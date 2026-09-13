@@ -55,4 +55,9 @@ jobs:
           git push -f origin "${commit}:refs/heads/gh-pages"
 
           echo "Published ${GITHUB_SHA:0:7} to gh-pages" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_STEP_SUMMARY"
+          # The published CNAME is the authoritative site URL.
+          if [ -f packages/app/dist/CNAME ]; then
+            echo "https://$(cat packages/app/dist/CNAME)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_STEP_SUMMARY"
+          fi
