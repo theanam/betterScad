@@ -169,8 +169,43 @@ union() {
 }
 ```
 
+**Scope is the enclosing braces.** A negative reaches exactly as far as the
+`{ … }` block, module body, or top level it is written in — never further. It is
+global only when written at the top level.
+
+Wrappers that are *not* scopes are transparent to it: `translate`, `rotate`,
+`color`, `if`, `for` and `let` pass the negative through to the enclosing scope,
+carrying their transforms with it. So these two cut identically:
+
+```scad
+union() {
+  cube(10);
+  translate([5, 0, 0]) negative() cube(10);   // bubbles out to the union
+}
+
+union() {
+  cube(10);
+  negative() translate([5, 0, 0]) cube(10);   // written at the scope directly
+}
+```
+
+Adding braces makes the wrapper a scope, which contains the negative:
+
+```scad
+union() {
+  cube(10);
+  translate([5, 0, 0]) { negative() cube(10); }   // cuts nothing; warns
+}
+```
+
+A module body is always a scope, braced or not, so a `negative()` inside a
+module can never reach out and cut its caller. A negative that reaches its scope
+with nothing to cut produces no geometry and reports a warning.
+
 **Downgrade:** the enclosing scope is rewritten as
-`difference() { union() { …siblings… } …negatives… }`. Geometry is identical.
+`difference() { union() { …siblings… } …negatives… }`, with each cutter keeping
+the wrappers it was written under. Geometry is identical — the round trip is
+covered by tests for every nesting case above.
 
 ### C-style statement `for`
 

@@ -17,7 +17,7 @@ import { importDXF } from '../io/import/dxf.js';
 import { importMesh } from '../io/import/mesh.js';
 import { importSVG } from '../io/import/svg.js';
 import { Contribution, Display, resolveContribution, resolveDisplay } from '../roles.js';
-import { Mat4, Resolution, SceneNode, determinant3, fragments, walk } from '../scene.js';
+import { Mat4, Resolution, SceneNode, determinant3, fragments, isScopeGroup, walk } from '../scene.js';
 import { Value } from '../values.js';
 import { Arena, Assembly, Piece, RGBA, assembly, emptyAssembly } from './geometry.js';
 import {
@@ -282,10 +282,29 @@ function flatPiece(ctx: Ctx, section: CrossSection): Assembly {
 
 type CombineOp = 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski';
 
+/**
+ * Nodes a `negative()` may not escape.
+ *
+ * A brace scope (`{ … }`, a module body, the top level) bounds it by
+ * definition. Dimension-changing nodes bound it too, for a different reason:
+ * a 2D negative carried up past a `linear_extrude` would be meaningless in the
+ * 3D scope above, so it is reported rather than silently mismatched.
+ */
+function isScopeBarrier(node: SceneNode): boolean {
+  if (isScopeGroup(node)) return true;
+  return (
+    node.op === 'linear_extrude' ||
+    node.op === 'rotate_extrude' ||
+    node.op === 'projection' ||
+    node.op === 'offset'
+  );
+}
+
 function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
   const operands: Assembly[] = [];
-  const subtractive: Assembly[] = [];
   const annotations: Piece[] = [];
+  // Negatives written here, plus any that bubbled up from a child wrapper.
+  const negatives: Piece[] = [];
 
   for (const child of node.children) {
     const contribution: Contribution = resolveContribution(child.roles);
@@ -297,10 +316,17 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
     // and keep propagating upwards.
     if (evaluated.isolated) return { ...evaluated, isolated: true };
     if (contribution === 'isolate') {
-      return { pieces: evaluated.pieces, annotations: evaluated.annotations, isolated: true };
+      return {
+        pieces: evaluated.pieces,
+        annotations: evaluated.annotations,
+        negatives: [],
+        isolated: true,
+      };
     }
 
     annotations.push(...evaluated.annotations);
+    // A child that could not place its own negatives hands them to this scope.
+    negatives.push(...evaluated.negatives);
 
     // A child's own display role (`#`) applies to the geometry it produced,
     // whether that child is a leaf primitive or a whole subtree.
@@ -318,7 +344,7 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
         );
         break;
       case 'subtractive':
-        subtractive.push(displayed);
+        negatives.push(...displayed.pieces);
         break;
       default:
         operands.push(displayed);
@@ -326,16 +352,37 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
   }
 
   const combined = applyOperation(operands, op, ctx, node.span);
-  const withNegatives =
-    subtractive.length > 0 ? subtractNegatives(combined, subtractive, ctx, node.span) : combined;
+
+  let pieces = combined.pieces;
+  let pending: Piece[] = [];
+
+  if (negatives.length > 0) {
+    if (pieces.length > 0) {
+      // There is something to cut here, so this is the negative's scope.
+      pieces = subtractPieces(pieces, negatives, ctx, node.span);
+    } else if (isScopeBarrier(node)) {
+      // The scope ends here and nothing was cut. Silently dropping geometry is
+      // the worst outcome, so say so.
+      ctx.diagnostics.warn(
+        'negative() has nothing to subtract from in this scope; it produces no geometry.',
+        node.span,
+        'kernel.negative-unused',
+      );
+    } else {
+      // Not a scope: ride up to the enclosing one, transforms and all.
+      pending = negatives;
+    }
+  }
 
   const display = resolveDisplay(node.roles);
-  const pieces =
-    display === 'normal'
-      ? withNegatives.pieces
-      : withNegatives.pieces.map((p) => ({ ...p, display }));
+  if (display !== 'normal') pieces = pieces.map((p) => ({ ...p, display }));
 
-  return { pieces, annotations: [...annotations, ...withNegatives.annotations], isolated: false };
+  return {
+    pieces,
+    annotations: [...annotations, ...combined.annotations],
+    negatives: pending,
+    isolated: false,
+  };
 }
 
 function applyOperation(
@@ -521,18 +568,43 @@ function minkowskiOf(operands: Assembly[], ctx: Ctx, span: SourceSpan | undefine
 }
 
 /**
- * Subtracts every `negative`-role subtree from the assembled scope.
+ * Subtracts negative geometry from a scope's assembled pieces.
  *
- * This is the whole implementation of the `negative()` extension: the
- * combiner routed the children here purely on their declared contribution.
+ * This is the whole implementation of the `negative()` extension: the combiner
+ * routed the geometry here purely on its declared contribution, and every piece
+ * keeps its own colour through the cut.
  */
-function subtractNegatives(
-  base: Assembly,
-  negatives: Assembly[],
+function subtractPieces(
+  base: Piece[],
+  cutters: Piece[],
   ctx: Ctx,
   span: SourceSpan | undefined,
-): Assembly {
-  return differenceOf([base, ...negatives], ctx, span);
+): Piece[] {
+  const cutters3 = cutters.filter((p) => p.dim === 3).map((p) => p.solid as Manifold);
+  const cutters2 = cutters.filter((p) => p.dim === 2).map((p) => p.solid as CrossSection);
+  const out: Piece[] = [];
+
+  for (const piece of base) {
+    const relevant = piece.dim === 3 ? cutters3 : cutters2;
+    if (relevant.length === 0) {
+      out.push(piece);
+      continue;
+    }
+    const result = guardGeom(ctx, span, 'negative', () =>
+      piece.dim === 3
+        ? ctx.arena.track(
+            ctx.api.Manifold.difference([piece.solid as Manifold, ...(cutters3 as Manifold[])]),
+          )
+        : ctx.arena.track(
+            ctx.api.CrossSection.difference([
+              piece.solid as CrossSection,
+              ...(cutters2 as CrossSection[]),
+            ]),
+          ),
+    );
+    if (result) out.push({ ...piece, solid: result });
+  }
+  return out;
 }
 
 function collect(assemblies: Assembly[], dim: 2 | 3): (Manifold | CrossSection)[] {
@@ -586,7 +658,9 @@ function applyTransform(
   ctx: Ctx,
   span: SourceSpan | undefined,
 ): Assembly {
-  if (input.pieces.length === 0 && input.annotations.length === 0) return input;
+  if (input.pieces.length === 0 && input.annotations.length === 0 && input.negatives.length === 0) {
+    return input;
+  }
 
   // A negative determinant mirrors the solid, which inverts every face winding.
   // Manifold handles that internally, but the warning is worth surfacing for
@@ -624,6 +698,9 @@ function applyTransform(
   return {
     pieces: input.pieces.map(map),
     annotations: input.annotations.map(map),
+    // Negatives on their way up must carry this transform with them, or they
+    // would cut at the position they were written rather than where they sit.
+    negatives: input.negatives.map(map),
     isolated: input.isolated,
   };
 }
@@ -648,6 +725,8 @@ function applyColor(node: SceneNode, ctx: Ctx): Assembly {
   return {
     pieces: inner.pieces.map(paint),
     annotations: inner.annotations.map(paint),
+    // Colour is a display property; it must not stop a negative bubbling.
+    negatives: inner.negatives,
     isolated: inner.isolated,
   };
 }

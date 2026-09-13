@@ -63,34 +63,43 @@ class Printer {
   // -- statements -----------------------------------------------------------
 
   printBody(statements: Statement[], depth: number): void {
-    // A scope containing `negative()` children becomes a difference() whose
-    // first child is everything else. This is the whole downgrade for the
-    // extension, and it is exact: the role's contribution is "subtract from
-    // every sibling in scope".
-    const negatives = statements.filter(isNegativeCall);
-    if (negatives.length > 0) {
-      this.rewrites.add('negative() rewritten as difference()');
-      const rest = statements.filter((s) => !isNegativeCall(s));
-      this.line(depth, 'difference() {');
-      if (rest.length === 0) {
-        this.line(depth + 1, '// nothing to cut from: negative() had no siblings');
-      } else if (rest.length === 1) {
-        this.printStatement(rest[0], depth + 1);
-      } else {
-        this.line(depth + 1, 'union() {');
-        for (const stmt of rest) this.printStatement(stmt, depth + 2);
-        this.line(depth + 1, '}');
-      }
-      for (const negative of negatives) {
-        // The wrapper module disappears; only its children survive as cutters.
-        const children = negative.kind === 'module-call' ? negative.children : [];
-        for (const child of children) this.printStatement(child, depth + 1);
-      }
-      this.line(depth, '}');
+    // A scope containing negatives becomes a difference() whose first child is
+    // everything else. This is the whole downgrade for the extension, and it is
+    // exact: the role's contribution is "subtract from every sibling in scope".
+    const solids: Statement[] = [];
+    const cutters: Statement[] = [];
+
+    for (const stmt of statements) {
+      const split = splitNegatives(stmt);
+      if (split.solid) solids.push(split.solid);
+      cutters.push(...split.cutters);
+    }
+
+    if (cutters.length === 0) {
+      for (const stmt of solids) this.printStatement(stmt, depth);
       return;
     }
 
-    for (const stmt of statements) this.printStatement(stmt, depth);
+    this.rewrites.add('negative() rewritten as difference()');
+
+    if (solids.length === 0) {
+      // Nothing to cut, so the scope produces nothing — exactly what the
+      // evaluator does. Emitting `difference() { cutter }` here would render
+      // the cutter as solid, which is the opposite of what was asked for.
+      this.line(depth, '// negative() had nothing to cut in this scope; it produces no geometry.');
+      return;
+    }
+
+    this.line(depth, 'difference() {');
+    if (solids.length === 1) {
+      this.printStatement(solids[0], depth + 1);
+    } else {
+      this.line(depth + 1, 'union() {');
+      for (const stmt of solids) this.printStatement(stmt, depth + 2);
+      this.line(depth + 1, '}');
+    }
+    for (const cutter of cutters) this.printStatement(cutter, depth + 1);
+    this.line(depth, '}');
   }
 
   printStatement(stmt: Statement, depth: number): void {
@@ -113,8 +122,11 @@ class Printer {
         return;
 
       case 'module-decl':
-        this.line(depth, `module ${stmt.name}(${this.params(stmt.params)})`);
-        this.printChild(stmt.body, depth);
+        // Always braced: a module body is a scope, so any negative inside it
+        // must be resolved there rather than leaking to the call site.
+        this.line(depth, `module ${stmt.name}(${this.params(stmt.params)}) {`);
+        this.printBody(stmt.body.kind === 'block' ? stmt.body.body : [stmt.body], depth + 1);
+        this.line(depth, '}');
         return;
 
       case 'function-decl':
@@ -202,19 +214,17 @@ class Printer {
     }
   }
 
-  /** Prints a statement as the child of another, wrapping bare lists in braces. */
+  /**
+   * Prints a statement as the child of another.
+   *
+   * No negative handling here: by the time a wrapper's child is printed, the
+   * enclosing `printBody` has already lifted any negatives out of it, exactly
+   * as the evaluator bubbles them up to the same scope.
+   */
   private printChild(stmt: Statement, depth: number): void {
     if (stmt.kind === 'block') {
       this.line(depth, '{');
       this.printBody(stmt.body, depth + 1);
-      this.line(depth, '}');
-      return;
-    }
-    // A lone `negative()` child still needs the scope rewrite, which only
-    // `printBody` performs.
-    if (isNegativeCall(stmt)) {
-      this.line(depth, '{');
-      this.printBody([stmt], depth + 1);
       this.line(depth, '}');
       return;
     }
@@ -308,8 +318,95 @@ class Printer {
   }
 }
 
-function isNegativeCall(stmt: Statement): boolean {
-  return stmt.kind === 'module-call' && stmt.name === 'negative';
+/** A statement split into what stays, and what becomes a cutter. */
+interface NegativeSplit {
+  solid?: Statement;
+  cutters: Statement[];
+}
+
+/**
+ * Lifts `negative()` subtrees out of a statement.
+ *
+ * Mirrors how the evaluator bubbles negatives: transparent through wrappers
+ * that are not brace scopes (transforms, `if`, `for`, `let`), and stopping at a
+ * `{ … }` block, whose own `printBody` resolves it. A cutter keeps the wrappers
+ * it was written under, so `translate(v) negative() c;` becomes
+ * `translate(v) c;` on the cutter side and disappears from the solid side.
+ */
+function splitNegatives(stmt: Statement): NegativeSplit {
+  if (stmt.kind === 'module-call' && stmt.name === 'negative') {
+    // The wrapper disappears; only its children survive, as cutters.
+    return {
+      cutters: stmt.children.flatMap((child) => (child.kind === 'block' ? child.body : [child])),
+    };
+  }
+
+  // A braced child list is a scope: leave it whole for its own printBody.
+  const hasBracedChildren = (children: Statement[]): boolean =>
+    children.length === 1 && children[0].kind === 'block';
+
+  const rewrap = (child: Statement, wrap: (c: Statement) => Statement): Statement => wrap(child);
+
+  switch (stmt.kind) {
+    case 'module-call': {
+      if (stmt.children.length === 0 || hasBracedChildren(stmt.children)) {
+        return { solid: stmt, cutters: [] };
+      }
+      const solids: Statement[] = [];
+      const cutters: Statement[] = [];
+      for (const child of stmt.children) {
+        const split = splitNegatives(child);
+        if (split.solid) solids.push(split.solid);
+        for (const cutter of split.cutters) {
+          cutters.push(rewrap(cutter, (c) => ({ ...stmt, children: [c] })));
+        }
+      }
+      return {
+        solid: solids.length > 0 ? { ...stmt, children: solids } : undefined,
+        cutters,
+      };
+    }
+
+    case 'if': {
+      const thenSplit = splitNegatives(stmt.then);
+      const elseSplit: NegativeSplit = stmt.else ? splitNegatives(stmt.else) : { cutters: [] };
+      const cutters: Statement[] = [
+        // A cutter under a branch only cuts when that branch is taken, so the
+        // condition has to be preserved around it.
+        ...thenSplit.cutters.map((c) => ({ ...stmt, then: c, else: undefined })),
+        ...elseSplit.cutters.map((c) => ({
+          ...stmt,
+          then: { kind: 'empty' as const, span: stmt.span },
+          else: c,
+        })),
+      ];
+      if (cutters.length === 0) return { solid: stmt, cutters: [] };
+      const solidThen = thenSplit.solid ?? { kind: 'empty' as const, span: stmt.span };
+      const solidElse = elseSplit.solid;
+      const anySolid = thenSplit.solid || solidElse;
+      return {
+        solid: anySolid ? { ...stmt, then: solidThen, else: solidElse } : undefined,
+        cutters,
+      };
+    }
+
+    case 'for':
+    case 'for-c':
+    case 'intersection-for':
+    case 'let-stmt': {
+      const split = splitNegatives(stmt.body);
+      if (split.cutters.length === 0) return { solid: stmt, cutters: [] };
+      return {
+        solid: split.solid ? { ...stmt, body: split.solid } : undefined,
+        // The loop or binding has to wrap the cutter too, so it is produced
+        // once per iteration with that iteration's values.
+        cutters: split.cutters.map((c) => ({ ...stmt, body: c })),
+      };
+    }
+
+    default:
+      return { solid: stmt, cutters: [] };
+  }
 }
 
 /** Rebuilds the `% # ! *` prefix from a statement's roles. */

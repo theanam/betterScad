@@ -108,8 +108,16 @@ and the evaluator dispatches on what a role *declares*:
 
 `combine()` in `kernel/evaluate.ts` never mentions `%`, `#`, `!` or `*`. It asks
 `resolveContribution()` what each child's roles mean and routes accordingly.
-That is why adding `negative()` required a registry entry and a transpiler rule,
-and no change to the CSG evaluator at all.
+
+`subtractive` is the one contribution that needs more than routing, because it
+has a *reach*: a negative cuts its siblings in the enclosing brace scope, but is
+usually written under a wrapper — `translate(…) negative() …`, or inside an `if`
+or `for` — that has no geometry of its own. So an assembly carries a `negatives`
+list alongside its pieces: a wrapper with nothing to cut passes them up (through
+`applyTransform`, so they arrive positioned correctly), and a scope consumes
+them. `scopeGroup()` marks what counts as a scope — a `{ … }` block, a module
+body, the top level — and dimension-changing nodes bound it too, since a 2D
+negative means nothing in the 3D scope above a `linear_extrude`.
 
 `defineRole()` **throws** unless the role declares a legacy downgrade path. The
 spec's cross-cutting constraint is enforced at registration rather than

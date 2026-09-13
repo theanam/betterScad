@@ -100,6 +100,27 @@ export function group(children: SceneNode[], roles: string[] = [], span?: Source
   return node('group', {}, children, roles, span);
 }
 
+/**
+ * A group that delimits a brace scope: `{ … }`, a module body, or the top
+ * level.
+ *
+ * The distinction exists for `negative()`, which subtracts from its siblings
+ * within a scope and must not leak past one. Ordinary wrappers — transforms,
+ * `if`, `for`, `let` — produce plain groups and are transparent to it.
+ */
+export function scopeGroup(
+  children: SceneNode[],
+  roles: string[] = [],
+  span?: SourceSpan,
+): SceneNode {
+  return node('group', { braced: true }, children, roles, span);
+}
+
+/** Whether a node delimits a brace scope (see `scopeGroup`). */
+export function isScopeGroup(n: SceneNode): boolean {
+  return n.params.braced === true;
+}
+
 /** Walks the tree depth-first, parents before children. */
 export function* walk(root: SceneNode): Generator<SceneNode> {
   yield root;

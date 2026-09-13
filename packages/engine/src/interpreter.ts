@@ -32,6 +32,7 @@ import {
   Resolution,
   SceneNode,
   group,
+  scopeGroup,
   matMultiply,
   mirrorMatrix,
   node,
@@ -241,7 +242,9 @@ class Interpreter {
     }
 
     return {
-      root: group(children),
+      // The top level is itself a brace scope: a negative() written here cuts
+      // everything, but that is because *here* is the global scope.
+      root: scopeGroup(children),
       diagnostics: this.diagnostics,
       topLevelVars: root.vars,
     };
@@ -384,7 +387,7 @@ class Interpreter {
         const inner = new Scope(scope, scope);
         const kids: SceneNode[] = [];
         this.executeScope(stmt.body, inner, kids, file);
-        this.emit(out, group(kids, stmt.roles, stmt.span));
+        this.emit(out, scopeGroup(kids, stmt.roles, stmt.span));
         return;
       }
 
@@ -581,10 +584,20 @@ class Interpreter {
     const builtin = BUILTIN_MODULES[name];
     if (builtin) {
       const kids: SceneNode[] = [];
+      // `translate(…) { a; b; }` writes a brace scope; `translate(…) a;` does
+      // not. The block is unwrapped either way, so the distinction is recorded
+      // here — it is what bounds a negative() written inside those braces.
+      const braced = this.hasBracedChildren(stmt.children);
       this.executeChildren(stmt.children, scope, kids, file);
       const args = this.bindArguments(builtin.params, stmt.args, scope, name, stmt.nameSpan, builtin.acceptsExtra);
       const built = builtin.build(args, kids, scope, this, stmt.span);
-      if (built) this.emit(out, { ...built, roles: [...stmt.roles, ...built.roles] });
+      if (built) {
+        this.emit(out, {
+          ...built,
+          params: braced ? { ...built.params, braced: true } : built.params,
+          roles: [...stmt.roles, ...built.roles],
+        });
+      }
       return;
     }
 
@@ -623,7 +636,9 @@ class Interpreter {
     } finally {
       this.depth--;
     }
-    this.emit(out, group(kids, stmt.roles, stmt.span));
+    // A module body is a scope even when written without braces, so a
+    // negative() inside a module can never reach out and cut its caller.
+    this.emit(out, scopeGroup(kids, stmt.roles, stmt.span));
   }
 
   /**
@@ -660,15 +675,21 @@ class Interpreter {
    * A block carrying its own modifiers is left intact, because those modifiers
    * apply to the block as a whole.
    */
+  /** Whether a module instantiation's children were written as a `{ … }` block. */
+  private hasBracedChildren(children: Statement[]): boolean {
+    return children.length === 1 && children[0].kind === 'block' && children[0].roles.length === 0;
+  }
+
   private executeChildren(
     children: Statement[],
     scope: Scope,
     out: SceneNode[],
     file: string,
   ): void {
-    if (children.length === 1 && children[0].kind === 'block' && children[0].roles.length === 0) {
+    const only = children[0];
+    if (children.length === 1 && only.kind === 'block' && only.roles.length === 0) {
       // A fresh scope so the block's own assignments stay local to it.
-      this.executeScope(children[0].body, new Scope(scope, scope), out, file);
+      this.executeScope(only.body, new Scope(scope, scope), out, file);
       return;
     }
     for (const child of children) {

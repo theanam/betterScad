@@ -31,14 +31,30 @@ export interface Assembly {
    */
   annotations: Piece[];
   /**
+   * `negative`-role geometry that has not yet found anything to cut.
+   *
+   * A negative subtracts from its siblings in the enclosing *brace* scope, but
+   * it is often written under a wrapper that has no geometry of its own —
+   * `translate(…) negative() …`, or inside an `if` or `for`. Those wrappers are
+   * not scopes, so the negative rides up through them (picking up their
+   * transforms) until it reaches a scope with something to cut.
+   */
+  negatives: Piece[];
+
+  /**
    * True once a `root`-role node (`!`) has claimed the render; ancestors must
    * then discard their other children.
    */
   isolated: boolean;
 }
 
-export function assembly(pieces: Piece[], annotations: Piece[] = [], isolated = false): Assembly {
-  return { pieces, annotations, isolated };
+export function assembly(
+  pieces: Piece[],
+  annotations: Piece[] = [],
+  isolated = false,
+  negatives: Piece[] = [],
+): Assembly {
+  return { pieces, annotations, isolated, negatives };
 }
 
 export const emptyAssembly = (): Assembly => assembly([]);
@@ -48,7 +64,7 @@ export function piecesOfDim(a: Assembly, dim: 2 | 3): Piece[] {
 }
 
 export function isEmpty(a: Assembly): boolean {
-  return a.pieces.length === 0 && a.annotations.length === 0;
+  return a.pieces.length === 0 && a.annotations.length === 0 && a.negatives.length === 0;
 }
 
 /** The dominant dimension of an assembly, preferring 3D when both are present. */
