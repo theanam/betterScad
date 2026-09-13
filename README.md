@@ -248,25 +248,6 @@ set *Settings → Pages → Source* to "GitHub Actions" first: the default
 `GITHUB_TOKEN` has no admin rights, so `configure-pages` cannot create the site
 and the first run fails. Publishing to a branch needs only `contents: write`.
 
-### Custom domain
-
-The site is served from **betterscad.org**. The domain is declared by
-[`packages/app/public/CNAME`](packages/app/public/CNAME), which Vite copies into
-the build, so every deploy reasserts it — setting it through *Settings → Pages*
-instead would not survive, because the workflow force-pushes `gh-pages`.
-
-DNS is four `A` records on the apex pointing at GitHub's Pages addresses:
-
-```
-185.199.108.153   185.199.109.153   185.199.110.153   185.199.111.153
-```
-
-To move the site to another domain, edit that one file and repoint the records.
-
-`base` is `'./'` in [`vite.config.ts`](packages/app/vite.config.ts), so the same
-build works from a domain root, from a project subpath like
-`/betterScad/`, and from `file://` in the desktop shell.
-
 ## Contributing
 
 Issues and pull requests are welcome. The one non-negotiable rule: **any new language
