@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { describeExtensions, parse } from '../dist/index.js';
+import { describeExtensions, parse, toStockScad } from '../dist/index.js';
 
 const extensionsIn = (source) => describeExtensions(parse(source).file);
 const names = (source) => extensionsIn(source).map((e) => e.name).sort();
@@ -75,4 +75,67 @@ test('extensions nested inside wrappers are still found', () => {
   ]) {
     assert.deepEqual(names(source), ['negative()'], `missed the extension in: ${source}`);
   }
+});
+
+// --- toStockScad -----------------------------------------------------------
+
+test('a file with no extensions is returned byte for byte', () => {
+  // The point of the check: this source has comments, deliberate spacing and
+  // unparenthesised arithmetic, all of which the pretty-printer would rewrite.
+  const source = [
+    '// A bracket.',
+    'size = 40;      // [10:80]',
+    '',
+    'module plate(w, h) {',
+    '  /* two holes */',
+    '  difference() {',
+    '    cube([w, h, 3]);',
+    '    for (x = [8, w - 8]) translate([x, h / 2, -1]) cylinder(d = 4, h = 5);',
+    '  }',
+    '}',
+    '',
+    'plate(size, size * 0.6);',
+    '',
+  ].join('\n');
+
+  const result = toStockScad(source, 'bracket.scad');
+  assert.equal(result.verbatim, true);
+  assert.equal(result.source, source, 'a stock file must not be reformatted');
+  assert.deepEqual(result.extensions, []);
+  assert.deepEqual(result.rewrites, []);
+  assert.deepEqual(result.errors, []);
+});
+
+test('stock modifiers are not an extension and do not trigger a rewrite', () => {
+  const source = '%cube(1);\n#sphere(2);\n!cylinder(3);\n*cube(4);\n';
+  const result = toStockScad(source);
+  assert.equal(result.verbatim, true);
+  assert.equal(result.source, source);
+});
+
+test('a file that uses an extension is rewritten', () => {
+  const source = 'cube(10);\nnegative() translate([5,0,0]) cube(10);\n';
+  const result = toStockScad(source, 'part.scad');
+  assert.equal(result.verbatim, false);
+  assert.notEqual(result.source, source);
+  // Anchored to a statement: the header comment names the rewrite in prose.
+  assert.ok(!/^\s*negative\s*\(/m.test(result.source), 'negative() must not survive');
+  assert.ok(/difference\s*\(/.test(result.source), 'it must become a difference()');
+  assert.deepEqual(result.extensions.map((e) => e.name), ['negative()']);
+  assert.ok(result.rewrites.length > 0);
+});
+
+test('the rewritten output is itself stock, so a second pass is a no-op', () => {
+  const once = toStockScad('cube(10);\nnegative() cube(5);\n');
+  const twice = toStockScad(once.source);
+  assert.equal(twice.verbatim, true);
+  assert.equal(twice.source, once.source, 'transpiling is idempotent');
+});
+
+test('parse errors write nothing and hand back the input untouched', () => {
+  const broken = 'cube(10)\nnegative( {{{\n';
+  const result = toStockScad(broken, 'broken.scad');
+  assert.ok(result.errors.length > 0);
+  assert.equal(result.source, broken, 'a file that does not parse must not be mangled');
+  assert.equal(result.verbatim, true);
 });

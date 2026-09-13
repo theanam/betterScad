@@ -48,7 +48,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Live customizer** | Auto-generates sliders, dropdowns and checkboxes from `//` parameter annotations, using OpenSCAD's own conventions. |
 | **Modern editor** | CodeMirror 6 with OpenSCAD syntax highlighting, autocomplete with real signatures, multi-file tabs, and inline error squiggles. |
 | **Fast + precise renders** | `F5` preview and `F6` full render, mirroring OpenSCAD, exposed to scripts as `$preview`. Auto-render keeps the preview live as you type, so the Preview button hides itself while it is on. |
-| **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and the model's own source as stock `.scad`, with every extension rewritten. |
+| **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
 | **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
 | **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |
 | **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation and click-to-snap standard views. |
@@ -148,7 +148,7 @@ union() {
 }
 ```
 
-Exporting to legacy `.scad` rewrites it as a `difference()` that produces **byte-identical
+Saving as OpenSCAD `.scad` rewrites it as a `difference()` that produces **byte-identical
 geometry** — the round trip is covered by a test.
 
 ## Command line
@@ -178,9 +178,15 @@ document either way.
 
 **Opening a `.scad` that is not stock OpenSCAD warns you**, naming each extension it uses,
 what the downgrade rewrites it to, and the lines it appears on. The file renders here
-regardless — the warning is about what will happen elsewhere. To hand it to stock OpenSCAD,
-**Export ▸ OpenSCAD source** applies those rewrites; `Ctrl/Cmd+E` lists it alongside the
-geometry formats.
+regardless — the warning is about what will happen elsewhere.
+
+**Save ▸ Save as OpenSCAD `.scad`** is the guaranteed-portable output, and it asks first,
+saying what it will do to this particular file. **A file that uses no extensions is written
+byte for byte** — the transpiler doubles as a pretty-printer, so running it over already
+stock code would reflow the layout, drop the comments and parenthesise every expression for
+no gain. Only a file that actually needs rewriting gets rewritten; when it does, the saved
+`.scad` is a derivative and the tab keeps your original. `bscad --legacy-scad` follows the
+same rule.
 
 ## Browser support
 

@@ -21,7 +21,8 @@ import {
   ScadFile,
   Statement,
 } from './ast.js';
-import { MODIFIER_ROLES } from './parser.js';
+import { Diagnostic } from './diagnostics.js';
+import { MODIFIER_ROLES, parse } from './parser.js';
 import { getRole } from './roles.js';
 
 export interface TranspileOptions {
@@ -516,4 +517,50 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
   for (const stmt of file.body) visitStatement(stmt);
   for (const use of found.values()) use.lines.sort((a, b) => a - b);
   return [...found.values()];
+}
+
+export interface StockScadResult {
+  /** Stock OpenSCAD: the input unchanged, or a transpile of it. */
+  source: string;
+  /** Extensions found in the input. Empty means nothing needed rewriting. */
+  extensions: ExtensionUse[];
+  /** What the transpiler rewrote. Always empty when `verbatim`. */
+  rewrites: string[];
+  /** True when `source` is the input, byte for byte. */
+  verbatim: boolean;
+  /** Parse errors. When non-empty nothing was transpiled and `source` is the input. */
+  errors: Diagnostic[];
+}
+
+/**
+ * Produces stock OpenSCAD from BetterSCAD source.
+ *
+ * A file that uses no extensions comes back **byte for byte**, not re-printed.
+ * The transpiler doubles as a pretty-printer, so running it over an already
+ * stock file would reflow the user's layout, drop every comment and
+ * parenthesise every expression — a diff with nothing to show for it, on a file
+ * that was already going to open in OpenSCAD. The rewrite is a cost worth
+ * paying only when there is something that has to be rewritten.
+ *
+ * `source` must already have any `.bscad` metadata header removed
+ * (see `toLegacyScadSource`); a header left in place would survive verbatim.
+ */
+export function toStockScad(
+  source: string,
+  file = '<input>',
+  options: TranspileOptions = {},
+): StockScadResult {
+  const parsed = parse(source, file);
+  const errors = parsed.diagnostics.filter((d) => d.severity === 'error');
+  if (errors.length > 0) {
+    return { source, extensions: [], rewrites: [], verbatim: true, errors };
+  }
+
+  const extensions = describeExtensions(parsed.file);
+  if (extensions.length === 0) {
+    return { source, extensions, rewrites: [], verbatim: true, errors: [] };
+  }
+
+  const { source: rewritten, rewrites } = transpileToLegacyScad(parsed.file, options);
+  return { source: rewritten, extensions, rewrites, verbatim: false, errors: [] };
 }

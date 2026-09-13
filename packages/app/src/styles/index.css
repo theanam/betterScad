@@ -502,15 +502,40 @@ textarea {
   pointer-events: none;
 }
 
+/* A row of individually-floating controls, not one grouped pill: each does an
+   unrelated thing, so grouping them only implied a relationship that is not
+   there. */
 .viewport__tools {
   position: absolute;
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--bs-radius);
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.viewport__control {
   background: color-mix(in srgb, var(--bs-surface) 88%, transparent);
   border: 1px solid var(--bs-border);
-  pointer-events: auto;
+  box-shadow: var(--bs-shadow-1);
+}
+
+.viewport__control--round {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.viewport__control--round:hover:not(:disabled) {
+  background: var(--bs-surface);
+  border-color: var(--bs-border-strong);
+}
+
+.viewport__control--round.btn--active {
+  background: var(--bs-solid-500);
+  border-color: var(--bs-solid-500);
+  color: #fff;
 }
 
 /* Display toggles, kept away from the camera controls in the opposite corner. */
@@ -526,10 +551,6 @@ textarea {
   bottom: var(--bs-space-3);
   width: 104px;
   justify-content: center;
-}
-
-.viewport__tools .btn {
-  padding: 4px 7px;
 }
 
 .viewport__busy {
@@ -1125,9 +1146,9 @@ kbd {
   }
 }
 
-/* --- theme toggle --------------------------------------------------------- */
+/* --- icon switch (theme, grid) --------------------------------------------------------- */
 
-.themetoggle {
+.iconswitch {
   display: inline-flex;
   align-items: center;
   padding: 0;
@@ -1138,13 +1159,13 @@ kbd {
   flex: none;
 }
 
-.themetoggle:focus-visible {
+.iconswitch:focus-visible {
   outline: 2px solid var(--bs-solid-500);
   outline-offset: 2px;
   border-radius: 999px;
 }
 
-.themetoggle__track {
+.iconswitch__track {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1159,11 +1180,11 @@ kbd {
   transition: border-color var(--bs-transition);
 }
 
-.themetoggle:hover .themetoggle__track {
+.iconswitch:hover .iconswitch__track {
   border-color: var(--bs-border-strong);
 }
 
-.themetoggle__icon {
+.iconswitch__icon {
   position: relative;
   z-index: 1;
   color: var(--bs-text-faint);
@@ -1172,7 +1193,7 @@ kbd {
 
 /* The thumb rests over whichever icon is active, so the switch reads without
    a label: the lit side is the current theme. */
-.themetoggle__thumb {
+.iconswitch__thumb {
   position: absolute;
   top: 2px;
   left: 2px;
@@ -1185,17 +1206,65 @@ kbd {
   transition: transform var(--bs-transition);
 }
 
-.themetoggle[aria-checked='true'] .themetoggle__thumb {
+.iconswitch[aria-checked='true'] .iconswitch__thumb {
   transform: translateX(22px);
 }
 
-.themetoggle[aria-checked='true'] .themetoggle__icon--moon,
-.themetoggle[aria-checked='false'] .themetoggle__icon--sun {
+.iconswitch[aria-checked='true'] .iconswitch__icon--on,
+.iconswitch[aria-checked='false'] .iconswitch__icon--off {
   color: var(--bs-solid-500);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .themetoggle__thumb {
+  .iconswitch__thumb {
+    transition: none;
+  }
+}
+
+/* The grid switch floats over the viewport, so its track carries the same
+   surface treatment as the round controls beside it. */
+.viewport__control.iconswitch {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.viewport__control.iconswitch .iconswitch__track {
+  background: color-mix(in srgb, var(--bs-surface) 88%, transparent);
+  box-shadow: var(--bs-shadow-1);
+}
+
+/* --- hover hints ---------------------------------------------------------- */
+
+.hint {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 70;
+  max-width: 260px;
+  padding: 5px 8px;
+  border-radius: var(--bs-radius-sm);
+  border: 1px solid var(--bs-border);
+  background: var(--bs-surface-raised);
+  color: var(--bs-text);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.35;
+  box-shadow: var(--bs-shadow-2);
+  /* Never intercepts the pointer, or hovering a control would flicker as the
+     hint appears under the cursor. */
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--bs-transition);
+}
+
+.hint--visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint {
     transition: none;
   }
 }

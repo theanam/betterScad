@@ -7,6 +7,7 @@
  */
 
 import { button, clear, el, formatDuration, icon, splitButton, type MenuItem } from './dom.js';
+import { setHint } from './tooltip.js';
 import { formatShortcut } from './command-palette.js';
 import type { Document, DocumentFormat } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
@@ -16,45 +17,77 @@ import type { RenderStats } from '../render/protocol.js';
 // ---------------------------------------------------------------------------
 
 /**
- * A sun/moon switch rather than a button.
+ * A two-state switch: both icons visible, a thumb resting over the active one.
  *
- * Both icons stay visible with a thumb resting over the active one, so the
- * control reads as a two-state switch at a glance and needs no label. It is
- * deliberately small and muted: theme is set once and then forgotten, so it
- * should not compete with the actions next to it.
+ * Shared by the theme control and the grid toggle. A switch says "this has two
+ * settings and one of them is current" in a way a highlighted button does not,
+ * and it does so without needing a text label.
  */
-export class ThemeToggle {
+export interface IconSwitchOptions {
+  /** Icon for the "off" state, shown on the left. */
+  offIcon: string;
+  /** Icon for the "on" state, shown on the right. */
+  onIcon: string;
+  /** Stable accessible name, e.g. "Ground grid". */
+  label: string;
+  /** Hint text per state. */
+  hint(on: boolean): string;
+  onToggle(): void;
+}
+
+export class IconSwitch {
   readonly element: HTMLButtonElement;
 
-  constructor(onToggle: () => void) {
-    const track = el('span', { class: 'themetoggle__track' });
+  constructor(private readonly options: IconSwitchOptions) {
+    const track = el('span', { class: 'iconswitch__track' });
 
-    const sun = icon('sun', 13);
-    sun.classList.add('themetoggle__icon', 'themetoggle__icon--sun');
-    const moon = icon('moon', 13);
-    moon.classList.add('themetoggle__icon', 'themetoggle__icon--moon');
+    const off = icon(options.offIcon, 13);
+    off.classList.add('iconswitch__icon', 'iconswitch__icon--off');
+    const on = icon(options.onIcon, 13);
+    on.classList.add('iconswitch__icon', 'iconswitch__icon--on');
 
-    track.append(el('span', { class: 'themetoggle__thumb' }), sun, moon);
+    track.append(el('span', { class: 'iconswitch__thumb' }), off, on);
 
-    // `role="switch"` gives the right affordance to assistive tech; `checked`
-    // means dark, which the label below names explicitly so "on" is not
-    // left to interpretation.
+    // `role="switch"` gives assistive tech the right affordance; the label
+    // names what is being switched, so "on" is not left to interpretation.
     this.element = el('button', {
-      class: 'themetoggle',
+      class: 'iconswitch',
       type: 'button',
       role: 'switch',
       'aria-checked': 'true',
-      'aria-label': 'Dark theme',
-      onclick: () => onToggle(),
+      'aria-label': options.label,
+      onclick: () => options.onToggle(),
     }) as HTMLButtonElement;
     this.element.appendChild(track);
+    this.setState(true);
+  }
+
+  setState(on: boolean): void {
+    this.element.setAttribute('aria-checked', String(on));
+    setHint(this.element, this.options.hint(on));
+    // `setHint` fills in a missing aria-label; keep the stable one instead.
+    this.element.setAttribute('aria-label', this.options.label);
+  }
+}
+
+/** The theme control: sun on the left, moon on the right. */
+export class ThemeToggle {
+  private readonly control: IconSwitch;
+  readonly element: HTMLButtonElement;
+
+  constructor(onToggle: () => void) {
+    this.control = new IconSwitch({
+      offIcon: 'sun',
+      onIcon: 'moon',
+      label: 'Dark theme',
+      hint: (dark) => `Switch to ${dark ? 'light' : 'dark'} theme`,
+      onToggle,
+    });
+    this.element = this.control.element;
   }
 
   setTheme(theme: 'light' | 'dark'): void {
-    const dark = theme === 'dark';
-    this.element.setAttribute('aria-checked', String(dark));
-    this.element.title = `Switch to ${dark ? 'light' : 'dark'} theme`;
-    this.element.setAttribute('aria-label', 'Dark theme');
+    this.control.setState(theme === 'dark');
   }
 }
 
@@ -68,6 +101,8 @@ export interface ToolbarActions {
   save(): void;
   /** Save As. `format` forces the on-disk format; omitted keeps the current one. */
   saveAs(format?: DocumentFormat): void;
+  /** Save as stock OpenSCAD, transpiling the extensions the file uses. */
+  saveAsStockScad(): void;
   preview(): void;
   render(): void;
   export(): void;
@@ -160,11 +195,12 @@ export class Toolbar {
   /**
    * The Save menu, rebuilt on every open.
    *
-   * A `.scad` document gets "Save as .bscad" alongside plain Save As, because
-   * for that file the choice of format is live: it is the only document kind
-   * where saving drops the panel layout, presets and camera. A `.bscad` has no
-   * matching "save as .scad" here — that is a downgrade, not a save, and it
-   * lives in Export where the rewrites can be shown first.
+   * Every way of writing this document to disk lives here, so the question
+   * "how do I get a plain .scad out of this?" has one answer and it is next to
+   * Save. The stock-OpenSCAD item is listed whatever the document's extension
+   * is: it is the only item that *guarantees* the result opens in OpenSCAD, and
+   * a `.scad` file that uses extensions is exactly the case where the guarantee
+   * is worth having and the file name does not give it away.
    */
   private saveMenuItems(): MenuItem[] {
     const items: MenuItem[] = [
@@ -182,6 +218,12 @@ export class Toolbar {
         onSelect: () => this.actions.saveAs('bscad'),
       });
     }
+
+    items.push({
+      label: 'Save as OpenSCAD .scad…',
+      description: 'Rewrites BetterSCAD syntax, if the file uses any',
+      onSelect: () => this.actions.saveAsStockScad(),
+    });
 
     return items;
   }
@@ -275,6 +317,7 @@ export class TabStrip {
         class: 'tab__close',
         type: 'button',
         'aria-label': `Close ${doc.name}`,
+        'data-hint': `Close ${doc.name}`,
         onclick: ((event: Event) => {
           event.stopPropagation();
           this.onClose(doc.id);
@@ -290,7 +333,7 @@ export class TabStrip {
       class: 'tab',
       type: 'button',
       'aria-label': 'New file',
-      title: 'New file',
+      'data-hint': 'New file',
       onclick: () => this.onNew(),
     });
     add.appendChild(icon('plus', 13));

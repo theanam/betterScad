@@ -6,6 +6,8 @@
  * bundle cost buys nothing here (spec feature 1: a small static site).
  */
 
+import { setHint } from './tooltip.js';
+
 type Attributes = Record<string, string | number | boolean | undefined | EventListener>;
 
 export function el<K extends keyof HTMLElementTagNameMap>(
@@ -103,6 +105,10 @@ const ICONS: Record<string, string> = {
   sun: 'M8 5.3a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zM8 1.2v1.5M8 13.3v1.5M14.8 8h-1.5M2.7 8H1.2M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1M12.8 12.8l-1.1-1.1M4.3 4.3 3.2 3.2',
   // A 300-degree arc with a chevron at its head: the usual "reset" glyph.
   reset: 'M8 2.5A5.5 5.5 0 1 1 3.24 5.25M5.8 1.5 8 2.5 7.05 4.75',
+  // Isometric cube: a hexagon outline with the three edges that meet at the
+  // near corner, which is what makes it read as a cube rather than a hexagon.
+  cube: 'M8 1.8 13.4 4.9 13.4 11.1 8 14.2 2.6 11.1 2.6 4.9Z M8 8 13.4 4.9M8 8 2.6 4.9M8 8v6.2',
+  gridOff: 'M2 2h12v12H2zm4 0v12M10 2v12M2 6h12M2 10h12M2.6 2.6l10.8 10.8',
 };
 
 /** Inline SVG icon; `stroke` style keeps them crisp at 16px. */
@@ -131,6 +137,11 @@ export interface ButtonOptions {
   iconName?: string;
   variant?: 'default' | 'primary' | 'ghost';
   shortcut?: string;
+  /**
+   * Hover/focus hint. Defaults to the title, and is what an icon-only control
+   * relies on to explain itself.
+   */
+  hint?: string;
   onClick(): void;
 }
 
@@ -139,13 +150,20 @@ export function button(options: ButtonOptions): HTMLButtonElement {
   if (options.variant === 'primary') classes.push('btn--primary');
   if (options.variant === 'ghost') classes.push('btn--ghost');
 
+  const described = options.title ?? options.label ?? '';
+  const text = options.shortcut ? `${described} (${options.shortcut})` : described;
+
   const node = el('button', {
     class: classes.join(' '),
     type: 'button',
-    title: options.shortcut ? `${options.title ?? options.label ?? ''} (${options.shortcut})` : options.title ?? options.label,
     'aria-label': options.label ?? options.title,
     onclick: () => options.onClick(),
   });
+
+  // `setHint` also strips `title`, so the styled hint and the OS tooltip can
+  // never both appear.
+  const hintText = options.hint ?? text;
+  if (hintText) setHint(node, hintText);
 
   if (options.iconName) node.appendChild(icon(options.iconName));
   if (options.label) node.appendChild(el('span', { text: options.label }));
@@ -264,9 +282,9 @@ export function splitButton(options: SplitButtonOptions): HTMLElement {
     'aria-haspopup': 'menu',
     'aria-expanded': 'false',
     'aria-label': options.menuLabel,
-    title: options.menuLabel,
     onclick: () => openMenu(toggle, options.items()),
   }) as HTMLButtonElement;
+  setHint(toggle, options.menuLabel);
   toggle.appendChild(icon('caret', 13));
 
   return el('div', { class: 'splitbtn' }, [main, toggle]);

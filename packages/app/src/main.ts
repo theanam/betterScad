@@ -12,7 +12,7 @@ import {
   applyParametersToSource,
   describeExtensions,
   parse,
-  transpileToLegacyScad,
+  toStockScad,
   type CustomizerModel,
   type Diagnostic,
   type ExtensionUse,
@@ -49,7 +49,7 @@ import {
   type Document,
   type DocumentFormat,
 } from './state/workspace.js';
-import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
+import { AnimationBar, IconSwitch, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
@@ -58,11 +58,12 @@ import {
   showConfirm,
   showExportDialog,
   showFontDialog,
-  showLegacyExportDialog,
   showNonStandardSyntaxDialog,
+  showSaveAsScadDialog,
   type NonStandardFile,
 } from './ui/dialogs.js';
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
+import { installTooltips } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
 import { Viewport } from './viewport/viewport.js';
 
@@ -115,6 +116,7 @@ class App {
     }
     this.applyTheme(this.workspace.layout.theme);
 
+    installTooltips();
     this.buildUi();
     this.registerCommands();
 
@@ -157,6 +159,7 @@ class App {
       open: () => void this.openFiles(),
       save: () => void this.save(),
       saveAs: (format) => void this.saveAs(format),
+      saveAsStockScad: () => this.saveAsStockScad(),
       preview: () => void this.render(true),
       render: () => void this.render(false),
       export: () => void this.exportModel(),
@@ -238,6 +241,7 @@ class App {
     root.append(this.toolbar.element, this.mainSplit.element, this.statusBar.element);
 
     // --- live components, created after they have a sized host ---
+    let paintHud: (() => void) | undefined;
     this.editor = new ScadEditor(editorHost, this.workspace.active?.text ?? '', {
       onChange: (source) => this.onSourceChanged(source),
       onCursor: (line, column) => {
@@ -249,12 +253,15 @@ class App {
 
     this.viewport = new Viewport(viewportHost, {
       onMeasure: (measurement) => this.showMeasurement(measurement),
+      // Guarded: the Viewport constructor applies the camera once, before
+      // `paintHud` below has been assigned.
+      onCamera: () => paintHud?.(),
     });
     this.viewport.controls.apply();
 
     // The HUD tracks the camera, which changes far more often than anything
     // else on screen, so it updates directly rather than through refreshChrome.
-    const paintHud = (): void => {
+    paintHud = (): void => {
       const vp = this.viewport.controls.viewportVariables;
       hud.replaceChildren(
         el('span', { text: `$vpd ${formatNumber(vp.distance, 1)}` }),
@@ -264,8 +271,6 @@ class App {
       );
     };
     paintHud();
-    viewportHost.addEventListener('pointermove', paintHud);
-    viewportHost.addEventListener('wheel', paintHud, { passive: true });
 
     this.palette = new CommandPalette(this.registry);
     this.applyLayoutVisibility();
@@ -281,23 +286,26 @@ class App {
    * named view is still reachable from the command palette.
    */
   private buildViewTools(): HTMLElement[] {
-    const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' });
-
-    const gridButton = button({
-      iconName: 'grid',
-      title: 'Toggle the ground grid',
-      onClick: () => {
+    // --- display toggles, top-left, each its own control ---
+    const gridSwitch = new IconSwitch({
+      offIcon: 'gridOff',
+      onIcon: 'grid',
+      label: 'Ground grid',
+      hint: (on) => (on ? 'Hide the ground grid' : 'Show the ground grid'),
+      onToggle: () => {
         this.workspace.layout.showGrid = !this.workspace.layout.showGrid;
         this.viewport.setHelperVisibility({ grid: this.workspace.layout.showGrid });
-        gridButton.classList.toggle('btn--active', this.workspace.layout.showGrid);
+        gridSwitch.setState(this.workspace.layout.showGrid);
         this.workspace.persist();
       },
     });
-    gridButton.classList.toggle('btn--active', this.workspace.layout.showGrid);
+    gridSwitch.setState(this.workspace.layout.showGrid);
+    gridSwitch.element.classList.add('viewport__control');
 
     const measureButton = button({
       iconName: 'ruler',
-      title: 'Measure — click points on the model for coordinates and distances',
+      hint: 'Measure — click two points on the model for the distance between them',
+      title: 'Measure',
       onClick: () => {
         const active = !this.viewport.measuring;
         this.viewport.setMeasuring(active);
@@ -305,21 +313,29 @@ class App {
         if (!active) this.measureReadout.style.display = 'none';
       },
     });
+    measureButton.classList.add('viewport__control', 'viewport__control--round');
 
-    displayTools.append(gridButton, measureButton);
+    const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' }, [
+      gridSwitch.element,
+      measureButton,
+    ]);
 
-    // Sits under the cube, so the camera controls are all in one place.
+    // --- camera, under the view cube ---
+    const cameraButton = (iconName: string, hint: string, onClick: () => void): HTMLButtonElement => {
+      const node = button({ iconName, hint, title: hint, onClick });
+      node.classList.add('viewport__control', 'viewport__control--round');
+      return node;
+    };
+
     const cameraTools = el('div', { class: 'viewport__tools viewport__tools--gizmo' }, [
-      button({
-        iconName: 'reset',
-        title: 'Reset to the isometric view',
-        onClick: () => this.viewport.setView('iso'),
+      // Reset is the one-press way back to a sane view, so it does both halves
+      // of "I have lost the model": orientation and framing.
+      cameraButton('reset', 'Reset the view — isometric, fitted to the model', () => {
+        this.viewport.setView('iso');
+        this.viewport.frameAll();
       }),
-      button({
-        iconName: 'frame',
-        title: 'Fit the model in view',
-        onClick: () => this.viewport.frameAll(),
-      }),
+      cameraButton('frame', 'Fit the model in view', () => this.viewport.frameAll()),
+      cameraButton('cube', 'Isometric view', () => this.viewport.setView('iso')),
     ]);
 
     return [displayTools, cameraTools];
@@ -590,19 +606,8 @@ class App {
     const doc = this.workspace.active;
     if (!doc) return;
 
-    const choice = await showExportDialog(
-      doc.name.replace(/\.[^.]+$/, ''),
-      this.lastDimension,
-      this.extensionsIn(doc),
-    );
+    const choice = await showExportDialog(doc.name.replace(/\.[^.]+$/, ''), this.lastDimension);
     if (!choice) return;
-
-    // Source export never touches the kernel: it is a transpile of the text on
-    // screen, so it works even when the model fails to render.
-    if (choice.format === 'scad') {
-      this.writeLegacyScad(doc, choice.filename);
-      return;
-    }
 
     this.setBusy(true);
     try {
@@ -622,39 +627,65 @@ class App {
     }
   }
 
-  /** Legacy `.scad` export, with the extension rewrites surfaced (feature 21). */
-  private exportLegacyScad(): void {
+  /**
+   * Saves the document as stock OpenSCAD (spec feature 21).
+   *
+   * Lives in the Save menu rather than Export because the output is the file
+   * itself, not a rendering of it — and because when nothing needs rewriting it
+   * *is* an ordinary save, byte for byte.
+   */
+  private saveAsStockScad(): void {
     const doc = this.workspace.active;
     if (!doc) return;
+    doc.text = this.editor.source;
 
-    showLegacyExportDialog(this.extensionsIn(doc), () =>
-      this.writeLegacyScad(doc, `${doc.name.replace(/\.[^.]+$/, '')}.scad`),
-    );
+    showSaveAsScadDialog(this.extensionsIn(doc), () => void this.writeStockScad(doc));
   }
 
   /**
-   * Transpiles a document to stock `.scad` and writes it out.
+   * Writes the document out as stock `.scad`.
    *
-   * Deliberately not a Save: the result is a lossy derivative — extensions are
-   * rewritten and the metadata header is gone — so it must not adopt the tab's
-   * handle or clear its dirty flag.
+   * Whether this counts as saving the document depends on what came back. A
+   * file that needed no rewriting was written byte for byte, so the tab can
+   * adopt the new handle like any Save As. A rewritten one cannot: the bytes on
+   * disk are a derivative, and adopting the handle would point Ctrl+S at a file
+   * whose contents the next save would silently replace with the un-rewritten
+   * original.
    */
-  private writeLegacyScad(doc: Document, filename: string): void {
-    const parsed = parse(doc.text, doc.name);
-    const errors = parsed.diagnostics.filter((d) => d.severity === 'error');
-    if (errors.length > 0) {
-      this.reportError(`Cannot export source with parse errors: ${errors[0].message}`);
+  private async writeStockScad(doc: Document): Promise<void> {
+    const result = toStockScad(doc.text, doc.name);
+    if (result.errors.length > 0) {
+      this.reportError(`Cannot save as .scad with parse errors: ${result.errors[0].message}`);
       return;
     }
 
-    const { source, rewrites } = transpileToLegacyScad(parsed.file);
-    void saveBinaryAs(filename, new TextEncoder().encode(source), 'text/plain');
-    this.toasts.show(
-      rewrites.length > 0
-        ? `Exported ${filename}, with ${rewrites.length} rewrite${rewrites.length === 1 ? '' : 's'}.`
-        : `Exported ${filename}.`,
-      'success',
-    );
+    const suggested = withFormatExtension(doc.name, 'scad');
+    try {
+      const handle = await saveTextAs(suggested, result.source);
+
+      if (result.verbatim) {
+        if (handle) {
+          doc.handle = handle;
+          doc.name = handle.name;
+        } else {
+          doc.name = suggested;
+        }
+        doc.hadMetadata = false;
+        doc.savedText = doc.text;
+        this.workspace.persist();
+        this.refreshChrome();
+        this.toasts.show(`Saved ${doc.name} — already stock OpenSCAD, saved unchanged.`, 'success');
+        return;
+      }
+
+      this.toasts.show(
+        `Saved ${handle?.name ?? suggested} with ${result.rewrites.length} rewrite` +
+          `${result.rewrites.length === 1 ? '' : 's'}. This tab still holds your original.`,
+        'success',
+      );
+    } catch (err) {
+      this.reportError(`Could not save: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async exportScreenshot(): Promise<void> {
@@ -1034,10 +1065,10 @@ class App {
         run: () => void this.addAssets(),
       },
       {
-        id: 'file.legacy',
+        id: 'file.saveAsScad',
         category: 'File',
-        title: 'Export as legacy .scad…',
-        run: () => this.exportLegacyScad(),
+        title: 'Save as OpenSCAD .scad…',
+        run: () => this.saveAsStockScad(),
       },
       { id: 'file.export', category: 'File', title: 'Export model…', shortcut: 'Mod+E', run: () => void this.exportModel() },
       {

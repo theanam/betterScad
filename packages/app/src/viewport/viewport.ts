@@ -43,6 +43,14 @@ export interface Measurement {
 
 export interface ViewportCallbacks {
   onMeasure(measurement: Measurement | null): void;
+  /**
+   * Fired whenever the camera moves, by drag or by command.
+   *
+   * Without it the `$vp*` readout only refreshed while the pointer happened to
+   * be moving over the canvas, so it went stale the moment a button or the view
+   * cube changed the view — exactly when you would look at it.
+   */
+  onCamera?(): void;
 }
 
 /** Reads a CSS custom property, so the viewport follows the app theme. */
@@ -96,7 +104,10 @@ export class Viewport {
 
     this.camera = new PerspectiveCamera(45, 1, 0.1, 10_000);
     this.controls = new OrbitCamera(this.camera, this.renderer.domElement, {
-      onChange: () => this.invalidate(),
+      onChange: () => {
+        this.invalidate();
+        this.callbacks.onCamera?.();
+      },
     });
 
     this.gizmo = new ViewGizmo((view) => this.setView(view));

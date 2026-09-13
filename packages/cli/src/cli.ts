@@ -16,10 +16,9 @@ import {
   Engine,
   EXPORT_FORMATS,
   FontRegistry,
-  describeExtensions,
   parse,
   parseBscad,
-  transpileToLegacyScad,
+  toStockScad,
   type AssetProvider,
   type Diagnostic,
   type ExportFormat,
@@ -54,7 +53,8 @@ Options
       --font <file.ttf>    Load a font for text(). Repeatable.
       --time <t>           Set $t for the render (default: 0).
       --frames <n>         Render n frames with $t from 0 to 1; output gets a -0000 suffix.
-      --legacy-scad        Transpile to legacy OpenSCAD .scad instead of rendering.
+      --legacy-scad        Write stock OpenSCAD .scad instead of rendering. A file that
+                           uses no extensions is copied byte for byte.
   -q, --quiet              Only print errors.
       --strict             Treat warnings as errors (useful in CI).
   -h, --help               Show this help.
@@ -174,23 +174,26 @@ async function renderFile(
 async function transpileFile(input: string, options: Options): Promise<void> {
   const raw = await readFile(input, 'utf8');
   const { source } = parseBscad(raw);
-  const parsed = parse(source, basename(input));
+  const result = toStockScad(source, basename(input));
 
-  const errors = parsed.diagnostics.filter((d) => d.severity === 'error');
-  if (errors.length > 0) {
-    for (const error of errors) process.stderr.write(formatDiagnostic(input, error) + '\n');
+  if (result.errors.length > 0) {
+    for (const error of result.errors) process.stderr.write(formatDiagnostic(input, error) + '\n');
     throw new Error('Parse errors; nothing written.');
   }
 
-  const extensions = describeExtensions(parsed.file);
-  const { source: legacy, rewrites } = transpileToLegacyScad(parsed.file);
   const outPath = resolveOutputPath(input, options, 'scad');
-  await writeFile(outPath, legacy, 'utf8');
+  await writeFile(outPath, result.source, 'utf8');
 
   if (!options.quiet) {
     log(`${input} -> ${outPath}`);
-    for (const extension of extensions) log(`  rewrote ${extension.name}: ${extension.downgrade}`);
-    for (const rewrite of rewrites) log(`  ${rewrite}`);
+    if (result.verbatim) {
+      // Worth saying out loud: an unchanged copy is the right answer for a file
+      // that was already stock, not a sign the transpile was skipped by mistake.
+      log('  already stock OpenSCAD; copied unchanged');
+      return;
+    }
+    for (const extension of result.extensions) log(`  rewrote ${extension.name}: ${extension.downgrade}`);
+    for (const rewrite of result.rewrites) log(`  ${rewrite}`);
   }
 }
 
