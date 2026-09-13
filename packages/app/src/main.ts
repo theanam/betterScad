@@ -22,6 +22,7 @@ import { ScadEditor } from './editor/editor.js';
 import {
   BUNDLED_FONTS,
   DEFAULT_FAMILY,
+  cachedFontBytes,
   clearFontCache,
   fetchBundledFont,
   fetchCatalogFont,
@@ -60,6 +61,8 @@ class App {
   private readonly workspace = new Workspace();
   private readonly registry = new CommandRegistry();
   private readonly toasts = new Toasts();
+  /** Font bytes that never reach the download cache: bundled, disk and system faces. */
+  private readonly localFontBytes = new Map<string, Uint8Array>();
 
   private editor!: ScadEditor;
   private viewport!: Viewport;
@@ -85,6 +88,7 @@ class App {
   private lastDimension: 2 | 3 | 0 = 0;
   private customizerModel: CustomizerModel = { parameters: [], groups: [] };
   private fontFamilies: string[] = [];
+  private fontFaces: { family: string; style: string }[] = [];
   private catalog: CatalogEntry[] = [];
   private animationTime = 0;
   /** True until the first render completes, so the boot screen can stay up. */
@@ -332,6 +336,7 @@ class App {
     this.lastDimension = result.dimension;
     this.customizerModel = result.customizer;
     this.fontFamilies = result.fonts;
+    this.fontFaces = result.fontFaces;
 
     if (result.dimension === 2) {
       this.viewport.setContours(result.contours);
@@ -596,6 +601,32 @@ class App {
 
   // -- fonts ----------------------------------------------------------------
 
+  /**
+   * Font bytes for a family, for previewing in the picker.
+   *
+   * Three sources, in the order they are cheapest: fonts loaded from disk or
+   * the system this session, the bundled files, and the IndexedDB download
+   * cache. Returns undefined when the family has not been fetched at all, in
+   * which case the picker simply shows no preview until it is loaded.
+   */
+  private async fontBytesFor(family: string): Promise<Uint8Array | undefined> {
+    const local = this.localFontBytes.get(family);
+    if (local) return local;
+
+    const bundled = BUNDLED_FONTS.find((f) => f.family === family);
+    if (bundled) {
+      try {
+        const data = await fetchBundledFont(document.baseURI, bundled.file);
+        this.localFontBytes.set(family, data);
+        return data;
+      } catch {
+        return undefined;
+      }
+    }
+
+    return cachedFontBytes(family);
+  }
+
   private async loadBundledFonts(): Promise<void> {
     const base = document.baseURI;
     for (const font of BUNDLED_FONTS) {
@@ -611,18 +642,28 @@ class App {
   private async openFontManager(): Promise<void> {
     if (this.catalog.length === 0) this.catalog = await loadCatalog(document.baseURI);
 
-    showFontDialog(this.fontFamilies, this.catalog, {
+    showFontDialog(this.fontFaces, this.catalog, {
       loadCatalogFont: async (entry) => {
         const { data } = await fetchCatalogFont(entry);
         const response = await this.client.loadFont(data);
         this.fontFamilies = response.families;
+        this.fontFaces = response.faces;
         void this.render(true);
+        return data;
+      },
+      bytesFor: (family) => this.fontBytesFor(family),
+      insert: (text) => {
+        this.editor.insertAtCursor(text);
+        this.toasts.show(`Inserted ${text}`, 'success');
       },
       loadFromDisk: async () => {
         const files = await openFontFiles();
         for (const file of files) {
           const response = await this.client.loadFont(file.data);
           this.fontFamilies = response.families;
+          this.fontFaces = response.faces;
+          // Kept so the picker can preview a face the user supplied.
+          this.localFontBytes.set(response.family ?? file.name, file.data);
         }
         if (files.length > 0) {
           this.toasts.show(`Loaded ${files.length} font file${files.length === 1 ? '' : 's'}.`, 'success');
@@ -637,8 +678,11 @@ class App {
         for (const font of fonts.slice(0, 60)) {
           try {
             const blob = await font.blob();
-            const response = await this.client.loadFont(new Uint8Array(await blob.arrayBuffer()));
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            const response = await this.client.loadFont(bytes);
             this.fontFamilies = response.families;
+            this.fontFaces = response.faces;
+            this.localFontBytes.set(response.family ?? font.family, bytes);
             loaded.push(font.family);
           } catch {
             // Skip faces the parser cannot read (bitmap fonts, odd collections).
@@ -993,8 +1037,11 @@ class App {
         if (/\.(bscad|scad)$/i.test(file.name)) {
           opened = this.workspace.createDocument(file.name, await file.text());
         } else if (/\.(ttf|otf|ttc)$/i.test(file.name)) {
-          const response = await this.client.loadFont(new Uint8Array(await file.arrayBuffer()));
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const response = await this.client.loadFont(bytes);
           this.fontFamilies = response.families;
+          this.fontFaces = response.faces;
+          this.localFontBytes.set(response.family ?? file.name, bytes);
         } else {
           this.workspace.assets.set(file.name, new Uint8Array(await file.arrayBuffer()));
         }

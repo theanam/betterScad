@@ -95,6 +95,11 @@ async function writeCached(key: string, data: Uint8Array): Promise<void> {
   });
 }
 
+/** Bytes for a previously downloaded family, or undefined if never fetched. */
+export function cachedFontBytes(family: string): Promise<Uint8Array | undefined> {
+  return readCached(family);
+}
+
 export async function cachedFamilies(): Promise<string[]> {
   const db = await openDb();
   if (!db) return [];

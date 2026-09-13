@@ -123,6 +123,11 @@ characters change.
 `halign` shifts by the advance width, which includes the trailing sidebearing,
 for the same reason.
 
+The `font` argument is `"Family"`, or `"Family:style=Style"` for anything other
+than Regular. The app's **Fonts** dialog previews each face in its own typeface
+and shows the exact snippet, with Copy and Insert buttons, so the spelling never
+has to be guessed.
+
 ### `round()` rounds half away from zero
 
 `round(2.5)` is `3`, `round(-2.5)` is `-3`. (JavaScript's `Math.round` would

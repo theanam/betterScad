@@ -114,82 +114,252 @@ export function showExportDialog(
 // ---------------------------------------------------------------------------
 
 export interface FontDialogCallbacks {
-  loadCatalogFont(entry: CatalogEntry): Promise<void>;
+  /** Downloads, caches and registers a catalogue font. Resolves to its bytes. */
+  loadCatalogFont(entry: CatalogEntry): Promise<Uint8Array>;
   loadFromDisk(): Promise<void>;
   loadSystemFonts(): Promise<string[]>;
   clearCache(): Promise<void>;
+  /** Bytes already on hand for a family, from the app or the IndexedDB cache. */
+  bytesFor(family: string): Promise<Uint8Array | undefined>;
+  /** Inserts text at the editor cursor. */
+  insert(text: string): void;
+}
+
+const DEFAULT_SAMPLE = 'Handgloves 123';
+
+/**
+ * Registers a font for *preview only*, under a namespaced CSS family.
+ *
+ * The prefix keeps these from colliding with a real installed font of the same
+ * name, so a preview always shows the face BetterSCAD will actually use for
+ * geometry rather than whatever the OS happens to have.
+ */
+const previewFamilies = new Map<string, string>();
+
+async function registerPreviewFont(family: string, data: Uint8Array): Promise<string | undefined> {
+  const cached = previewFamilies.get(family);
+  if (cached) return cached;
+
+  const cssFamily = `bsprev-${family.replace(/[^\w-]/g, '-')}`;
+  try {
+    // `slice()` detaches a copy: the caller may transfer the original buffer to
+    // the worker, which would leave FontFace reading a neutered ArrayBuffer.
+    const face = new FontFace(cssFamily, data.slice().buffer as ArrayBuffer);
+    await face.load();
+    document.fonts.add(face);
+    previewFamilies.set(family, cssFamily);
+    return cssFamily;
+  } catch {
+    // A face the browser cannot render still works for geometry, so failing to
+    // preview is not an error worth surfacing.
+    return undefined;
+  }
 }
 
 /** Font manager (spec feature 23). */
 export function showFontDialog(
-  loadedFamilies: string[],
+  loadedFaces: { family: string; style: string }[],
   catalog: CatalogEntry[],
   callbacks: FontDialogCallbacks,
 ): HTMLDialogElement {
-  const loaded = new Set(loadedFamilies);
+  const loaded = new Map<string, string[]>();
+  for (const face of loadedFaces) {
+    const styles = loaded.get(face.family) ?? [];
+    if (!styles.includes(face.style)) styles.push(face.style);
+    loaded.set(face.family, styles);
+  }
+
   const list = el('div', { class: 'fontlist' });
+
   const search = el('input', {
     type: 'text',
+    class: 'font__field',
     placeholder: 'Search families…',
     'aria-label': 'Search font families',
-    style: 'width: 100%; padding: 6px 8px; margin-bottom: 12px;',
   });
+
+  const sample = el('input', {
+    type: 'text',
+    class: 'font__field',
+    value: DEFAULT_SAMPLE,
+    'aria-label': 'Preview text',
+    placeholder: 'Preview text…',
+  });
+
+  const sampleText = (): string => sample.value || DEFAULT_SAMPLE;
+
+  // Retitle every rendered preview in place, rather than rebuilding the list.
+  sample.addEventListener('input', () => {
+    for (const node of list.querySelectorAll('.font__preview')) {
+      node.textContent = sampleText();
+    }
+  });
+
+  const status = el('p', { class: 'param__hint', text: '' });
+
+  function specFor(family: string, style?: string): string {
+    if (!style || style.toLowerCase() === 'regular') return family;
+    return `${family}:style=${style}`;
+  }
+
+  /** The `font = "…"` snippet, with Copy and Insert beside it. */
+  function specRow(family: string, style?: string): HTMLElement {
+    const spec = specFor(family, style);
+    const snippet = `font = ${JSON.stringify(spec)}`;
+
+    const copy = button({
+      label: 'Copy',
+      title: `Copy ${snippet}`,
+      onClick: () => {
+        void navigator.clipboard
+          .writeText(snippet)
+          .then(() => {
+            copy.replaceChildren(document.createTextNode('Copied'));
+            setTimeout(() => copy.replaceChildren(document.createTextNode('Copy')), 1400);
+          })
+          .catch(() => {
+            // Clipboard access can be denied; the text is selectable regardless.
+            status.textContent = 'Could not reach the clipboard — select the snippet and copy it.';
+          });
+      },
+    });
+
+    const insert = button({
+      label: 'Insert',
+      variant: 'primary',
+      title: `Insert ${snippet} at the cursor`,
+      onClick: () => {
+        callbacks.insert(snippet);
+        status.textContent = `Inserted ${snippet}`;
+      },
+    });
+
+    return el('div', { class: 'font__spec' }, [
+      el('code', { class: 'font__snippet', title: 'The argument text() expects', text: snippet }),
+      el('div', { class: 'font__specactions' }, [copy, insert]),
+    ]);
+  }
+
+  function row(entry: CatalogEntry | { family: string; license?: string }): HTMLElement {
+    const family = entry.family;
+    const styles = loaded.get(family);
+    const isLoaded = !!styles;
+
+    const preview = el('div', {
+      class: 'font__preview',
+      text: sampleText(),
+      // Falls back to the UI font until the real face is registered.
+      style: 'font-family: var(--bs-font-ui)',
+    });
+
+    const meta = el('span', {
+      class: 'fontlist__meta',
+      text: [
+        'license' in entry && entry.license ? entry.license : null,
+        'variable' in entry && (entry as CatalogEntry).variable ? 'variable' : null,
+        isLoaded && styles.length > 1 ? `${styles.length} styles` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    });
+
+    const actions = el('div', { class: 'font__actions' });
+    const body = el('div', { class: 'font__body' }, [
+      el('div', { class: 'font__head' }, [
+        el('span', { class: 'font__family', text: family }),
+        meta,
+        el('span', { class: 'toolbar__spacer' }),
+        actions,
+      ]),
+      preview,
+    ]);
+
+    const item = el('div', { class: 'font__item' }, [body]);
+
+    /** Swaps the preview onto the real face and reveals the spec snippet. */
+    const applyPreview = async (data: Uint8Array): Promise<void> => {
+      const cssFamily = await registerPreviewFont(family, data);
+      if (cssFamily) preview.style.fontFamily = `'${cssFamily}', var(--bs-font-ui)`;
+    };
+
+    const showSpecs = (): void => {
+      const available = loaded.get(family) ?? ['Regular'];
+      for (const style of available) body.appendChild(specRow(family, style));
+    };
+
+    if (isLoaded) {
+      actions.appendChild(el('span', { class: 'fontlist__state', text: 'Loaded' }));
+      showSpecs();
+      // Bytes may be in the IndexedDB cache or bundled; either way, preview it.
+      void callbacks.bytesFor(family).then((data) => {
+        if (data) void applyPreview(data);
+      });
+    } else {
+      const load = button({
+        label: 'Load',
+        iconName: 'download',
+        title: `Download ${family} and make it available to text()`,
+        onClick: async () => {
+          load.disabled = true;
+          load.replaceChildren(document.createTextNode('Loading…'));
+          try {
+            const data = await callbacks.loadCatalogFont(entry as CatalogEntry);
+            loaded.set(family, ['Regular']);
+            actions.replaceChildren(el('span', { class: 'fontlist__state', text: 'Loaded' }));
+            await applyPreview(data);
+            showSpecs();
+          } catch (err) {
+            load.disabled = false;
+            load.replaceChildren(document.createTextNode('Retry'));
+            status.textContent = err instanceof Error ? err.message : String(err);
+          }
+        },
+      });
+      actions.appendChild(load);
+
+      // If it is already cached from a previous session, preview it for free.
+      void callbacks.bytesFor(family).then((data) => {
+        if (data) void applyPreview(data);
+      });
+    }
+
+    return item;
+  }
 
   const paint = (): void => {
     clear(list);
     const query = search.value.trim().toLowerCase();
-    const matches = catalog.filter((entry) => entry.family.toLowerCase().includes(query));
 
-    if (matches.length === 0) {
+    // Loaded families first — they are the ones usable right now — then the
+    // rest of the catalogue.
+    const catalogued = new Set(catalog.map((e) => e.family));
+    const extras = [...loaded.keys()]
+      .filter((family) => !catalogued.has(family))
+      .map((family) => ({ family }));
+
+    const entries = [...extras, ...catalog].filter((e) => e.family.toLowerCase().includes(query));
+    entries.sort((a, b) => {
+      const rank = (f: string): number => (loaded.has(f) ? 0 : 1);
+      return rank(a.family) - rank(b.family) || a.family.localeCompare(b.family);
+    });
+
+    if (entries.length === 0) {
       list.appendChild(el('p', { class: 'panel__empty', text: 'No matching families.' }));
       return;
     }
-
-    for (const entry of matches.slice(0, 200)) {
-      const isLoaded = loaded.has(entry.family);
-      const item = el(
-        'button',
-        {
-          class: 'fontlist__item',
-          type: 'button',
-          disabled: isLoaded,
-          onclick: async () => {
-            item.disabled = true;
-            const state = item.querySelector('.fontlist__state');
-            if (state) state.textContent = 'Loading…';
-            try {
-              await callbacks.loadCatalogFont(entry);
-              loaded.add(entry.family);
-              if (state) state.textContent = 'Loaded';
-            } catch (err) {
-              if (state) state.textContent = err instanceof Error ? err.message : 'Failed';
-              item.disabled = false;
-            }
-          },
-        },
-        [
-          el('span', {}, [
-            el('div', { text: entry.family }),
-            el('div', { class: 'fontlist__meta', text: `${entry.license}${entry.variable ? ' · variable' : ''}` }),
-          ]),
-          el('span', { class: 'fontlist__state', text: isLoaded ? 'Loaded' : 'Download' }),
-        ],
-      );
-      list.appendChild(item);
-    }
+    for (const entry of entries.slice(0, 200)) list.appendChild(row(entry));
   };
 
   search.addEventListener('input', paint);
   paint();
 
-  const systemStatus = el('p', { class: 'param__hint', text: '' });
-
   const body = el('div', {}, [
     el('p', {
       class: 'param__hint',
+      style: 'margin-top: 0',
       text:
-        'Fonts are used by text(). A few families ship with the app for offline use; ' +
-        'anything you download here is cached in your browser and stays available offline.',
+        'Fonts are used by text(). A few ship with the app for offline use; anything you ' +
+        'load here is cached in your browser and stays available offline.',
     }),
     el('div', { class: 'toolbar__group', style: 'margin: 12px 0;' }, [
       button({
@@ -201,35 +371,41 @@ export function showFontDialog(
         label: 'Use system fonts',
         title: 'Requires permission; supported in Chrome and Edge',
         onClick: async () => {
-          systemStatus.textContent = 'Requesting access…';
+          status.textContent = 'Requesting access…';
           const families = await callbacks.loadSystemFonts();
-          systemStatus.textContent =
+          status.textContent =
             families.length > 0
               ? `Loaded ${families.length} system famil${families.length === 1 ? 'y' : 'ies'}.`
               : 'This browser does not expose system fonts. Load a font file instead.';
-          for (const family of families) loaded.add(family);
+          for (const family of families) {
+            if (!loaded.has(family)) loaded.set(family, ['Regular']);
+          }
           paint();
         },
       }),
     ]),
-    systemStatus,
-    search,
+    status,
+    el('div', { class: 'font__filters' }, [
+      el('label', { class: 'font__filter' }, [
+        el('span', { class: 'param__hint', text: 'Search' }),
+        search,
+      ]),
+      el('label', { class: 'font__filter' }, [
+        el('span', { class: 'param__hint', text: 'Preview text' }),
+        sample,
+      ]),
+    ]),
     list,
   ]);
 
   const dialog = shell('Fonts', body, [
-    button({
-      label: 'Clear cache',
-      onClick: () => void callbacks.clearCache(),
-    }),
+    button({ label: 'Clear cache', onClick: () => void callbacks.clearCache() }),
     button({ label: 'Done', variant: 'primary', onClick: () => dialog.close() }),
   ]);
 
   dialog.showModal();
   return dialog;
 }
-
-// ---------------------------------------------------------------------------
 
 export function showConfirm(
   title: string,

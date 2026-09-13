@@ -40,6 +40,18 @@ export interface TextResult {
   descender: number;
 }
 
+/**
+ * Builds the `font =` spec for a face, the inverse of `parseFontSpec`.
+ *
+ * `Regular` is omitted because it is the default; emitting
+ * `"Noto Sans:style=Regular"` is correct but noisier than anyone wants to read
+ * or type.
+ */
+export function formatFontSpec(family: string, style?: string): string {
+  if (!style || style.trim().toLowerCase() === 'regular') return family;
+  return `${family}:style=${style.trim()}`;
+}
+
 /** Parses `"Liberation Sans:style=Bold Italic"` into its parts. */
 export function parseFontSpec(spec: string): { family: string; style: string } {
   const [familyPart, ...rest] = spec.split(':');
@@ -92,6 +104,18 @@ export class FontRegistry {
 
   get families(): string[] {
     return [...new Set(this.faces.map((f) => f.family))].sort();
+  }
+
+  /**
+   * Every loaded face as a family/style pair.
+   *
+   * A UI needs the style to build the `font = "Family:style=Style"` spec that
+   * `text()` expects; the family list alone cannot express a Bold face.
+   */
+  get list(): { family: string; style: string }[] {
+    return this.faces
+      .map((f) => ({ family: f.family, style: f.style }))
+      .sort((a, b) => a.family.localeCompare(b.family) || a.style.localeCompare(b.style));
   }
 
   stylesFor(family: string): string[] {

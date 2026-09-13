@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { FontRegistry } from '../dist/index.js';
+import { FontRegistry, formatFontSpec, parseFontSpec } from '../dist/index.js';
 
 const FONT = fileURLToPath(new URL('../../app/public/fonts/NotoSans.ttf', import.meta.url));
 
@@ -192,4 +192,40 @@ test('an unknown family falls back instead of rendering nothing', () => {
     segments: 8,
   });
   assert.ok(result && result.contours.length > 0, 'should fall back to a loaded face');
+});
+
+test('font specs round-trip between formatting and parsing', () => {
+  // `formatFontSpec` is what the font picker shows and inserts, so it has to
+  // produce exactly what `text(font = …)` parses back.
+  const cases = [
+    ['Noto Sans', 'Regular', 'Noto Sans'],
+    ['Noto Sans', undefined, 'Noto Sans'],
+    ['Noto Sans', 'Bold', 'Noto Sans:style=Bold'],
+    ['Playfair Display', 'Bold Italic', 'Playfair Display:style=Bold Italic'],
+  ];
+
+  for (const [family, style, expected] of cases) {
+    const spec = formatFontSpec(family, style);
+    assert.equal(spec, expected);
+    assert.equal(parseFontSpec(spec).family, family);
+  }
+
+  // Regular is dropped because it is the default, not because it is ignored.
+  assert.equal(parseFontSpec(formatFontSpec('Noto Sans', 'Regular')).style, '');
+  assert.equal(parseFontSpec(formatFontSpec('Noto Sans', 'Bold')).style, 'Bold');
+});
+
+test('the registry lists faces with their styles', () => {
+  const fonts = registry();
+  const faces = fonts.list;
+  assert.ok(faces.length > 0);
+  for (const face of faces) {
+    assert.equal(typeof face.family, 'string');
+    assert.equal(typeof face.style, 'string');
+    assert.ok(face.family.length > 0 && face.style.length > 0);
+  }
+  // A spec built from any listed face must resolve back to that same face.
+  const [first] = faces;
+  const resolved = fonts.resolve(formatFontSpec(first.family, first.style));
+  assert.ok(resolved && resolved.family === first.family);
 });

@@ -184,6 +184,7 @@ async function handleRender(request: RenderRequest): Promise<void> {
       },
       bounds: boundsOf(meshes),
       fonts: fonts.families,
+      fontFaces: fonts.list,
     },
     transfer,
   );
@@ -241,6 +242,7 @@ function handleFont(request: LoadFontRequest): void {
     family: face.family,
     style: face.style,
     families: fonts.families,
+    faces: fonts.list,
   });
 }
 

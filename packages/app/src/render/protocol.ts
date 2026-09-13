@@ -7,6 +7,12 @@
 
 import type { CustomizerModel, Diagnostic, ExportFormat, Value } from '@betterscad/engine';
 
+/** A loaded font face. The style is what makes a `font=` spec unambiguous. */
+export interface FontFaceInfo {
+  family: string;
+  style: string;
+}
+
 export interface RenderRequest {
   type: 'render';
   id: number;
@@ -84,6 +90,7 @@ export interface RenderResponse {
   stats: RenderStats;
   bounds: { min: [number, number, number]; max: [number, number, number] } | null;
   fonts: string[];
+  fontFaces: FontFaceInfo[];
 }
 
 export interface ExportResponse {
@@ -102,6 +109,7 @@ export interface FontResponse {
   family?: string;
   style?: string;
   families: string[];
+  faces: FontFaceInfo[];
 }
 
 export interface ErrorResponse {

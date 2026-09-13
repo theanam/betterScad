@@ -262,6 +262,20 @@ export class ScadEditor {
     this.view.dispatch({ changes: { from, to, insert: text } });
   }
 
+  /**
+   * Inserts text at the cursor, replacing any selection, and leaves the caret
+   * after it. Used by the font picker's Insert action.
+   */
+  insertAtCursor(text: string): void {
+    const range = this.view.state.selection.main;
+    this.view.dispatch({
+      changes: { from: range.from, to: range.to, insert: text },
+      selection: { anchor: range.from + text.length },
+      scrollIntoView: true,
+    });
+    this.view.focus();
+  }
+
   undo(): void {
     undo(this.view);
   }
