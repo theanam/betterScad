@@ -250,11 +250,35 @@ function handleFont(request: LoadFontRequest): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Converts a mesh to a GPU-ready payload with angle-weighted vertex normals.
+ * Above this angle between neighbouring faces, the edge between them is a
+ * crease: the two sides get their own normals instead of being averaged into
+ * one. 30° is the usual choice and lands where it should here — a $fn = 48
+ * sphere steps 7.5° per ring and stays smooth, a cube's 90° edges stay sharp,
+ * and a cylinder's flat cap never blends into its wall.
+ */
+const CREASE_COS = Math.cos((30 * Math.PI) / 180);
+
+/** Two corner normals close enough to share a vertex rather than split it. */
+const SAME_NORMAL_COS = 0.9999;
+
+/**
+ * Converts a mesh to a GPU-ready payload with crease-aware vertex normals.
  *
- * Normals are computed here rather than in the viewport because the worker
- * already owns the data, and because splitting hard edges on the main thread
- * would mean shipping the mesh twice.
+ * Averaging every adjacent face into a shared vertex is what makes a cube shade
+ * like a ball: its eight vertices are shared by three faces each, so every
+ * corner normal comes out along the body diagonal and the GPU interpolates that
+ * across faces that are actually flat. Manifold emits exactly that topology —
+ * `cube(20)` is 8 vertices and 12 triangles — so the preview has to reconstruct
+ * the hard edges rather than assume they survived.
+ *
+ * Faces are only averaged together when they meet at less than `CREASE_COS`;
+ * across a crease the vertex is duplicated so each side keeps its own normal.
+ * Vertices that need no split keep their original index, which matters because
+ * de-indexing wholesale would triple the buffers for smooth meshes — the ones
+ * that are already the largest.
+ *
+ * Computed in the worker rather than the viewport because the worker already
+ * owns the data, and the split has to happen before the buffers are transferred.
  */
 function toPayload(
   mesh: { positions: Float32Array; triangles: Uint32Array },
@@ -263,12 +287,20 @@ function toPayload(
   transfer: Transferable[],
 ): MeshPayload {
   const { positions, triangles } = mesh;
-  const normals = new Float32Array(positions.length);
+  const vertexCount = positions.length / 3;
+  const faceCount = triangles.length / 3;
 
-  for (let t = 0; t < triangles.length; t += 3) {
-    const ia = triangles[t] * 3;
-    const ib = triangles[t + 1] * 3;
-    const ic = triangles[t + 2] * 3;
+  // --- per-face normals ---------------------------------------------------
+  // Area-weighted for averaging (the un-normalised cross product is already
+  // proportional to area, which beats averaging unit normals on irregular
+  // meshes), and unit for comparing angles.
+  const faceWeighted = new Float32Array(faceCount * 3);
+  const faceUnit = new Float32Array(faceCount * 3);
+
+  for (let f = 0; f < faceCount; f++) {
+    const ia = triangles[f * 3] * 3;
+    const ib = triangles[f * 3 + 1] * 3;
+    const ic = triangles[f * 3 + 2] * 3;
 
     const abx = positions[ib] - positions[ia];
     const aby = positions[ib + 1] - positions[ia + 1];
@@ -277,32 +309,136 @@ function toPayload(
     const acy = positions[ic + 1] - positions[ia + 1];
     const acz = positions[ic + 2] - positions[ia + 2];
 
-    // The un-normalised cross product is already area-weighted, which gives
-    // better results than averaging unit normals on irregular meshes.
     const nx = aby * acz - abz * acy;
     const ny = abz * acx - abx * acz;
     const nz = abx * acy - aby * acx;
 
-    for (const index of [ia, ib, ic]) {
-      normals[index] += nx;
-      normals[index + 1] += ny;
-      normals[index + 2] += nz;
-    }
-  }
+    faceWeighted[f * 3] = nx;
+    faceWeighted[f * 3 + 1] = ny;
+    faceWeighted[f * 3 + 2] = nz;
 
-  for (let i = 0; i < normals.length; i += 3) {
-    const length = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
+    const length = Math.hypot(nx, ny, nz);
     if (length > 0) {
-      normals[i] /= length;
-      normals[i + 1] /= length;
-      normals[i + 2] /= length;
+      faceUnit[f * 3] = nx / length;
+      faceUnit[f * 3 + 1] = ny / length;
+      faceUnit[f * 3 + 2] = nz / length;
     } else {
-      normals[i + 2] = 1;
+      // A degenerate triangle has no direction to contribute; leaving it zero
+      // keeps it out of every average rather than poisoning its neighbours.
+      faceUnit[f * 3 + 2] = 0;
     }
   }
 
-  const payload: MeshPayload = { positions, normals, indices: triangles, color, display };
-  transfer.push(positions.buffer, normals.buffer, triangles.buffer as ArrayBuffer);
+  // --- which faces touch each vertex, as a compressed adjacency list -------
+  const offsets = new Uint32Array(vertexCount + 1);
+  for (let i = 0; i < triangles.length; i++) offsets[triangles[i] + 1]++;
+  for (let v = 0; v < vertexCount; v++) offsets[v + 1] += offsets[v];
+
+  const adjacency = new Uint32Array(triangles.length);
+  const cursor = offsets.slice(0, vertexCount);
+  for (let f = 0; f < faceCount; f++) {
+    for (let k = 0; k < 3; k++) adjacency[cursor[triangles[f * 3 + k]]++] = f;
+  }
+
+  // --- corner normals, splitting vertices across creases -------------------
+  const normals = new Float32Array(positions.length);
+  const written = new Uint8Array(vertexCount);
+  const indices = new Uint32Array(triangles.length);
+
+  // Only the vertices that actually split allocate anything, so a smooth mesh
+  // pays nothing for this.
+  const splits = new Map<number, number[]>();
+  const extraPositions: number[] = [];
+  const extraNormals: number[] = [];
+  let nextIndex = vertexCount;
+
+  for (let f = 0; f < faceCount; f++) {
+    const fx = faceUnit[f * 3];
+    const fy = faceUnit[f * 3 + 1];
+    const fz = faceUnit[f * 3 + 2];
+
+    for (let k = 0; k < 3; k++) {
+      const v = triangles[f * 3 + k];
+
+      let nx = 0;
+      let ny = 0;
+      let nz = 0;
+      for (let j = offsets[v]; j < offsets[v + 1]; j++) {
+        const g = adjacency[j];
+        const dot = fx * faceUnit[g * 3] + fy * faceUnit[g * 3 + 1] + fz * faceUnit[g * 3 + 2];
+        if (dot < CREASE_COS) continue;
+        nx += faceWeighted[g * 3];
+        ny += faceWeighted[g * 3 + 1];
+        nz += faceWeighted[g * 3 + 2];
+      }
+
+      const length = Math.hypot(nx, ny, nz);
+      if (length > 0) {
+        nx /= length;
+        ny /= length;
+        nz /= length;
+      } else {
+        nx = fx;
+        ny = fy;
+        nz = fz;
+      }
+
+      indices[f * 3 + k] = placeCorner(v, nx, ny, nz);
+    }
+  }
+
+  /** Reuses the vertex when the normal matches, and splits it when it does not. */
+  function placeCorner(v: number, nx: number, ny: number, nz: number): number {
+    if (!written[v]) {
+      normals[v * 3] = nx;
+      normals[v * 3 + 1] = ny;
+      normals[v * 3 + 2] = nz;
+      written[v] = 1;
+      return v;
+    }
+    if (normals[v * 3] * nx + normals[v * 3 + 1] * ny + normals[v * 3 + 2] * nz >= SAME_NORMAL_COS) {
+      return v;
+    }
+
+    const existing = splits.get(v);
+    if (existing) {
+      for (const index of existing) {
+        const at = (index - vertexCount) * 3;
+        if (extraNormals[at] * nx + extraNormals[at + 1] * ny + extraNormals[at + 2] * nz >= SAME_NORMAL_COS) {
+          return index;
+        }
+      }
+    }
+
+    const index = nextIndex++;
+    extraPositions.push(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]);
+    extraNormals.push(nx, ny, nz);
+    if (existing) existing.push(index);
+    else splits.set(v, [index]);
+    return index;
+  }
+
+  // --- assemble -----------------------------------------------------------
+  let outPositions = positions;
+  let outNormals = normals;
+  if (extraPositions.length > 0) {
+    outPositions = new Float32Array(positions.length + extraPositions.length);
+    outPositions.set(positions);
+    outPositions.set(extraPositions, positions.length);
+
+    outNormals = new Float32Array(normals.length + extraNormals.length);
+    outNormals.set(normals);
+    outNormals.set(extraNormals, normals.length);
+  }
+
+  const payload: MeshPayload = {
+    positions: outPositions,
+    normals: outNormals,
+    indices,
+    color,
+    display,
+  };
+  transfer.push(outPositions.buffer, outNormals.buffer, indices.buffer);
   return payload;
 }
 
