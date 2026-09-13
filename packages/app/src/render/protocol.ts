@@ -85,6 +85,8 @@ export interface RenderResponse {
   /** Flattened 2D contours, for the 2D preview. */
   contours: { points: Float32Array; color: [number, number, number, number] }[];
   dimension: 2 | 3 | 0;
+  /** Echoes the request's mode, so the UI can show which one you are looking at. */
+  preview: boolean;
   diagnostics: Diagnostic[];
   customizer: CustomizerModel;
   stats: RenderStats;

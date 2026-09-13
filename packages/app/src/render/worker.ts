@@ -173,6 +173,7 @@ async function handleRender(request: RenderRequest): Promise<void> {
       annotations,
       contours,
       dimension: result.geometry.dimension,
+      preview: request.preview,
       diagnostics: result.diagnostics,
       customizer: result.customizer,
       stats: {

@@ -80,6 +80,8 @@ export class Toolbar {
   readonly element: HTMLElement;
   private readonly customizerButton: HTMLButtonElement;
   private readonly consoleButton: HTMLButtonElement;
+  private readonly previewButton: HTMLButtonElement;
+  private readonly renderButton: HTMLButtonElement;
   private readonly themeToggle: ThemeToggle;
 
   constructor(private readonly actions: ToolbarActions) {
@@ -94,6 +96,21 @@ export class Toolbar {
       onClick: () => this.actions.toggleConsole(),
     });
     this.themeToggle = new ThemeToggle(() => actions.toggleTheme());
+    this.previewButton = button({
+      label: 'Preview',
+      iconName: 'play',
+      shortcut: 'F5',
+      variant: 'primary',
+      title: 'Re-render with $preview = true',
+      onClick: () => actions.preview(),
+    });
+    this.renderButton = button({
+      label: 'Render',
+      iconName: 'render',
+      shortcut: 'F6',
+      title: 'Re-render with $preview = false — the geometry Export produces',
+      onClick: () => actions.render(),
+    });
 
     this.element = el('header', { class: 'toolbar', role: 'toolbar' }, [
       el('div', { class: 'toolbar__brand' }, [
@@ -107,8 +124,8 @@ export class Toolbar {
       ]),
       el('div', { class: 'toolbar__divider' }),
       el('div', { class: 'toolbar__group' }, [
-        button({ label: 'Preview', iconName: 'play', shortcut: 'F5', variant: 'primary', onClick: () => actions.preview() }),
-        button({ label: 'Render', iconName: 'render', shortcut: 'F6', onClick: () => actions.render() }),
+        this.previewButton,
+        this.renderButton,
         button({ label: 'Export', iconName: 'download', shortcut: formatShortcut('Mod+E'), onClick: () => actions.export() }),
       ]),
       el('div', { class: 'toolbar__spacer' }),
@@ -132,9 +149,25 @@ export class Toolbar {
     customizerVisible: boolean;
     consoleVisible: boolean;
     theme: 'light' | 'dark';
+    autoRender: boolean;
+    showingFinalRender: boolean;
   }): void {
     this.customizerButton.classList.toggle('btn--active', state.customizerVisible);
     this.consoleButton.classList.toggle('btn--active', state.consoleVisible);
+
+    // Auto-render already re-renders in preview mode on every edit, so the
+    // Preview button would do exactly nothing. F5 still works — hiding a
+    // button should not remove its shortcut.
+    this.previewButton.hidden = state.autoRender;
+
+    // Render is not redundant: it is the only way to see $preview = false,
+    // which is what Export produces. Marking it active when that is what is on
+    // screen is the difference between a useful button and a mystery one.
+    this.renderButton.classList.toggle('btn--active', state.showingFinalRender);
+    this.renderButton.title = state.showingFinalRender
+      ? 'Showing the final render ($preview = false)'
+      : 'Re-render with $preview = false — the geometry Export produces';
+
     this.setTheme(state.theme);
   }
 

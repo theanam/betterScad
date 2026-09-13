@@ -43,7 +43,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Real file access** | Opens and saves files directly on disk via the File System Access API, with a download/upload fallback for Firefox and Safari. |
 | **Live customizer** | Auto-generates sliders, dropdowns and checkboxes from `//` parameter annotations, using OpenSCAD's own conventions. |
 | **Modern editor** | CodeMirror 6 with OpenSCAD syntax highlighting, autocomplete with real signatures, multi-file tabs, and inline error squiggles. |
-| **Fast + precise renders** | `F5` preview and `F6` full render, mirroring OpenSCAD, exposed to scripts as `$preview`. |
+| **Fast + precise renders** | `F5` preview and `F6` full render, mirroring OpenSCAD, exposed to scripts as `$preview`. Auto-render keeps the preview live as you type, so the Preview button hides itself while it is on. |
 | **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
 | **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
 | **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |

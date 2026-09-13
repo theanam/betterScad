@@ -29,6 +29,16 @@ recursion, `children()` with index/range/vector selectors, `$children`
 **Special variables** — `$fn`, `$fa`, `$fs`, `$t`, `$preview`, `$children`,
 `$vpr`, `$vpt`, `$vpd`, `$vpf`
 
+`$preview` is `true` for `F5` and for the app's auto-render, `false` for `F6`
+and for every export. Unlike stock OpenSCAD, where F5 and F6 use different
+geometry kernels, BetterSCAD produces an exact mesh either way — so the two
+differ *only* for scripts that read `$preview` and simplify themselves:
+
+```scad
+$fn = $preview ? 12 : 96;   // 140 triangles while editing, 9212 on export
+sphere(10);
+```
+
 **Constants** — `PI`, plus the `true` / `false` / `undef` literals
 
 **Modifiers** — `%` background, `#` highlight, `!` root, `*` disable

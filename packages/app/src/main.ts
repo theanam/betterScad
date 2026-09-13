@@ -86,6 +86,8 @@ class App {
   private cursor = { line: 1, column: 1 };
   private lastStats: RenderStats | undefined;
   private lastDimension: 2 | 3 | 0 = 0;
+  /** Whether what is on screen came from a full render rather than a preview. */
+  private showingFinalRender = false;
   private customizerModel: CustomizerModel = { parameters: [], groups: [] };
   private fontFamilies: string[] = [];
   private fontFaces: { family: string; style: string }[] = [];
@@ -334,6 +336,7 @@ class App {
   private onRenderResult(result: RenderResponse): void {
     this.lastStats = result.stats;
     this.lastDimension = result.dimension;
+    this.showingFinalRender = !result.preview;
     this.customizerModel = result.customizer;
     this.fontFamilies = result.fonts;
     this.fontFaces = result.fontFaces;
@@ -846,8 +849,8 @@ class App {
     this.tabs.update(this.workspace.documents, this.workspace.activeId, (doc) =>
       this.workspace.isDirty(doc),
     );
-    this.toolbar.update(this.workspace.layout);
     const counts = this.consolePanel.counts;
+    this.toolbar.update({ ...this.workspace.layout, showingFinalRender: this.showingFinalRender });
     this.statusBar.update({
       cursor: this.cursor,
       errors: counts.errors,
