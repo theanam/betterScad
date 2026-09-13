@@ -33,6 +33,7 @@ export class Toolbar {
   readonly element: HTMLElement;
   private readonly customizerButton: HTMLButtonElement;
   private readonly consoleButton: HTMLButtonElement;
+  private readonly themeButton: HTMLButtonElement;
 
   constructor(private readonly actions: ToolbarActions) {
     this.customizerButton = button({
@@ -45,6 +46,7 @@ export class Toolbar {
       iconName: 'console',
       onClick: () => this.actions.toggleConsole(),
     });
+    this.themeButton = button({ label: 'Dark', iconName: 'moon', onClick: () => actions.toggleTheme() });
 
     this.element = el('header', { class: 'toolbar', role: 'toolbar' }, [
       el('div', { class: 'toolbar__brand' }, [
@@ -67,12 +69,7 @@ export class Toolbar {
         this.customizerButton,
         this.consoleButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
-        button({
-          title: 'Toggle theme',
-          label: 'Theme',
-          iconName: 'gear',
-          onClick: () => actions.toggleTheme(),
-        }),
+        this.themeButton,
         button({
           label: 'Commands',
           title: 'Command palette',
@@ -83,9 +80,31 @@ export class Toolbar {
     ]);
   }
 
-  update(state: { customizerVisible: boolean; consoleVisible: boolean }): void {
+  update(state: {
+    customizerVisible: boolean;
+    consoleVisible: boolean;
+    theme: 'light' | 'dark';
+  }): void {
     this.customizerButton.classList.toggle('btn--active', state.customizerVisible);
     this.consoleButton.classList.toggle('btn--active', state.consoleVisible);
+    this.setTheme(state.theme);
+  }
+
+  /**
+   * Shows the theme that is *active*, not the one a click would switch to.
+   *
+   * Both conventions exist and neither is self-evident from an icon alone, so
+   * the label states the current mode and the tooltip states the action.
+   */
+  private setTheme(theme: 'light' | 'dark'): void {
+    const dark = theme === 'dark';
+    this.themeButton.replaceChildren(
+      icon(dark ? 'moon' : 'sun'),
+      el('span', { text: dark ? 'Dark' : 'Light' }),
+    );
+    const action = `Switch to ${dark ? 'light' : 'dark'} theme`;
+    this.themeButton.title = action;
+    this.themeButton.setAttribute('aria-label', `${dark ? 'Dark' : 'Light'} theme. ${action}.`);
   }
 }
 

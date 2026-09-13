@@ -829,6 +829,8 @@ class App {
     this.workspace.layout.theme = next;
     this.applyTheme(next);
     this.workspace.persist();
+    // Repaints the toolbar toggle so its icon and label track the new theme.
+    this.refreshChrome();
   }
 
   private applyTheme(theme: 'light' | 'dark'): void {

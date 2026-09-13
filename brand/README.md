@@ -40,7 +40,7 @@ product:
 | `betterscad-icon-maskable.svg`, `-maskable-512.png` | Android maskable icon; the mark is inset to 90% so a circular mask does not clip the cube. |
 | `apple-touch-icon.png` | iOS home-screen icon, on an opaque ground. |
 | `betterscad-social.png` | Open Graph / social preview. |
-| `tokens.css` | The design tokens the app imports. Single source of truth. |
+| `tokens.css` | The design tokens the app imports. Single source of truth — `packages/app/src/styles/index.css` imports this file directly rather than keeping a copy, so the two cannot drift. |
 
 ## Usage
 
@@ -49,6 +49,10 @@ product:
   the mark; without it the shape reads as a plain cube.
 - On backgrounds between roughly `#3A4654` and `#8B9BAB`, neither lockup has
   enough contrast. Put the mark on a solid surface instead.
+- The `--bs-syntax-*` tokens are separate from the brand ramps on purpose. The
+  ramps are tuned for UI chrome, where a tint on a surface reads fine; code is
+  dense body text, so every syntax colour clears WCAG AA (4.5:1) against the
+  editor surface in its own theme. Re-check that if you change them.
 - The wordmark uses Inter with a system fallback stack. It is set as live text
   rather than outlines so it stays editable; if you need guaranteed-identical
   rendering in a fixed context, convert to paths at that point.

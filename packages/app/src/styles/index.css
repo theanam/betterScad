@@ -1,6 +1,8 @@
-/* BetterSCAD application styles. All colour comes from brand/tokens.css. */
+/* BetterSCAD application styles. All colour comes from brand/tokens.css.
+   Imported from `brand/` directly rather than copied, so the app and the brand
+   assets cannot drift apart. */
 
-@import './tokens.css';
+@import '../../../../brand/tokens.css';
 
 *,
 *::before,

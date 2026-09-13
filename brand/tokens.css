@@ -11,7 +11,9 @@
  */
 
 :root {
-  color-scheme: light dark;
+  /* Pinned per theme below. The app always sets `data-theme`, so native
+     controls follow the chosen theme rather than the OS setting. */
+  color-scheme: light;
 
   /* --- brand ------------------------------------------------------------ */
   --bs-solid-100: #ffe7c2;
@@ -46,6 +48,22 @@
   --bs-text: #12202e;
   --bs-text-muted: #5c7285;
   --bs-text-faint: #8b9bab;
+
+
+  /* --- editor syntax ----------------------------------------------------
+     Split from the brand ramps because those are tuned for UI chrome, where a
+     tint on a surface is fine. Code is dense body text: every one of these
+     clears WCAG AA (4.5:1) against the editor surface in its own theme. */
+  --bs-syntax-comment: #66788a;
+  --bs-syntax-keyword: #9a4708;
+  --bs-syntax-type: #0b6379;
+  --bs-syntax-transform: #12708a;
+  --bs-syntax-builtin: #8f5111;
+  --bs-syntax-number: #0f6b3d;
+  --bs-syntax-string: #963c10;
+  --bs-syntax-special: #6b21c8;
+  --bs-syntax-call: #1a4fd0;
+  --bs-syntax-modifier: #bf2020;
 
   /* --- viewport --------------------------------------------------------- */
   --bs-viewport-bg: #e7ebef;
@@ -82,6 +100,8 @@
 
 :root[data-theme='dark'],
 :root:not([data-theme='light']) {
+  color-scheme: dark;
+
   --bs-bg: #0d1117;
   --bs-surface: #151b23;
   --bs-surface-raised: #1c242e;
@@ -96,6 +116,17 @@
   --bs-viewport-bg: #12181f;
   --bs-viewport-grid: #232d38;
 
+  --bs-syntax-comment: #7a8fa3;
+  --bs-syntax-keyword: #e8862a;
+  --bs-syntax-type: #5fe3f7;
+  --bs-syntax-transform: #3fd3ea;
+  --bs-syntax-builtin: #ffc46b;
+  --bs-syntax-number: #82c8a0;
+  --bs-syntax-string: #e0a878;
+  --bs-syntax-special: #c792ea;
+  --bs-syntax-call: #7fb3ff;
+  --bs-syntax-modifier: #ff7a7a;
+
   --bs-shadow-1: 0 1px 2px rgb(0 0 0 / 40%);
   --bs-shadow-2: 0 4px 16px rgb(0 0 0 / 50%);
   --bs-shadow-3: 0 16px 48px rgb(0 0 0 / 60%);
@@ -103,6 +134,8 @@
 
 /* An explicit light choice must beat the dark default above. */
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --bs-bg: #f5f7f9;
   --bs-surface: #ffffff;
   --bs-surface-raised: #ffffff;
@@ -116,4 +149,19 @@
 
   --bs-viewport-bg: #e7ebef;
   --bs-viewport-grid: #c3ccd6;
+
+  /* --- editor syntax ----------------------------------------------------
+     Split from the brand ramps because those are tuned for UI chrome, where a
+     tint on a surface is fine. Code is dense body text: every one of these
+     clears WCAG AA (4.5:1) against the editor surface in its own theme. */
+  --bs-syntax-comment: #66788a;
+  --bs-syntax-keyword: #9a4708;
+  --bs-syntax-type: #0b6379;
+  --bs-syntax-transform: #12708a;
+  --bs-syntax-builtin: #8f5111;
+  --bs-syntax-number: #0f6b3d;
+  --bs-syntax-string: #963c10;
+  --bs-syntax-special: #6b21c8;
+  --bs-syntax-call: #1a4fd0;
+  --bs-syntax-modifier: #bf2020;
 }

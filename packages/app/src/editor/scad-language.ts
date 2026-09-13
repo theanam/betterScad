@@ -170,23 +170,23 @@ export const scadStreamParser = StreamLanguage.define<ScadState>({
  * rest of the UI and both light and dark work without reconfiguring CodeMirror.
  */
 export const scadHighlightStyle = HighlightStyle.define([
-  { tag: t.comment, color: 'var(--bs-text-faint)', fontStyle: 'italic' },
-  { tag: t.keyword, color: 'var(--bs-solid-500)', fontWeight: '600' },
-  { tag: t.number, color: '#82c8a0' },
-  { tag: t.string, color: '#e0a878' },
+  { tag: t.comment, color: 'var(--bs-syntax-comment)', fontStyle: 'italic' },
+  { tag: t.keyword, color: 'var(--bs-syntax-keyword)', fontWeight: '600' },
+  { tag: t.number, color: 'var(--bs-syntax-number)' },
+  { tag: t.string, color: 'var(--bs-syntax-string)' },
   { tag: t.operator, color: 'var(--bs-text-muted)' },
   { tag: t.punctuation, color: 'var(--bs-text-muted)' },
   { tag: t.variableName, color: 'var(--bs-text)' },
 
-  { tag: scadTags.primitive, color: 'var(--bs-cut-300)', fontWeight: '600' },
-  { tag: scadTags.transform, color: 'var(--bs-cut-300)' },
-  { tag: scadTags.builtinFunction, color: 'var(--bs-solid-300)' },
-  { tag: scadTags.userCall, color: '#7fb3ff' },
-  { tag: scadTags.specialVariable, color: '#c792ea' },
-  { tag: scadTags.constant, color: '#c792ea' },
-  { tag: scadTags.includePath, color: '#82c8a0', fontStyle: 'italic' },
+  { tag: scadTags.primitive, color: 'var(--bs-syntax-type)', fontWeight: '600' },
+  { tag: scadTags.transform, color: 'var(--bs-syntax-transform)' },
+  { tag: scadTags.builtinFunction, color: 'var(--bs-syntax-builtin)' },
+  { tag: scadTags.userCall, color: 'var(--bs-syntax-call)' },
+  { tag: scadTags.specialVariable, color: 'var(--bs-syntax-special)' },
+  { tag: scadTags.constant, color: 'var(--bs-syntax-special)' },
+  { tag: scadTags.includePath, color: 'var(--bs-syntax-number)', fontStyle: 'italic' },
   // Debug modifiers change what renders, so they are shouted, not whispered.
-  { tag: scadTags.debugModifier, color: 'var(--bs-danger)', fontWeight: '700' },
+  { tag: scadTags.debugModifier, color: 'var(--bs-syntax-modifier)', fontWeight: '700' },
 ]);
 
 export function openscad(): LanguageSupport {
