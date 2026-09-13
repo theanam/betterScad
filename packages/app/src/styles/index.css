@@ -532,10 +532,14 @@ textarea {
   border-color: var(--bs-border-strong);
 }
 
-.viewport__control--round.btn--active {
-  background: var(--bs-solid-500);
-  border-color: var(--bs-solid-500);
-  color: #fff;
+/* Active state is the icon colour alone — no fill. These toggles sit over the
+   model, where a solid amber disc would read as a control demanding attention
+   rather than a setting that happens to be on. The `:hover` variant repeats the
+   colour because the base `.btn:hover` rule is more specific than the class
+   pair on its own. */
+.viewport__control--round.btn--active,
+.viewport__control--round.btn--active:hover:not(:disabled) {
+  color: var(--bs-solid-500);
 }
 
 /* Display toggles, kept away from the camera controls in the opposite corner. */
@@ -1221,18 +1225,6 @@ kbd {
   }
 }
 
-/* The grid switch floats over the viewport, so its track carries the same
-   surface treatment as the round controls beside it. */
-.viewport__control.iconswitch {
-  background: none;
-  border: none;
-  box-shadow: none;
-}
-
-.viewport__control.iconswitch .iconswitch__track {
-  background: color-mix(in srgb, var(--bs-surface) 88%, transparent);
-  box-shadow: var(--bs-shadow-1);
-}
 
 /* --- hover hints ---------------------------------------------------------- */
 

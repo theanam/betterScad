@@ -49,7 +49,7 @@ import {
   type Document,
   type DocumentFormat,
 } from './state/workspace.js';
-import { AnimationBar, IconSwitch, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
+import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
@@ -63,7 +63,7 @@ import {
   type NonStandardFile,
 } from './ui/dialogs.js';
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
-import { installTooltips } from './ui/tooltip.js';
+import { installTooltips, setHint } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
 import { Viewport } from './viewport/viewport.js';
 
@@ -287,20 +287,28 @@ class App {
    */
   private buildViewTools(): HTMLElement[] {
     // --- display toggles, top-left, each its own control ---
-    const gridSwitch = new IconSwitch({
-      offIcon: 'gridOff',
-      onIcon: 'grid',
-      label: 'Ground grid',
-      hint: (on) => (on ? 'Hide the ground grid' : 'Show the ground grid'),
-      onToggle: () => {
+    const gridButton = button({
+      iconName: 'grid',
+      title: 'Ground grid',
+      hint: 'Show the ground grid',
+      onClick: () => {
         this.workspace.layout.showGrid = !this.workspace.layout.showGrid;
         this.viewport.setHelperVisibility({ grid: this.workspace.layout.showGrid });
-        gridSwitch.setState(this.workspace.layout.showGrid);
+        setGridState(this.workspace.layout.showGrid);
         this.workspace.persist();
       },
     });
-    gridSwitch.setState(this.workspace.layout.showGrid);
-    gridSwitch.element.classList.add('viewport__control');
+    gridButton.classList.add('viewport__control', 'viewport__control--round');
+
+    // On and off differ by icon colour alone, so the control keeps the same
+    // weight in the corner whichever way it is set.
+    const setGridState = (on: boolean): void => {
+      gridButton.classList.toggle('btn--active', on);
+      gridButton.setAttribute('aria-pressed', String(on));
+      setHint(gridButton, on ? 'Hide the ground grid' : 'Show the ground grid');
+      gridButton.setAttribute('aria-label', 'Ground grid');
+    };
+    setGridState(this.workspace.layout.showGrid);
 
     const measureButton = button({
       iconName: 'ruler',
@@ -310,13 +318,15 @@ class App {
         const active = !this.viewport.measuring;
         this.viewport.setMeasuring(active);
         measureButton.classList.toggle('btn--active', active);
+        measureButton.setAttribute('aria-pressed', String(active));
         if (!active) this.measureReadout.style.display = 'none';
       },
     });
     measureButton.classList.add('viewport__control', 'viewport__control--round');
+    measureButton.setAttribute('aria-pressed', 'false');
 
     const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' }, [
-      gridSwitch.element,
+      gridButton,
       measureButton,
     ]);
 

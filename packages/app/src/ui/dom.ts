@@ -108,7 +108,6 @@ const ICONS: Record<string, string> = {
   // Isometric cube: a hexagon outline with the three edges that meet at the
   // near corner, which is what makes it read as a cube rather than a hexagon.
   cube: 'M8 1.8 13.4 4.9 13.4 11.1 8 14.2 2.6 11.1 2.6 4.9Z M8 8 13.4 4.9M8 8 2.6 4.9M8 8v6.2',
-  gridOff: 'M2 2h12v12H2zm4 0v12M10 2v12M2 6h12M2 10h12M2.6 2.6l10.8 10.8',
 };
 
 /** Inline SVG icon; `stroke` style keeps them crisp at 16px. */
