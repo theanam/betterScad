@@ -18,6 +18,10 @@ No install, no sign-up. It loads a starter model you can edit straight away.
 
 [Quick start](#quick-start) · [Why](#why-another-openscad) · [Architecture](#architecture) · [CLI](#command-line) · [Contributing](#contributing)
 
+<br>
+
+<img src="docs/images/screenshot.png" alt="The BetterSCAD editor: OpenSCAD source on the left with the Customizer beneath it, a shaded 3D preview of a parametric project box and its lid on the right, and a console showing echo output and render statistics." width="900">
+
 </div>
 
 ---
