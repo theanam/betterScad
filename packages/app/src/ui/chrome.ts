@@ -12,6 +12,53 @@ import type { Document } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
 
 // ---------------------------------------------------------------------------
+// Theme toggle
+// ---------------------------------------------------------------------------
+
+/**
+ * A sun/moon switch rather than a button.
+ *
+ * Both icons stay visible with a thumb resting over the active one, so the
+ * control reads as a two-state switch at a glance and needs no label. It is
+ * deliberately small and muted: theme is set once and then forgotten, so it
+ * should not compete with the actions next to it.
+ */
+export class ThemeToggle {
+  readonly element: HTMLButtonElement;
+
+  constructor(onToggle: () => void) {
+    const track = el('span', { class: 'themetoggle__track' });
+
+    const sun = icon('sun', 13);
+    sun.classList.add('themetoggle__icon', 'themetoggle__icon--sun');
+    const moon = icon('moon', 13);
+    moon.classList.add('themetoggle__icon', 'themetoggle__icon--moon');
+
+    track.append(el('span', { class: 'themetoggle__thumb' }), sun, moon);
+
+    // `role="switch"` gives the right affordance to assistive tech; `checked`
+    // means dark, which the label below names explicitly so "on" is not
+    // left to interpretation.
+    this.element = el('button', {
+      class: 'themetoggle',
+      type: 'button',
+      role: 'switch',
+      'aria-checked': 'true',
+      'aria-label': 'Dark theme',
+      onclick: () => onToggle(),
+    }) as HTMLButtonElement;
+    this.element.appendChild(track);
+  }
+
+  setTheme(theme: 'light' | 'dark'): void {
+    const dark = theme === 'dark';
+    this.element.setAttribute('aria-checked', String(dark));
+    this.element.title = `Switch to ${dark ? 'light' : 'dark'} theme`;
+    this.element.setAttribute('aria-label', 'Dark theme');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Toolbar
 // ---------------------------------------------------------------------------
 
@@ -33,7 +80,7 @@ export class Toolbar {
   readonly element: HTMLElement;
   private readonly customizerButton: HTMLButtonElement;
   private readonly consoleButton: HTMLButtonElement;
-  private readonly themeButton: HTMLButtonElement;
+  private readonly themeToggle: ThemeToggle;
 
   constructor(private readonly actions: ToolbarActions) {
     this.customizerButton = button({
@@ -46,7 +93,7 @@ export class Toolbar {
       iconName: 'console',
       onClick: () => this.actions.toggleConsole(),
     });
-    this.themeButton = button({ label: 'Dark', iconName: 'moon', onClick: () => actions.toggleTheme() });
+    this.themeToggle = new ThemeToggle(() => actions.toggleTheme());
 
     this.element = el('header', { class: 'toolbar', role: 'toolbar' }, [
       el('div', { class: 'toolbar__brand' }, [
@@ -69,13 +116,14 @@ export class Toolbar {
         this.customizerButton,
         this.consoleButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
-        this.themeButton,
         button({
           label: 'Commands',
           title: 'Command palette',
           shortcut: formatShortcut('Mod+Shift+P'),
           onClick: () => actions.openPalette(),
         }),
+        el('div', { class: 'toolbar__divider' }),
+        this.themeToggle.element,
       ]),
     ]);
   }
@@ -90,21 +138,8 @@ export class Toolbar {
     this.setTheme(state.theme);
   }
 
-  /**
-   * Shows the theme that is *active*, not the one a click would switch to.
-   *
-   * Both conventions exist and neither is self-evident from an icon alone, so
-   * the label states the current mode and the tooltip states the action.
-   */
   private setTheme(theme: 'light' | 'dark'): void {
-    const dark = theme === 'dark';
-    this.themeButton.replaceChildren(
-      icon(dark ? 'moon' : 'sun'),
-      el('span', { text: dark ? 'Dark' : 'Light' }),
-    );
-    const action = `Switch to ${dark ? 'light' : 'dark'} theme`;
-    this.themeButton.title = action;
-    this.themeButton.setAttribute('aria-label', `${dark ? 'Dark' : 'Light'} theme. ${action}.`);
+    this.themeToggle.setTheme(theme);
   }
 }
 

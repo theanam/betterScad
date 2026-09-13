@@ -956,3 +956,78 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- theme toggle --------------------------------------------------------- */
+
+.themetoggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  /* Kept from stretching in the flex toolbar, which would distort the pill. */
+  flex: none;
+}
+
+.themetoggle:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.themetoggle__track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: 46px;
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--bs-border);
+  border-radius: 999px;
+  background: var(--bs-surface-sunken);
+  transition: border-color var(--bs-transition);
+}
+
+.themetoggle:hover .themetoggle__track {
+  border-color: var(--bs-border-strong);
+}
+
+.themetoggle__icon {
+  position: relative;
+  z-index: 1;
+  color: var(--bs-text-faint);
+  transition: color var(--bs-transition);
+}
+
+/* The thumb rests over whichever icon is active, so the switch reads without
+   a label: the lit side is the current theme. */
+.themetoggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bs-surface-raised);
+  border: 1px solid var(--bs-border-strong);
+  box-shadow: var(--bs-shadow-1);
+  transition: transform var(--bs-transition);
+}
+
+.themetoggle[aria-checked='true'] .themetoggle__thumb {
+  transform: translateX(22px);
+}
+
+.themetoggle[aria-checked='true'] .themetoggle__icon--moon,
+.themetoggle[aria-checked='false'] .themetoggle__icon--sun {
+  color: var(--bs-solid-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .themetoggle__thumb {
+    transition: none;
+  }
+}
