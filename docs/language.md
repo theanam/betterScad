@@ -29,6 +29,8 @@ recursion, `children()` with index/range/vector selectors, `$children`
 **Special variables** — `$fn`, `$fa`, `$fs`, `$t`, `$preview`, `$children`,
 `$vpr`, `$vpt`, `$vpd`, `$vpf`
 
+**Constants** — `PI`, plus the `true` / `false` / `undef` literals
+
 **Modifiers** — `%` background, `#` highlight, `!` root, `*` disable
 
 **Functions** — the full standard library: trigonometry, `pow`, `sqrt`, `ln`,
@@ -79,6 +81,26 @@ outer();    // 2, 1
 ### `^` binds tighter than unary minus
 
 `-2 ^ 2` is `-4`. Exponentiation is right-associative: `2 ^ 3 ^ 2` is `512`.
+
+### `PI` is the only built-in constant
+
+`PI` resolves below every user scope, so a script may shadow it:
+
+```scad
+echo(PI);   // 3.14159
+PI = 3;
+echo(PI);   // 3
+```
+
+There is no `E`, and **no `inf` or `nan` identifiers**. Those values exist, but
+you produce them arithmetically:
+
+```scad
+echo(1/0, -1/0, 0/0);   // inf, -inf, nan
+```
+
+Defining `inf`/`nan`/`E` as identifiers would be a language extension, and would
+need a legacy downgrade path under the rule below — so BetterSCAD does not.
 
 ### `round()` rounds half away from zero
 

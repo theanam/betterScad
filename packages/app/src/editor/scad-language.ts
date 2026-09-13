@@ -37,6 +37,12 @@ const PRIMITIVES = new Set([
   'text', 'import', 'surface', 'children', 'import_stl', 'import_dxf', 'import_off',
 ]);
 
+/**
+ * `PI` is the only constant stock OpenSCAD defines. Infinity and NaN come from
+ * arithmetic (`1 / 0`), not from identifiers, so they are not listed here.
+ */
+const CONSTANTS = new Set(['PI']);
+
 const BUILTIN_FUNCTIONS = new Set([
   'abs', 'sign', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'floor',
   'round', 'ceil', 'ln', 'log', 'pow', 'sqrt', 'exp', 'min', 'max', 'norm',
@@ -52,6 +58,7 @@ export const scadTags = {
   primitive: Tag.define(),
   transform: Tag.define(),
   builtinFunction: Tag.define(),
+  constant: Tag.define(),
   userCall: Tag.define(),
   includePath: Tag.define(),
 };
@@ -63,6 +70,7 @@ const tokenTable: Record<string, Tag> = {
   scadPrimitive: scadTags.primitive,
   scadTransform: scadTags.transform,
   scadBuiltin: scadTags.builtinFunction,
+  scadConstant: scadTags.constant,
   scadCall: scadTags.userCall,
   scadIncludePath: scadTags.includePath,
 };
@@ -122,6 +130,7 @@ export const scadStreamParser = StreamLanguage.define<ScadState>({
     const word = matchText(stream, /^[A-Za-z_][A-Za-z0-9_]*/);
     if (word !== undefined) {
       if (KEYWORDS.has(word)) return 'keyword';
+      if (CONSTANTS.has(word)) return 'scadConstant';
       if (PRIMITIVES.has(word)) return 'scadPrimitive';
       if (TRANSFORMS.has(word)) return 'scadTransform';
       if (BUILTIN_FUNCTIONS.has(word)) return 'scadBuiltin';
@@ -174,6 +183,7 @@ export const scadHighlightStyle = HighlightStyle.define([
   { tag: scadTags.builtinFunction, color: 'var(--bs-solid-300)' },
   { tag: scadTags.userCall, color: '#7fb3ff' },
   { tag: scadTags.specialVariable, color: '#c792ea' },
+  { tag: scadTags.constant, color: '#c792ea' },
   { tag: scadTags.includePath, color: '#82c8a0', fontStyle: 'italic' },
   // Debug modifiers change what renders, so they are shouted, not whispered.
   { tag: scadTags.debugModifier, color: 'var(--bs-danger)', fontWeight: '700' },

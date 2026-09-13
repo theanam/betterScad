@@ -145,6 +145,36 @@ test('children() with indices and $children', async () => {
   assert.deepEqual(await echoes(source), ['3', '"one"']);
 });
 
+test('PI is a built-in constant, and an assignment shadows it', async () => {
+  // PI is the only constant stock OpenSCAD defines.
+  assert.deepEqual(await echoes('echo(PI);'), ['3.14159']);
+  assert.deepEqual(await echoes('echo(2 * PI);'), ['6.28319']);
+
+  // It resolves inside modules and functions, which is where it is actually used.
+  assert.deepEqual(
+    await echoes('function circ(r) = 2 * PI * r;\nmodule m() { echo(circ(10)); }\nm();'),
+    ['62.8319'],
+  );
+
+  // Constants sit below every user scope, so a script may redefine PI.
+  assert.deepEqual(await echoes('PI = 3;\necho(PI);'), ['3']);
+
+  // And using it must not warn about an undefined variable.
+  const result = await compile('echo(PI);');
+  assert.equal(
+    result.diagnostics.filter((d) => d.severity === 'warning').length,
+    0,
+    'PI should not warn',
+  );
+});
+
+test('infinity and NaN come from arithmetic, not identifiers', async () => {
+  // OpenSCAD has no `inf`/`nan` literals; adding them would be an extension.
+  assert.deepEqual(await echoes('echo(1/0, -1/0, 0/0);'), ['inf, -inf, nan']);
+  const result = await compile('echo(inf);');
+  assert.ok(result.diagnostics.some((d) => d.severity === 'warning' && /`inf` is not defined/.test(d.message)));
+});
+
 test('builtin functions behave as documented', async () => {
   const source = `
     echo(len("abc"), len([1,2]), concat([1],[2],3));

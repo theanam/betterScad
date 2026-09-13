@@ -166,6 +166,22 @@ export interface EvaluateResult {
   topLevelVars: Map<string, Value>;
 }
 
+/**
+ * Built-in constants.
+ *
+ * Resolved only when no variable of the same name is in scope, so `PI = 3;`
+ * shadows the constant rather than being an error — matching OpenSCAD, where
+ * these live in the builtin context that parents the root scope.
+ *
+ * `PI` is the only constant stock OpenSCAD defines. Infinity and NaN are
+ * produced arithmetically (`1 / 0`, `0 / 0`), not spelled as identifiers;
+ * adding `inf`/`nan`/`E` here would be a language extension, and would need a
+ * legacy downgrade path under spec feature 21.
+ */
+export const BUILTIN_CONSTANTS: Record<string, Value> = {
+  PI: Math.PI,
+};
+
 const MAX_RECURSION_DEFAULT = 200;
 const MAX_NODES_DEFAULT = 250_000;
 
@@ -864,6 +880,9 @@ class Interpreter {
       case 'identifier': {
         const found = scope.lookupVar(expr.name);
         if (!found.found) {
+          // Constants sit below every user scope, so an assignment of the same
+          // name shadows them — which is exactly how OpenSCAD behaves.
+          if (Object.hasOwn(BUILTIN_CONSTANTS, expr.name)) return BUILTIN_CONSTANTS[expr.name];
           // A bare identifier naming a function is a first-class function value.
           const fn = scope.lookupFunction(expr.name);
           if (fn) return new FunctionValue(fn.params, fn.body, fn.scope, fn.name);

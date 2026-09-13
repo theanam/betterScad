@@ -251,7 +251,7 @@ export * from './scene.js';
 export * from './transpile.js';
 export * from './values.js';
 export { BUILTIN_FUNCTIONS } from './builtins.js';
-export { BUILTIN_MODULES, evaluate } from './interpreter.js';
+export { BUILTIN_CONSTANTS, BUILTIN_MODULES, evaluate } from './interpreter.js';
 export { MODIFIER_ROLES, parse } from './parser.js';
 export type { ParseResult } from './parser.js';
 export { lex } from './lexer.js';

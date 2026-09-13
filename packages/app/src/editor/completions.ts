@@ -109,6 +109,15 @@ const KEYWORD_SNIPPETS: BuiltinDoc[] = [
   { label: 'use', template: 'use <${file.scad}>', detail: 'use <path>', info: 'Imports only the modules and functions from another file.', type: 'keyword' },
 ];
 
+/** Constants the language supplies. `PI` is the only one in stock OpenSCAD. */
+const CONSTANTS: { label: string; detail: string; info: string }[] = [
+  {
+    label: 'PI',
+    detail: '3.14159265358979',
+    info: 'The ratio of a circle\u2019s circumference to its diameter.\n\nAssigning to `PI` shadows it, as with any other variable.',
+  },
+];
+
 const SPECIAL_VARIABLES: { label: string; info: string }[] = [
   { label: '$fn', info: 'Fixed number of fragments per circle. Overrides $fa and $fs when > 0.' },
   { label: '$fa', info: 'Minimum angle per fragment, in degrees. Default 12.' },
@@ -132,9 +141,18 @@ function toCompletion(doc: BuiltinDoc, boost: number): Completion {
   });
 }
 
+const CONSTANT_COMPLETIONS: Completion[] = CONSTANTS.map((c) => ({
+  label: c.label,
+  detail: c.detail,
+  info: c.info,
+  type: 'constant',
+  boost: 2,
+}));
+
 // Modules are what people type most, so they outrank functions on ties.
 const BUILTIN_COMPLETIONS: Completion[] = [
   ...MODULES.map((d) => toCompletion(d, 3)),
+  ...CONSTANT_COMPLETIONS,
   ...KEYWORD_SNIPPETS.map((d) => toCompletion(d, 2)),
   ...FUNCTIONS.map((d) => toCompletion(d, 1)),
 ];
