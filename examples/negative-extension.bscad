@@ -1,0 +1,46 @@
+/* BetterSCAD
+{
+  "version": 1,
+  "presets": { "default": { "plate": 60, "holes": 5 } },
+  "activePreset": "default"
+}
+*/
+// Demonstrates the `negative()` extension (spec features 3a and 21).
+//
+// A negative() subtree is subtracted from every sibling in its scope, so
+// cutting features can live next to the things they cut instead of being
+// hoisted into a difference() at the top.
+//
+// Export this as legacy .scad (File -> Export as legacy .scad, or
+// `bscad negative-extension.bscad --legacy-scad`) to see it rewritten as a
+// plain difference().
+
+/* [Plate] */
+plate = 60;   // [30:120]
+holes = 5;    // [1:12]
+
+$fn = 48;
+
+thickness = 6;
+
+union() {
+  // The plate itself.
+  linear_extrude(height = thickness)
+    offset(r = 5) square([plate - 10, plate - 10], center = true);
+
+  // A raised boss, which the holes below also cut through.
+  translate([0, 0, thickness]) cylinder(h = 4, r = 12);
+
+  // Everything below is negative space, subtracted from both of the above.
+  negative() {
+    // Centre bore.
+    translate([0, 0, -1]) cylinder(h = thickness + 8, r = 5);
+
+    // A ring of mounting holes.
+    for (i = [0 : holes - 1]) {
+      rotate([0, 0, i * 360 / holes])
+        translate([plate / 2 - 12, 0, -1])
+          cylinder(h = thickness + 2, r = 2.5);
+    }
+  }
+}

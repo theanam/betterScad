@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BetterSCAD",
+  "version": "0.1.0",
+  "identifier": "dev.betterscad.app",
+  "build": {
+    "frontendDist": "../../app/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev -w @betterscad/app",
+    "beforeBuildCommand": "npm run build -w @betterscad/app"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BetterSCAD",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 560,
+        "resizable": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "connect-src": "'self' https://raw.githubusercontent.com"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Local-first parametric CAD",
+    "longDescription": "A local-first parametric CAD editor with full OpenSCAD language compatibility."
+  }
+}

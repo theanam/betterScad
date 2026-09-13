@@ -1,0 +1,28 @@
+{
+  "name": "@betterscad/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@betterscad/engine": "*",
+    "@codemirror/autocomplete": "^6.18.3",
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/language": "^6.10.6",
+    "@codemirror/lint": "^6.8.4",
+    "@codemirror/search": "^6.5.8",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.35.0",
+    "@lezer/highlight": "^1.2.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  }
+}

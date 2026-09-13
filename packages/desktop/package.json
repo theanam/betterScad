@@ -1,0 +1,16 @@
+{
+  "name": "@betterscad/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop packaging for BetterSCAD, reusing the same WASM engine and web UI.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "npm run build -w @betterscad/app && tauri build",
+    "icons": "tauri icon ../../brand/betterscad-icon-512.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

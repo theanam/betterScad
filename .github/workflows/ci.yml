@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build engine
+        run: npm run build:engine
+
+      - name: Test
+        run: npm test
+
+      - name: Build site
+        run: npm run build
+
+      # Renders every example headlessly, which exercises the engine, the CLI
+      # and the export pipeline against real models rather than fixtures.
+      - name: Render examples
+        run: |
+          npm run build -w @betterscad/cli
+          mkdir -p /tmp/render
+          for file in examples/*.scad examples/*.bscad; do
+            node packages/cli/bin/bscad.js "$file" \
+              --font packages/app/public/fonts/NotoSans.ttf \
+              -o /tmp/render/
+          done
+          ls -la /tmp/render
+
+      - name: Verify legacy .scad export round-trips
+        run: |
+          node packages/cli/bin/bscad.js examples/negative-extension.bscad \
+            --legacy-scad -o /tmp/legacy.scad
+          node packages/cli/bin/bscad.js /tmp/legacy.scad -o /tmp/legacy.stl
+          # The transpiled file must produce byte-identical geometry.
+          cmp /tmp/render/negative-extension.stl /tmp/legacy.stl

@@ -1,0 +1,12 @@
+{
+  "name": "@betterscad/cli",
+  "version": "0.1.0",
+  "description": "Headless BetterSCAD renderer: batch-render .scad/.bscad to STL and friends.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "bscad": "./bin/bscad.js" },
+  "files": ["bin", "dist"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": { "@betterscad/engine": "*" },
+  "devDependencies": { "@types/node": "^22.10.1", "typescript": "^5.6.3" }
+}
