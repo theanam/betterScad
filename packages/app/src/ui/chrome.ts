@@ -6,9 +6,9 @@
  * for a handful of elements is both simpler and fast enough.
  */
 
-import { button, clear, el, formatDuration, icon } from './dom.js';
+import { button, clear, el, formatDuration, icon, splitButton, type MenuItem } from './dom.js';
 import { formatShortcut } from './command-palette.js';
-import type { Document } from '../state/workspace.js';
+import type { Document, DocumentFormat } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +66,8 @@ export interface ToolbarActions {
   newFile(): void;
   open(): void;
   save(): void;
+  /** Save As. `format` forces the on-disk format; omitted keeps the current one. */
+  saveAs(format?: DocumentFormat): void;
   preview(): void;
   render(): void;
   export(): void;
@@ -83,6 +85,9 @@ export class Toolbar {
   private readonly previewButton: HTMLButtonElement;
   private readonly renderButton: HTMLButtonElement;
   private readonly themeToggle: ThemeToggle;
+
+  /** Drives the Save menu; a `.scad` gets the extra "Save as .bscad" item. */
+  private documentFormat: DocumentFormat = 'bscad';
 
   constructor(private readonly actions: ToolbarActions) {
     this.customizerButton = button({
@@ -120,7 +125,14 @@ export class Toolbar {
       el('div', { class: 'toolbar__group' }, [
         button({ label: 'New', iconName: 'plus', shortcut: formatShortcut('Mod+N'), onClick: () => actions.newFile() }),
         button({ label: 'Open', iconName: 'open', shortcut: formatShortcut('Mod+O'), onClick: () => actions.open() }),
-        button({ label: 'Save', iconName: 'save', shortcut: formatShortcut('Mod+S'), onClick: () => actions.save() }),
+        splitButton({
+          label: 'Save',
+          iconName: 'save',
+          shortcut: formatShortcut('Mod+S'),
+          onClick: () => actions.save(),
+          menuLabel: 'More save options',
+          items: () => this.saveMenuItems(),
+        }),
       ]),
       el('div', { class: 'toolbar__divider' }),
       el('div', { class: 'toolbar__group' }, [
@@ -145,13 +157,45 @@ export class Toolbar {
     ]);
   }
 
+  /**
+   * The Save menu, rebuilt on every open.
+   *
+   * A `.scad` document gets "Save as .bscad" alongside plain Save As, because
+   * for that file the choice of format is live: it is the only document kind
+   * where saving drops the panel layout, presets and camera. A `.bscad` has no
+   * matching "save as .scad" here — that is a downgrade, not a save, and it
+   * lives in Export where the rewrites can be shown first.
+   */
+  private saveMenuItems(): MenuItem[] {
+    const items: MenuItem[] = [
+      {
+        label: 'Save as…',
+        shortcut: formatShortcut('Mod+Shift+S'),
+        onSelect: () => this.actions.saveAs(),
+      },
+    ];
+
+    if (this.documentFormat === 'scad') {
+      items.push({
+        label: 'Save as .bscad…',
+        description: 'Keeps presets, camera and panel layout in the file',
+        onSelect: () => this.actions.saveAs('bscad'),
+      });
+    }
+
+    return items;
+  }
+
   update(state: {
     customizerVisible: boolean;
     consoleVisible: boolean;
     theme: 'light' | 'dark';
     autoRender: boolean;
     showingFinalRender: boolean;
+    documentFormat: DocumentFormat;
   }): void {
+    this.documentFormat = state.documentFormat;
+
     this.customizerButton.classList.toggle('btn--active', state.customizerVisible);
     this.consoleButton.classList.toggle('btn--active', state.consoleVisible);
 

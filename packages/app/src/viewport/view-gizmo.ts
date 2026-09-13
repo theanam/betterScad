@@ -33,6 +33,8 @@ import type { StandardView } from './controls.js';
 export const GIZMO_SIZE = 104;
 /** Gap from the viewport's bottom-right corner. */
 const GIZMO_MARGIN = 12;
+/** Room kept beneath the cube for the reset/fit buttons that sit under it. */
+export const GIZMO_BOTTOM_RESERVE = 34;
 
 interface Face {
   view: StandardView;
@@ -157,7 +159,7 @@ export class ViewGizmo {
   rect(width: number, height: number): { x: number; y: number; size: number } {
     return {
       x: width - GIZMO_SIZE - GIZMO_MARGIN,
-      y: height - GIZMO_SIZE - GIZMO_MARGIN,
+      y: height - GIZMO_SIZE - GIZMO_MARGIN - GIZMO_BOTTOM_RESERVE,
       size: GIZMO_SIZE,
     };
   }

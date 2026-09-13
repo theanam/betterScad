@@ -48,7 +48,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Live customizer** | Auto-generates sliders, dropdowns and checkboxes from `//` parameter annotations, using OpenSCAD's own conventions. |
 | **Modern editor** | CodeMirror 6 with OpenSCAD syntax highlighting, autocomplete with real signatures, multi-file tabs, and inline error squiggles. |
 | **Fast + precise renders** | `F5` preview and `F6` full render, mirroring OpenSCAD, exposed to scripts as `$preview`. Auto-render keeps the preview live as you type, so the Preview button hides itself while it is on. |
-| **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
+| **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and the model's own source as stock `.scad`, with every extension rewritten. |
 | **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
 | **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |
 | **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation and click-to-snap standard views. |
@@ -75,7 +75,7 @@ npm run build        # output in packages/app/dist — serve it anywhere
 Run the tests:
 
 ```sh
-npm test             # 59 engine tests: language semantics, geometry, exports
+npm test             # 94 engine tests: language semantics, geometry, exports
 ```
 
 ## Why another OpenSCAD?
@@ -168,6 +168,19 @@ bscad model.scad --strict                   # treat warnings as errors, for CI
 with a metadata header in a leading block comment, holding panel layout, customizer presets
 and camera state. Stock OpenSCAD reads it unchanged, because a comment is just a comment.
 `.scad` remains fully supported for both import and export.
+
+**Saving follows the extension.** A `.bscad` is written with its metadata header; a `.scad`
+is written as bare source, so opening someone else's file and saving it does not stamp a
+BetterSCAD header into it. The Save button's dropdown offers *Save as*, plus *Save as
+.bscad* when the current file is a `.scad` — that is the conversion, and it is the only way
+the header appears. Nothing is lost in the meantime: presets and camera stay on the open
+document either way.
+
+**Opening a `.scad` that is not stock OpenSCAD warns you**, naming each extension it uses,
+what the downgrade rewrites it to, and the lines it appears on. The file renders here
+regardless — the warning is about what will happen elsewhere. To hand it to stock OpenSCAD,
+**Export ▸ OpenSCAD source** applies those rewrites; `Ctrl/Cmd+E` lists it alongside the
+geometry formats.
 
 ## Browser support
 

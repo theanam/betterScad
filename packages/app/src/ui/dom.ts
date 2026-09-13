@@ -101,6 +101,8 @@ const ICONS: Record<string, string> = {
   // sun beside it.
   moon: 'M13.92 9.28A6 6 0 0 1 6.72 2.08a6 6 0 1 0 7.2 7.2z',
   sun: 'M8 5.3a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zM8 1.2v1.5M8 13.3v1.5M14.8 8h-1.5M2.7 8H1.2M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1M12.8 12.8l-1.1-1.1M4.3 4.3 3.2 3.2',
+  // A 300-degree arc with a chevron at its head: the usual "reset" glyph.
+  reset: 'M8 2.5A5.5 5.5 0 1 1 3.24 5.25M5.8 1.5 8 2.5 7.05 4.75',
 };
 
 /** Inline SVG icon; `stroke` style keeps them crisp at 16px. */

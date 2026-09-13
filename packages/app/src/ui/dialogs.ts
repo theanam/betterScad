@@ -6,10 +6,15 @@ import { EXPORT_FORMATS, type ExportFormat, type ExtensionUse } from '@bettersca
 import { button, clear, el } from './dom.js';
 import type { CatalogEntry } from '../files/font-library.js';
 
-function shell(title: string, body: HTMLElement, footer: HTMLElement[]): HTMLDialogElement {
+function shell(
+  title: string,
+  body: HTMLElement,
+  footer: HTMLElement[],
+  bodyClass?: string,
+): HTMLDialogElement {
   const dialog = el('dialog', {}, [
     el('div', { class: 'dialog__header', text: title }),
-    el('div', { class: 'dialog__body' }, [body]),
+    el('div', { class: `dialog__body${bodyClass ? ` ${bodyClass}` : ''}` }, [body]),
     el('div', { class: 'dialog__footer' }, footer),
   ]) as HTMLDialogElement;
   document.body.appendChild(dialog);
@@ -133,10 +138,12 @@ export function showExportDialog(
       false,
     );
 
-    const body = el('div', {}, [
-      list,
-      sourceNote,
-      el('label', { style: 'display:block; margin-top: 16px;' }, [
+    // The formats scroll; the file name stays put. Nesting the scroller rather
+    // than letting the dialog body scroll is what keeps the one editable field
+    // on screen however many formats are listed.
+    const body = el('div', { class: 'export__body' }, [
+      el('div', { class: 'export__scroll' }, [list, sourceNote]),
+      el('label', { class: 'export__filename' }, [
         el('div', { class: 'param__hint', text: 'File name' }),
         filenameInput,
       ]),
@@ -152,7 +159,7 @@ export function showExportDialog(
           dialog.close();
         },
       }),
-    ]);
+    ], 'dialog__body--flush');
 
     let resolved: ExportChoice | undefined;
     dialog.addEventListener('close', () => resolve(resolved));
@@ -502,25 +509,16 @@ export function showConfirm(
 }
 
 /** Reports what a legacy `.scad` export rewrote (spec feature 21). */
-export function showLegacyExportDialog(
-  rewrites: string[],
-  onConfirm: () => void,
-): void {
+export function showLegacyExportDialog(extensions: ExtensionUse[], onConfirm: () => void): void {
   const body = el('div', {}, [
     el('p', {
       style: 'margin-top:0',
       text:
-        rewrites.length > 0
+        extensions.length > 0
           ? 'This file uses BetterSCAD extensions. They will be rewritten so the exported file opens in stock OpenSCAD:'
           : 'This file uses only stock OpenSCAD constructs, so the export is a straight copy.',
     }),
-    rewrites.length > 0
-      ? el(
-          'ul',
-          { style: 'margin: 8px 0 0; padding-left: 20px;' },
-          rewrites.map((r) => el('li', { text: r })),
-        )
-      : null,
+    extensions.length > 0 ? extensionList(extensions) : null,
   ]);
 
   const dialog = shell('Export as legacy .scad', body, [
@@ -534,6 +532,65 @@ export function showLegacyExportDialog(
       },
     }),
   ]);
+  dialog.showModal();
+}
+
+export interface NonStandardFile {
+  name: string;
+  extensions: ExtensionUse[];
+}
+
+/**
+ * Warns that a `.scad` just opened is not actually stock OpenSCAD.
+ *
+ * A file named `.scad` carries a promise — that any OpenSCAD will open it —
+ * and BetterSCAD extensions quietly break that promise. Raised on open rather
+ * than on save because that is when the user still remembers where the file
+ * came from and whether anyone else is going to read it.
+ *
+ * `onConvert` renames the file to `.bscad`, which is offered only when a single
+ * file is affected: it acts on the active document, and picking which of
+ * several to convert belongs in the tab strip, not in a warning.
+ */
+export function showNonStandardSyntaxDialog(files: NonStandardFile[], onConvert?: () => void): void {
+  const single = files.length === 1;
+
+  const body = el('div', {}, [
+    el('p', {
+      style: 'margin-top:0',
+      text: single
+        ? `"${files[0].name}" uses BetterSCAD syntax that stock OpenSCAD does not accept:`
+        : `${files.length} of the files you opened use BetterSCAD syntax that stock OpenSCAD does not accept:`,
+    }),
+    ...files.map((file) =>
+      el('div', { style: 'margin-top: 12px;' }, [
+        single ? null : el('div', { class: 'param__name', text: file.name }),
+        extensionList(file.extensions),
+      ]),
+    ),
+    el('p', {
+      class: 'param__hint',
+      text:
+        'It opens and renders here either way. To hand it to stock OpenSCAD, use Export ▸ ' +
+        'OpenSCAD source, which applies the rewrites listed above. Saving as .bscad instead ' +
+        'makes the extensions explicit in the file name.',
+    }),
+  ]);
+
+  const footer = [
+    onConvert && single
+      ? button({
+          label: 'Save as .bscad…',
+          onClick: () => {
+            dialog.close();
+            onConvert();
+          },
+        })
+      : null,
+    button({ label: 'Got it', variant: 'primary', onClick: () => dialog.close() }),
+  ].filter((node): node is HTMLButtonElement => node !== null);
+
+  const dialog = shell('Not stock OpenSCAD', body, footer);
   dialog.showModal();
 }
 

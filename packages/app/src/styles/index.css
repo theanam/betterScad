@@ -207,6 +207,93 @@ textarea {
   opacity: 0.8;
 }
 
+/* --- split button + popup menu -------------------------------------------- */
+
+/* The two halves read as one control: they share a hover state and the seam
+   between them is a single hairline rather than a gap. */
+.splitbtn {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--bs-radius-sm);
+}
+
+.splitbtn:hover {
+  background: var(--bs-surface-sunken);
+}
+
+.splitbtn .btn:hover:not(:disabled) {
+  background: transparent;
+}
+
+.splitbtn__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-right: 7px;
+}
+
+.splitbtn__toggle {
+  padding: 5px 5px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 var(--bs-border);
+}
+
+.splitbtn:hover .btn,
+.splitbtn__toggle[aria-expanded='true'] {
+  color: var(--bs-text);
+}
+
+.splitbtn__toggle[aria-expanded='true'] {
+  background: var(--bs-surface-sunken);
+}
+
+.menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: 300px;
+  padding: var(--bs-space-1);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-raised);
+  box-shadow: var(--bs-shadow-3);
+}
+
+.menu__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__item:hover,
+.menu__item:focus-visible {
+  background: var(--bs-surface-sunken);
+  outline: none;
+}
+
+.menu__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-3);
+  white-space: nowrap;
+}
+
+.menu__hint {
+  color: var(--bs-text-muted);
+  font-size: 11px;
+  white-space: normal;
+}
+
 /* --- tabs ----------------------------------------------------------------- */
 
 .tabs {
@@ -417,16 +504,32 @@ textarea {
 
 .viewport__tools {
   position: absolute;
-  top: var(--bs-space-3);
-  right: var(--bs-space-3);
   display: flex;
-  flex-direction: column;
-  gap: var(--bs-space-1);
-  padding: var(--bs-space-1);
+  gap: 2px;
+  padding: 3px;
   border-radius: var(--bs-radius);
   background: color-mix(in srgb, var(--bs-surface) 88%, transparent);
   border: 1px solid var(--bs-border);
   pointer-events: auto;
+}
+
+/* Display toggles, kept away from the camera controls in the opposite corner. */
+.viewport__tools--topleft {
+  top: var(--bs-space-3);
+  left: var(--bs-space-3);
+}
+
+/* Reset and fit, directly beneath the view cube and the same width as it, so
+   the whole camera control reads as one object. */
+.viewport__tools--gizmo {
+  right: var(--bs-space-3);
+  bottom: var(--bs-space-3);
+  width: 104px;
+  justify-content: center;
+}
+
+.viewport__tools .btn {
+  padding: 4px 7px;
 }
 
 .viewport__busy {
@@ -445,7 +548,8 @@ textarea {
 
 .viewport__measure {
   position: absolute;
-  top: var(--bs-space-3);
+  /* Clears the display toggles now occupying the top-left corner. */
+  top: calc(var(--bs-space-3) + 38px);
   left: var(--bs-space-3);
   max-width: 280px;
   padding: var(--bs-space-2) var(--bs-space-3);
@@ -710,6 +814,70 @@ dialog::backdrop {
   gap: var(--bs-space-2);
   padding: var(--bs-space-3) var(--bs-space-4);
   border-top: 1px solid var(--bs-border);
+}
+
+/* --- extension lists (export + the non-standard-syntax warning) ----------- */
+
+.extensionlist {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--bs-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.extensionlist code {
+  color: var(--bs-text);
+  font-family: var(--bs-font-mono);
+}
+
+.extensionlist__where {
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* The dialog body stops scrolling and hands that job to a region inside it, so
+   the file name field below stays on screen — it is the one control here people
+   actually edit, and a scroll fold hides it exactly when a name needs changing. */
+.dialog__body--flush {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  /* Taller than the default body: the whole point of this dialog is that every
+     target is visible at once, and a scroll fold over the last one is how a
+     format ends up believed not to exist. Short windows still scroll, and the
+     file name field stays pinned below when they do. */
+  max-height: min(680px, 76vh);
+}
+
+.export__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.export__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.export__filename {
+  display: block;
+  flex: none;
+  padding-top: var(--bs-space-3);
+}
+
+.export__note {
+  margin-top: var(--bs-space-3);
+  padding: var(--bs-space-3);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
 }
 
 .palette {

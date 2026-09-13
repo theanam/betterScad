@@ -15,6 +15,7 @@ import {
   transpileToLegacyScad,
   type CustomizerModel,
   type Diagnostic,
+  type ExtensionUse,
   type Value,
 } from '@betterscad/engine';
 
@@ -41,7 +42,13 @@ import {
 } from './files/fs-access.js';
 import { RenderClient } from './render/client.js';
 import type { RenderResponse, RenderStats } from './render/protocol.js';
-import { STARTER_DOCUMENT, Workspace, type Document } from './state/workspace.js';
+import {
+  STARTER_DOCUMENT,
+  Workspace,
+  withFormatExtension,
+  type Document,
+  type DocumentFormat,
+} from './state/workspace.js';
 import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
@@ -52,6 +59,8 @@ import {
   showExportDialog,
   showFontDialog,
   showLegacyExportDialog,
+  showNonStandardSyntaxDialog,
+  type NonStandardFile,
 } from './ui/dialogs.js';
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
 import { Split } from './ui/layout.js';
@@ -147,6 +156,7 @@ class App {
       newFile: () => this.newDocument(),
       open: () => void this.openFiles(),
       save: () => void this.save(),
+      saveAs: (format) => void this.saveAs(format),
       preview: () => void this.render(true),
       render: () => void this.render(false),
       export: () => void this.exportModel(),
@@ -186,7 +196,7 @@ class App {
         this.busyBadge,
         this.measureReadout,
         hud,
-        this.buildViewTools(),
+        ...this.buildViewTools(),
       ]),
     );
 
@@ -261,24 +271,21 @@ class App {
     this.applyLayoutVisibility();
   }
 
-  private buildViewTools(): HTMLElement {
-    const views: [string, Parameters<Viewport['setView']>[0]][] = [
-      ['Iso', 'iso'],
-      ['Top', 'top'],
-      ['Front', 'front'],
-      ['Right', 'right'],
-    ];
-
-    const tools = el('div', { class: 'viewport__tools' }, [
-      button({ label: 'Fit', iconName: 'frame', title: 'Fit the model in view', onClick: () => this.viewport.frameAll() }),
-      ...views.map(([label, view]) =>
-        button({ label, title: `${label} view`, onClick: () => this.viewport.setView(view) }),
-      ),
-    ]);
+  /**
+   * Viewport overlay controls.
+   *
+   * Named views used to live in a button stack; the view cube replaces them and
+   * shows the current orientation besides. What is left are the two things the
+   * cube cannot express — reset and fit — tucked directly beneath it, and the
+   * two display toggles, moved out of the way to the opposite corner. Every
+   * named view is still reachable from the command palette.
+   */
+  private buildViewTools(): HTMLElement[] {
+    const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' });
 
     const gridButton = button({
       iconName: 'grid',
-      label: 'Grid',
+      title: 'Toggle the ground grid',
       onClick: () => {
         this.workspace.layout.showGrid = !this.workspace.layout.showGrid;
         this.viewport.setHelperVisibility({ grid: this.workspace.layout.showGrid });
@@ -290,8 +297,7 @@ class App {
 
     const measureButton = button({
       iconName: 'ruler',
-      label: 'Measure',
-      title: 'Click points on the model to measure distances',
+      title: 'Measure — click points on the model for coordinates and distances',
       onClick: () => {
         const active = !this.viewport.measuring;
         this.viewport.setMeasuring(active);
@@ -300,8 +306,23 @@ class App {
       },
     });
 
-    tools.append(gridButton, measureButton);
-    return tools;
+    displayTools.append(gridButton, measureButton);
+
+    // Sits under the cube, so the camera controls are all in one place.
+    const cameraTools = el('div', { class: 'viewport__tools viewport__tools--gizmo' }, [
+      button({
+        iconName: 'reset',
+        title: 'Reset to the isometric view',
+        onClick: () => this.viewport.setView('iso'),
+      }),
+      button({
+        iconName: 'frame',
+        title: 'Fit the model in view',
+        onClick: () => this.viewport.frameAll(),
+      }),
+    ]);
+
+    return [displayTools, cameraTools];
   }
 
   // -- rendering ------------------------------------------------------------
@@ -442,12 +463,15 @@ class App {
       const files = await openScadFiles();
       if (files.length === 0) return;
       this.stashEditorState();
+      const opened: Document[] = [];
       let last: Document | undefined;
       for (const file of files) {
         last = this.workspace.createDocument(file.name, file.text, file.handle);
+        opened.push(last);
       }
       if (last) this.activate(last);
       this.toasts.show(`Opened ${files.length} file${files.length === 1 ? '' : 's'}.`, 'success');
+      this.warnAboutExtensions(opened);
     } catch (err) {
       this.reportError(`Could not open: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -474,24 +498,84 @@ class App {
     await this.saveAs();
   }
 
-  private async saveAs(): Promise<void> {
+  /**
+   * Save As, optionally converting to another format.
+   *
+   * The format has to be decided before serialising rather than inferred from
+   * whatever name comes back: the picker may be cancelled, and on browsers
+   * without the File System Access API it returns nothing at all, so the bytes
+   * are already committed by then.
+   */
+  private async saveAs(format?: DocumentFormat): Promise<void> {
     const doc = this.workspace.active;
     if (!doc) return;
     doc.text = this.editor.source;
-    const text = this.workspace.serialize(doc, this.cameraMetadata());
+
+    const target = format ?? this.workspace.formatOf(doc);
+    const suggested = format ? withFormatExtension(doc.name, format) : doc.name;
+    const text = this.workspace.serialize(doc, this.cameraMetadata(), target);
 
     try {
-      const handle = await saveTextAs(doc.name, text);
+      const handle = await saveTextAs(suggested, text);
       if (handle) {
         doc.handle = handle;
         doc.name = handle.name;
+      } else if (format) {
+        // The download fallback wrote `suggested`, so the tab should follow it;
+        // otherwise the next plain Save would silently change format again.
+        doc.name = suggested;
       }
+      // Converting to `.bscad` by name alone is enough to keep the header from
+      // here on, so this flag only ever needs clearing — a `.scad` the user
+      // deliberately saved as `.scad` should stop carrying an inherited header.
+      if (target === 'scad') doc.hadMetadata = false;
       doc.savedText = doc.text;
       this.workspace.persist();
       this.refreshChrome();
       this.toasts.show(`Saved ${doc.name}.`, 'success');
     } catch (err) {
       this.reportError(`Could not save: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Warns when a file named `.scad` turns out to use BetterSCAD syntax.
+   *
+   * Only `.scad` is worth a warning: a `.bscad` is *expected* to carry
+   * extensions, and saying so on every open would be noise.
+   */
+  private warnAboutExtensions(documents: Document[]): void {
+    const offenders: NonStandardFile[] = [];
+
+    for (const doc of documents) {
+      if (this.workspace.formatOf(doc) !== 'scad') continue;
+      const extensions = this.extensionsIn(doc);
+      if (extensions.length > 0) offenders.push({ name: doc.name, extensions });
+    }
+    if (offenders.length === 0) return;
+
+    // Deliberately not logged to the console: that panel holds the results of
+    // one render and is replaced wholesale by the next one, which the open
+    // itself triggers. The dialog is the warning, and the Export dialog repeats
+    // the same list at the moment it actually matters.
+    const single = offenders.length === 1 && offenders[0].name === this.workspace.active?.name;
+    showNonStandardSyntaxDialog(offenders, single ? () => void this.saveAs('bscad') : undefined);
+  }
+
+  /**
+   * The BetterSCAD extensions a document uses.
+   *
+   * A file that does not parse has no reliable answer, so it reports none: a
+   * warning derived from a broken tree would be guesswork, and the parse errors
+   * are already in the console.
+   */
+  private extensionsIn(doc: Document): ExtensionUse[] {
+    try {
+      const parsed = parse(doc.text, doc.name);
+      if (parsed.diagnostics.some((d) => d.severity === 'error')) return [];
+      return describeExtensions(parsed.file);
+    } catch {
+      return [];
     }
   }
 
@@ -506,8 +590,19 @@ class App {
     const doc = this.workspace.active;
     if (!doc) return;
 
-    const choice = await showExportDialog(doc.name.replace(/\.[^.]+$/, ''), this.lastDimension);
+    const choice = await showExportDialog(
+      doc.name.replace(/\.[^.]+$/, ''),
+      this.lastDimension,
+      this.extensionsIn(doc),
+    );
     if (!choice) return;
+
+    // Source export never touches the kernel: it is a transpile of the text on
+    // screen, so it works even when the model fails to render.
+    if (choice.format === 'scad') {
+      this.writeLegacyScad(doc, choice.filename);
+      return;
+    }
 
     this.setBusy(true);
     try {
@@ -532,17 +627,33 @@ class App {
     const doc = this.workspace.active;
     if (!doc) return;
 
-    const parsed = parse(doc.text, doc.name);
-    const extensions = describeExtensions(parsed.file);
+    showLegacyExportDialog(this.extensionsIn(doc), () =>
+      this.writeLegacyScad(doc, `${doc.name.replace(/\.[^.]+$/, '')}.scad`),
+    );
+  }
 
-    showLegacyExportDialog(
-      extensions.map((e) => `${e.name} — ${e.downgrade}`),
-      () => {
-        const { source } = transpileToLegacyScad(parsed.file);
-        const name = `${doc.name.replace(/\.[^.]+$/, '')}.scad`;
-        void saveBinaryAs(name, new TextEncoder().encode(source), 'text/plain');
-        this.toasts.show(`Exported ${name}.`, 'success');
-      },
+  /**
+   * Transpiles a document to stock `.scad` and writes it out.
+   *
+   * Deliberately not a Save: the result is a lossy derivative — extensions are
+   * rewritten and the metadata header is gone — so it must not adopt the tab's
+   * handle or clear its dirty flag.
+   */
+  private writeLegacyScad(doc: Document, filename: string): void {
+    const parsed = parse(doc.text, doc.name);
+    const errors = parsed.diagnostics.filter((d) => d.severity === 'error');
+    if (errors.length > 0) {
+      this.reportError(`Cannot export source with parse errors: ${errors[0].message}`);
+      return;
+    }
+
+    const { source, rewrites } = transpileToLegacyScad(parsed.file);
+    void saveBinaryAs(filename, new TextEncoder().encode(source), 'text/plain');
+    this.toasts.show(
+      rewrites.length > 0
+        ? `Exported ${filename}, with ${rewrites.length} rewrite${rewrites.length === 1 ? '' : 's'}.`
+        : `Exported ${filename}.`,
+      'success',
     );
   }
 
@@ -850,7 +961,12 @@ class App {
       this.workspace.isDirty(doc),
     );
     const counts = this.consolePanel.counts;
-    this.toolbar.update({ ...this.workspace.layout, showingFinalRender: this.showingFinalRender });
+    const active = this.workspace.active;
+    this.toolbar.update({
+      ...this.workspace.layout,
+      showingFinalRender: this.showingFinalRender,
+      documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
+    });
     this.statusBar.update({
       cursor: this.cursor,
       errors: counts.errors,
@@ -905,6 +1021,12 @@ class App {
       { id: 'file.open', category: 'File', title: 'Open…', shortcut: 'Mod+O', run: () => void this.openFiles() },
       { id: 'file.save', category: 'File', title: 'Save', shortcut: 'Mod+S', run: () => void this.save() },
       { id: 'file.saveAs', category: 'File', title: 'Save as…', shortcut: 'Mod+Shift+S', run: () => void this.saveAs() },
+      {
+        id: 'file.saveAsBscad',
+        category: 'File',
+        title: 'Save as .bscad…',
+        run: () => void this.saveAs('bscad'),
+      },
       {
         id: 'file.assets',
         category: 'File',
@@ -1037,10 +1159,12 @@ class App {
       if (files.length === 0) return;
 
       this.stashEditorState();
+      const dropped: Document[] = [];
       let opened: Document | undefined;
       for (const file of files) {
         if (/\.(bscad|scad)$/i.test(file.name)) {
           opened = this.workspace.createDocument(file.name, await file.text());
+          dropped.push(opened);
         } else if (/\.(ttf|otf|ttc)$/i.test(file.name)) {
           const bytes = new Uint8Array(await file.arrayBuffer());
           const response = await this.client.loadFont(bytes);
@@ -1054,6 +1178,7 @@ class App {
       if (opened) this.activate(opened);
       else void this.render(true);
       this.toasts.show(`Added ${files.length} file${files.length === 1 ? '' : 's'}.`, 'success');
+      this.warnAboutExtensions(dropped);
     });
 
     window.addEventListener('resize', () => this.viewport.resize());
