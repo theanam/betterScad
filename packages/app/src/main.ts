@@ -227,6 +227,9 @@ class App {
       onChange: (name, value) => this.setParameter(name, value),
       onReset: () => this.resetParameters(),
       onApplyToSource: () => this.applyParametersToSource(),
+      // Closing means closing: a toggle here would reopen the panel if it
+      // were ever driven while already hidden.
+      onClose: () => this.setCustomizerVisible(false),
     });
     this.customizerHost = el('div', { style: 'display:none; flex: 0 0 42%; min-height:0;' }, [
       this.customizerPanel.element,
@@ -1135,7 +1138,11 @@ class App {
   // -- layout and theme -----------------------------------------------------
 
   private toggleCustomizer(): void {
-    this.workspace.layout.customizerVisible = !this.workspace.layout.customizerVisible;
+    this.setCustomizerVisible(!this.workspace.layout.customizerVisible);
+  }
+
+  private setCustomizerVisible(visible: boolean): void {
+    this.workspace.layout.customizerVisible = visible;
     this.applyLayoutVisibility();
     this.workspace.persist();
     this.refreshChrome();

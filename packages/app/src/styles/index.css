@@ -586,6 +586,33 @@ textarea {
   color: #fff;
 }
 
+/* A panel's own dismiss. Sized and weighted like the tab close it echoes, so
+   the two read as the same gesture in different places. */
+.panel__close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: var(--bs-space-1);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-text-muted);
+  cursor: pointer;
+  transition: background var(--bs-transition), color var(--bs-transition);
+}
+
+.panel__close:hover {
+  background: var(--bs-surface-raised);
+  color: var(--bs-text);
+}
+
+.panel__close:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: -2px;
+}
+
 /* --- editor --------------------------------------------------------------- */
 
 .editor {

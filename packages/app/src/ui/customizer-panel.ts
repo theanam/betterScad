@@ -8,12 +8,15 @@
  */
 
 import type { CustomizerModel, CustomizerParameter, Value } from '@betterscad/engine';
-import { button, clear, el, formatNumber } from './dom.js';
+import { button, clear, el, formatNumber, icon } from './dom.js';
+import { setHint } from './tooltip.js';
 
 export interface CustomizerCallbacks {
   onChange(name: string, value: Value): void;
   onReset(): void;
   onApplyToSource(): void;
+  /** Hides the panel. Same state the toolbar's Customizer button toggles. */
+  onClose(): void;
 }
 
 export class CustomizerPanel {
@@ -41,6 +44,7 @@ export class CustomizerPanel {
           title: 'Write the current values back into the source',
           onClick: () => this.callbacks.onApplyToSource(),
         }),
+        closeButton(() => this.callbacks.onClose()),
       ]),
       this.body,
     ]);
@@ -285,4 +289,23 @@ function inferStep(min: number, max: number): number {
   if (span <= 20) return 0.1;
   if (span <= 200) return 1;
   return Math.pow(10, Math.floor(Math.log10(span)) - 2);
+}
+
+/**
+ * The panel's own way out.
+ *
+ * The toolbar's Customizer button already toggles this panel, but a control
+ * that opens something from across the window is a poor way to close it: the
+ * thing you want gone is right here. Last in the header, where a dismiss
+ * belongs, and after the actions so it is not in the way of them.
+ */
+function closeButton(onClose: () => void): HTMLButtonElement {
+  const node = el('button', {
+    class: 'panel__close',
+    type: 'button',
+    onclick: () => onClose(),
+  }) as HTMLButtonElement;
+  node.appendChild(icon('close', 12));
+  setHint(node, 'Hide the Customizer');
+  return node;
 }
