@@ -167,7 +167,9 @@ export function layoutWithFace(face: FontFace, request: TextRequest): TextResult
   for (const glyph of order) {
     const path = glyph.getPath(penX, penY, size);
     contours.push(...flattenPath(path, request.segments));
-    if (vertical) penY -= lineHeight * spacing;
+    // `penY` is in opentype's Y-down space, so increasing it steps *down* the
+    // page once the outline is flipped into model space.
+    if (vertical) penY += lineHeight * spacing;
     else penX += (glyph.advanceWidth ?? 0) * scale * spacing;
   }
 
@@ -189,12 +191,18 @@ export function layoutWithFace(face: FontFace, request: TextRequest): TextResult
     default:
       dx = 0;
   }
+  // Vertical alignment is measured against the font's own ascender/descender
+  // band, not the ink of this particular string, so "Ag" and "xx" align
+  // identically. `descender` is negative, being below the baseline.
   switch (request.valign) {
     case 'top':
       dy = -ascender;
       break;
     case 'center':
-      dy = -ascender / 2;
+      // The midpoint of the band, which spans descender..ascender. Halving the
+      // ascender alone ignores the descent and drops the text by half of it —
+      // roughly 15% of the font size for a typical face.
+      dy = -(ascender + descender) / 2;
       break;
     case 'bottom':
       dy = -descender;
@@ -219,19 +227,31 @@ export function layoutWithFace(face: FontFace, request: TextRequest): TextResult
 /**
  * Flattens an opentype path (moveTo/lineTo/quadratic/cubic/close) into closed
  * polylines, subdividing each curve into `segments` straight pieces.
+ *
+ * **Coordinate flip.** opentype.js emits canvas-style coordinates with Y
+ * pointing *down* — the cap of an `A` sits at negative Y — while OpenSCAD model
+ * space is Y-up, which is also how `font.ascender` / `font.descender` are
+ * signed. Y is negated here, at the one place outlines enter the engine, so
+ * everything downstream works in a single consistent space.
+ *
+ * Flipping reverses contour winding, which is harmless: text is assembled with
+ * the even-odd fill rule, so only the nesting of contours decides what is a
+ * hole, not their direction.
  */
 function flattenPath(path: opentype.Path, segments: number): Contour[] {
   const steps = Math.max(2, Math.min(64, Math.round(segments)));
   const contours: Contour[] = [];
   let current: Contour = [];
+  // Pen position stays in opentype's own space; only emitted points are flipped.
   let x = 0;
   let y = 0;
 
   const push = (px: number, py: number): void => {
+    const flippedY = -py;
     const last = current[current.length - 1];
     // Drop consecutive duplicates; they make downstream triangulation unhappy.
-    if (last && Math.abs(last[0] - px) < 1e-9 && Math.abs(last[1] - py) < 1e-9) return;
-    current.push([px, py]);
+    if (last && Math.abs(last[0] - px) < 1e-9 && Math.abs(last[1] - flippedY) < 1e-9) return;
+    current.push([px, flippedY]);
   };
 
   const finish = (): void => {

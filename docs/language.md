@@ -102,6 +102,27 @@ echo(1/0, -1/0, 0/0);   // inf, -inf, nan
 Defining `inf`/`nan`/`E` as identifiers would be a language extension, and would
 need a legacy downgrade path under the rule below — so BetterSCAD does not.
 
+### `text()` aligns against font metrics, not ink
+
+`valign` is measured against the font's ascender/descender band, not the ink of
+the particular string. So `text("Ag")` and `text("xx")` receive the same
+vertical offset, and a line of text does not jump when you type a descender.
+
+| `valign` | Places at y = 0 |
+| --- | --- |
+| `"baseline"` (default) | the baseline |
+| `"top"` | the ascender line |
+| `"center"` | the midpoint of the descender..ascender band |
+| `"bottom"` | the descender line |
+
+Because the band includes the full descent, centred text with no descender —
+`text("ABC", valign = "center")` — sits very slightly above the visual middle of
+its own ink. That is correct, and it is what keeps a run of text steady as its
+characters change.
+
+`halign` shifts by the advance width, which includes the trailing sidebearing,
+for the same reason.
+
 ### `round()` rounds half away from zero
 
 `round(2.5)` is `3`, `round(-2.5)` is `-3`. (JavaScript's `Math.round` would
