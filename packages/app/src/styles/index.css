@@ -488,7 +488,7 @@ textarea {
   font-weight: 500;
   letter-spacing: var(--bs-tracking-label);
   text-transform: uppercase;
-  color: var(--bs-text-faint);
+  color: var(--bs-text-muted);
 }
 
 .panel__body {
@@ -620,7 +620,7 @@ textarea {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--bs-solid-500);
+  color: var(--bs-accent-ink);
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -629,7 +629,7 @@ textarea {
 }
 
 .extbanner__link:hover {
-  color: var(--bs-solid-300);
+  color: var(--bs-accent-ink-hover);
 }
 
 .downgrade {
@@ -983,7 +983,7 @@ textarea {
 }
 
 .statusbar__save--dirty {
-  color: var(--bs-solid-500);
+  color: var(--bs-accent-ink);
 }
 
 .statusbar__save--dirty .dot {
@@ -1169,75 +1169,67 @@ dialog::backdrop {
 
 /* --- welcome -------------------------------------------------------------- */
 
-/* Wider than the utility dialogs and with no header bar of its own: this is a
-   page, not a prompt, and the wordmark is its title. */
+/* Centred, and with no header bar of its own: this is a title page, not a
+   prompt, and the mark is the title. */
 .welcome {
-  width: min(760px, 92vw);
-  max-width: min(760px, 92vw);
+  width: min(700px, 92vw);
+  max-width: min(700px, 92vw);
   padding: var(--bs-space-5);
   border-radius: var(--bs-radius-lg);
+  text-align: center;
 }
 
 .welcome__head {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--bs-space-3);
 }
 
 .welcome__mark {
   display: block;
-  flex: none;
+  margin-bottom: var(--bs-space-3);
 }
 
 .welcome__wordmark {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: -0.6px;
+  letter-spacing: -0.7px;
   line-height: 1.1;
   color: var(--bs-text);
 }
 
 .welcome__tagline {
-  margin-top: 3px;
+  margin-top: 6px;
   font-family: var(--bs-font-mono);
   font-size: var(--bs-font-size-sm);
   letter-spacing: var(--bs-tracking-label);
   text-transform: uppercase;
-  color: var(--bs-text-faint);
-}
-
-.welcome__lede {
-  margin: var(--bs-space-4) 0 0;
-  font-size: 15px;
-  line-height: 1.5;
   color: var(--bs-text-muted);
 }
 
+/* `auto-fit` rather than a fixed three: the open-a-file card is absent where the
+   browser cannot open files, and two cards should fill the row rather than leave
+   a gap where the third would have been. It also collapses to one column on a
+   narrow screen without a media query. */
 .welcome__choices {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: var(--bs-space-3);
-  margin-top: var(--bs-space-4);
-}
-
-@media (max-width: 640px) {
-  .welcome__choices {
-    grid-template-columns: 1fr;
-  }
+  margin-top: var(--bs-space-5);
 }
 
 .welcomecard {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  padding: var(--bs-space-4);
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-4) var(--bs-space-3);
   border: 1px solid var(--bs-border);
   border-radius: var(--bs-radius);
   background: var(--bs-surface);
   color: var(--bs-text-muted);
   font: inherit;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: border-color var(--bs-transition), background var(--bs-transition),
     transform var(--bs-transition);
@@ -1248,14 +1240,14 @@ dialog::backdrop {
   background: var(--bs-surface-raised);
 }
 
-/* The recommended path carries the accent, in the one place on the card that
-   cannot be mistaken for a piece of the content. */
+/* The recommended path carries the accent — on the border and the glyph, never
+   as a fill, so the three cards still read as one row of equals. */
 .welcomecard--primary {
   border-color: var(--bs-solid-500);
 }
 
-.welcomecard--primary .welcomecard__eyebrow {
-  color: var(--bs-solid-500);
+.welcomecard--primary svg {
+  color: var(--bs-accent-ink);
 }
 
 .welcomecard:focus-visible {
@@ -1267,66 +1259,24 @@ dialog::backdrop {
   transform: translateY(1px);
 }
 
-.welcomecard__eyebrow {
-  font-family: var(--bs-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: var(--bs-tracking-label);
-  text-transform: uppercase;
+.welcomecard svg {
   color: var(--bs-text-faint);
 }
 
 .welcomecard__title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--bs-text);
 }
 
 .welcomecard__body {
   font-size: var(--bs-font-size-sm);
-  line-height: 1.55;
-}
-
-.welcomecard__preview {
-  margin-top: var(--bs-space-2);
-  padding: var(--bs-space-2) var(--bs-space-3);
-  border-radius: var(--bs-radius-sm);
-  background: var(--bs-surface-sunken);
-  color: var(--bs-text-faint);
-  overflow: hidden;
-}
-
-.welcomecard__preview code {
-  display: block;
-  font-family: var(--bs-font-mono);
-  font-size: 11px;
-  line-height: 1.7;
-  white-space: pre;
-}
-
-.welcome__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--bs-space-2) var(--bs-space-4);
-  margin: var(--bs-space-4) 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--bs-font-size-sm);
-  color: var(--bs-text-muted);
-}
-
-.welcome__facts li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.welcome__facts svg {
-  color: var(--bs-text-faint);
+  line-height: 1.5;
+  text-wrap: balance;
 }
 
 .welcome__compat {
-  margin: var(--bs-space-4) 0 0;
+  margin: var(--bs-space-5) 0 0;
   padding-top: var(--bs-space-4);
   border-top: 1px solid var(--bs-border);
   font-size: var(--bs-font-size-sm);
@@ -1339,13 +1289,13 @@ dialog::backdrop {
 }
 
 .welcome__link {
-  color: var(--bs-solid-500);
+  color: var(--bs-accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .welcome__link:hover {
-  color: var(--bs-solid-300);
+  color: var(--bs-accent-ink-hover);
 }
 
 /* --- font picker ---------------------------------------------------------- */

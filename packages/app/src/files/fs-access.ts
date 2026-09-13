@@ -50,6 +50,30 @@ export const supportsFileSystemAccess: boolean =
 export const supportsFileSystemWrite: boolean =
   supportsFileSystemAccess && 'showSaveFilePicker' in window;
 
+/**
+ * Whether this browser can open a file at all.
+ *
+ * Deliberately *not* `supportsFileSystemAccess`. Firefox and Safari have no
+ * `showOpenFilePicker` and open files perfectly well through the
+ * `<input type="file">` fallback below, so gating a control on the File System
+ * Access API would hide a working feature from most of the non-Chromium web.
+ *
+ * This is false only where neither route exists: a sandboxed frame that refuses
+ * file pickers, or a host with no DOM. A blocked input keeps its default `text`
+ * type instead of accepting `file`, which is what the probe looks for.
+ */
+export const supportsFileOpen: boolean = ((): boolean => {
+  if (supportsFileSystemAccess) return true;
+  if (typeof document === 'undefined') return false;
+  try {
+    const input = document.createElement('input');
+    input.type = 'file';
+    return input.type === 'file';
+  } catch {
+    return false;
+  }
+})();
+
 /** A one-line description of the active file strategy, for the status bar. */
 export function fileAccessMode(): string {
   return supportsFileSystemWrite ? 'Direct file access' : 'Download / upload';

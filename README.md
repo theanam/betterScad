@@ -57,6 +57,10 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Offline / PWA** | Installable, and fully functional with no network. |
 | **Headless CLI** | `bscad model.scad -o model.stl` for CI and batch generation. |
 
+First run opens a welcome screen offering the sample model, a blank file, or a file
+from disk; it is reachable afterwards from the command palette
+(`Help ▸ Welcome to BetterSCAD`).
+
 ## Quick start
 
 ```sh

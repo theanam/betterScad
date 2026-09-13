@@ -38,6 +38,7 @@ import {
   openScadFiles,
   saveBinaryAs,
   saveTextAs,
+  supportsFileOpen,
   writeToHandle,
 } from './files/fs-access.js';
 import { RenderClient } from './render/client.js';
@@ -510,7 +511,31 @@ class App {
       // The sample is already open; choosing it is just getting out of the way.
       sample: () => undefined,
       blank: () => this.replaceWithBlank(),
+      // Left out entirely where the browser cannot open files, rather than
+      // shown and then failing on click.
+      openFile: supportsFileOpen ? () => void this.openFromWelcome() : undefined,
     });
+  }
+
+  /**
+   * Opens files from the welcome, and clears the sample out of the way.
+   *
+   * Someone who arrives with a file of their own did not ask for the sample;
+   * leaving it as a second tab makes the first thing they see after opening
+   * their model a tab they have to close. It stays if the picker was cancelled,
+   * because then it is the only thing they have.
+   */
+  private async openFromWelcome(): Promise<void> {
+    const sample = this.workspace.active;
+    const before = this.workspace.documents.length;
+    await this.openFiles();
+
+    const opened = this.workspace.documents.length > before;
+    if (!opened || !sample || this.workspace.isDirty(sample)) return;
+
+    this.workspace.closeDocument(sample.id);
+    this.workspace.persist();
+    this.refreshChrome();
   }
 
   /**

@@ -41,6 +41,12 @@
   --bs-brand: var(--bs-solid-500);
   /* Amber is a light colour: its contrast partner is ink, not white. */
   --bs-brand-contrast: #1a1512;
+  /* The accent as *text on a surface*, which is a different problem from the
+     accent as a fill. `#efa84e` on white is about 1.9:1 — fine as a border or a
+     background, unreadable as a word. Dark mode can use the ramp's middle; light
+     mode has to go most of the way down it. */
+  --bs-accent-ink: var(--bs-solid-900);
+  --bs-accent-ink-hover: var(--bs-solid-700);
 
   /* --- semantic --------------------------------------------------------- */
   --bs-danger: #d2453f;
@@ -131,6 +137,9 @@
   --bs-text-muted: #9a8f86;
   --bs-text-faint: #6e655e;
 
+  --bs-accent-ink: var(--bs-solid-500);
+  --bs-accent-ink-hover: var(--bs-solid-300);
+
   --bs-viewport-bg: #0e0c0b;
   --bs-viewport-glow: #241d19;
   --bs-viewport-grid: #2b2522;
@@ -165,6 +174,9 @@
   --bs-text: #1c1815;
   --bs-text-muted: #6b6159;
   --bs-text-faint: #948980;
+
+  --bs-accent-ink: var(--bs-solid-900);
+  --bs-accent-ink-hover: var(--bs-solid-700);
 
   --bs-viewport-bg: #e8e2da;
   --bs-viewport-glow: #f8f5f1;
