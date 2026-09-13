@@ -9,6 +9,19 @@
 import { EditorState } from '@codemirror/state';
 import { parseBscad, serializeBscad, type BscadMetadata, type Value } from '@betterscad/engine';
 
+/** What a document writes to disk: `.bscad` carries metadata, `.scad` does not. */
+export type DocumentFormat = 'bscad' | 'scad';
+
+/** The format implied by a file name. Anything that is not `.bscad` is `.scad`. */
+export function formatForName(name: string): DocumentFormat {
+  return /\.bscad$/i.test(name) ? 'bscad' : 'scad';
+}
+
+/** Swaps a file name's extension, for suggesting a Save As name. */
+export function withFormatExtension(name: string, format: DocumentFormat): string {
+  return `${name.replace(/\.[^./]*$/, '')}.${format}`;
+}
+
 export interface Document {
   id: string;
   name: string;
@@ -20,6 +33,8 @@ export interface Document {
   /** Text as last saved, used to decide whether the tab is dirty. */
   savedText: string;
   metadata: BscadMetadata;
+  /** True when the file as opened already carried a `.bscad` metadata header. */
+  hadMetadata: boolean;
   /** Customizer values, overriding the script's own assignments. */
   parameters: Record<string, Value>;
 }
@@ -110,6 +125,7 @@ export class Workspace {
       savedText: parsed.source,
       handle,
       metadata: parsed.metadata,
+      hadMetadata: parsed.hadMetadata,
       parameters: {},
     };
     // Presets saved in the .bscad header restore the last active parameter set.
@@ -165,8 +181,31 @@ export class Workspace {
     return Object.fromEntries(this.assets);
   }
 
-  /** Serialises a document to `.bscad`, metadata header included. */
-  serialize(doc: Document, camera?: BscadMetadata['camera']): string {
+  /**
+   * The format a document saves back as.
+   *
+   * Normally the extension decides, so saving a `.scad` leaves a plain `.scad`
+   * rather than quietly stamping a BetterSCAD header into someone else's file.
+   * The exception is a file that arrived carrying a header: that metadata is
+   * the user's, and dropping it on save would lose their presets and camera.
+   */
+  formatOf(doc: Document): DocumentFormat {
+    return formatForName(doc.name) === 'bscad' || doc.hadMetadata ? 'bscad' : 'scad';
+  }
+
+  /**
+   * Serialises a document for writing to disk.
+   *
+   * `.scad` gets the bare source; `.bscad` gets the metadata header too. Note
+   * the metadata itself is never discarded — it stays on the in-memory document
+   * and in the persisted session, so switching back to `.bscad` restores it.
+   */
+  serialize(
+    doc: Document,
+    camera?: BscadMetadata['camera'],
+    format: DocumentFormat = this.formatOf(doc),
+  ): string {
+    if (format === 'scad') return doc.text;
     return serializeBscad(doc.text, {
       ...doc.metadata,
       version: 1,
@@ -202,6 +241,7 @@ export class Workspace {
           text: d.text,
           savedText: d.savedText,
           metadata: d.metadata,
+          hadMetadata: d.hadMetadata,
           parameters: d.parameters,
           hadHandle: !!d.handle,
         })),
@@ -228,6 +268,7 @@ export class Workspace {
       this.documents = payload.documents.map((d) => ({
         ...d,
         metadata: d.metadata ?? { version: 1 },
+        hadMetadata: d.hadMetadata ?? false,
         parameters: d.parameters ?? {},
       }));
       this.nextId = this.documents.length + 1;

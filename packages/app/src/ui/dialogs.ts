@@ -2,7 +2,7 @@
  * Modal dialogs: export, fonts, legacy export, and confirmations.
  */
 
-import { EXPORT_FORMATS, type ExportFormat } from '@betterscad/engine';
+import { EXPORT_FORMATS, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
 import { button, clear, el } from './dom.js';
 import type { CatalogEntry } from '../files/font-library.js';
 
@@ -23,15 +23,27 @@ function shell(title: string, body: HTMLElement, footer: HTMLElement[]): HTMLDia
 
 // ---------------------------------------------------------------------------
 
+/**
+ * What Export can produce: a geometry format, or the model's own source
+ * downgraded to stock `.scad`.
+ *
+ * Source is listed here rather than only in the command palette because
+ * "export a .scad" is the same intent as "export an STL" from where the user
+ * is standing — the fact that one goes through the geometry kernel and the
+ * other through the transpiler is an implementation detail.
+ */
+export type ExportTarget = ExportFormat | 'scad';
+
 export interface ExportChoice {
-  format: ExportFormat;
+  format: ExportTarget;
   filename: string;
 }
 
-/** Export dialog (spec feature 10). Resolves to `undefined` when cancelled. */
+/** Export dialog (spec features 10 and 21). Resolves to `undefined` when cancelled. */
 export function showExportDialog(
   baseName: string,
   dimension: 2 | 3 | 0,
+  extensions: ExtensionUse[] = [],
 ): Promise<ExportChoice | undefined> {
   return new Promise((resolve) => {
     // Offer the formats that match what was actually rendered first, but keep
@@ -39,42 +51,67 @@ export function showExportDialog(
     const matching = EXPORT_FORMATS.filter((f) => dimension === 0 || f.dimension === dimension);
     const other = EXPORT_FORMATS.filter((f) => !matching.includes(f));
 
-    let selected: ExportFormat = matching[0]?.format ?? 'stl';
+    let selected: ExportTarget = matching[0]?.format ?? 'stl';
+
+    const extensionFor = (format: ExportTarget): string =>
+      format === 'scad' ? 'scad' : EXPORT_FORMATS.find((f) => f.format === format)?.extension ?? 'stl';
 
     const filenameInput = el('input', {
       type: 'text',
-      value: `${baseName}.${EXPORT_FORMATS.find((f) => f.format === selected)?.extension ?? 'stl'}`,
+      value: `${baseName}.${extensionFor(selected)}`,
       'aria-label': 'File name',
       style: 'width: 100%; padding: 6px 8px;',
     });
 
-    const setFormat = (format: ExportFormat): void => {
+    // Only relevant to the source option, so it is shown with it rather than
+    // occupying space while an STL is being exported.
+    const sourceNote = el('div', { class: 'export__note', hidden: true });
+    sourceNote.append(
+      el('p', {
+        class: 'param__hint',
+        style: 'margin: 0',
+        text:
+          extensions.length > 0
+            ? 'This file uses BetterSCAD extensions. They are rewritten so the export opens in stock OpenSCAD:'
+            : 'This file uses only stock OpenSCAD constructs, so the export is a straight copy.',
+      }),
+    );
+    if (extensions.length > 0) sourceNote.append(extensionList(extensions));
+
+    const setFormat = (format: ExportTarget): void => {
       selected = format;
-      const extension = EXPORT_FORMATS.find((f) => f.format === format)?.extension ?? 'stl';
-      filenameInput.value = `${filenameInput.value.replace(/\.[^.]*$/, '')}.${extension}`;
+      filenameInput.value = `${filenameInput.value.replace(/\.[^.]*$/, '')}.${extensionFor(format)}`;
+      sourceNote.hidden = format !== 'scad';
     };
 
     const list = el('div', { class: 'fontlist' });
-    const addOption = (descriptor: (typeof EXPORT_FORMATS)[number], dimmed: boolean): void => {
+    const addOption = (
+      option: { format: ExportTarget; label: string; extension: string; meta: string },
+      dimmed: boolean,
+    ): void => {
       const radio = el('input', {
         type: 'radio',
         name: 'export-format',
-        value: descriptor.format,
-        checked: descriptor.format === selected,
-        onchange: () => setFormat(descriptor.format),
+        value: option.format,
+        checked: option.format === selected,
+        onchange: () => setFormat(option.format),
       });
       list.appendChild(
         el('label', { class: 'fontlist__item', style: dimmed ? 'opacity: .55' : undefined }, [
-          el('span', {}, [radio, document.createTextNode(` ${descriptor.label}`)]),
-          el('span', {
-            class: 'fontlist__meta',
-            text: `.${descriptor.extension} · ${descriptor.dimension}D`,
-          }),
+          el('span', {}, [radio, document.createTextNode(` ${option.label}`)]),
+          el('span', { class: 'fontlist__meta', text: option.meta }),
         ]),
       );
     };
 
-    for (const descriptor of matching) addOption(descriptor, false);
+    const geometryOption = (descriptor: (typeof EXPORT_FORMATS)[number]) => ({
+      format: descriptor.format as ExportTarget,
+      label: descriptor.label,
+      extension: descriptor.extension,
+      meta: `.${descriptor.extension} · ${descriptor.dimension}D`,
+    });
+
+    for (const descriptor of matching) addOption(geometryOption(descriptor), false);
     if (other.length > 0 && matching.length > 0) {
       list.appendChild(
         el('p', {
@@ -82,11 +119,23 @@ export function showExportDialog(
           text: `This model rendered as ${dimension}D. The formats below are for ${dimension === 3 ? '2D' : '3D'} geometry.`,
         }),
       );
-      for (const descriptor of other) addOption(descriptor, true);
+      for (const descriptor of other) addOption(geometryOption(descriptor), true);
     }
+
+    list.appendChild(el('p', { class: 'param__hint', text: 'Source — the model itself, not its geometry.' }));
+    addOption(
+      {
+        format: 'scad',
+        label: 'OpenSCAD source',
+        extension: 'scad',
+        meta: extensions.length > 0 ? '.scad · downgraded' : '.scad',
+      },
+      false,
+    );
 
     const body = el('div', {}, [
       list,
+      sourceNote,
       el('label', { style: 'display:block; margin-top: 16px;' }, [
         el('div', { class: 'param__hint', text: 'File name' }),
         filenameInput,
@@ -109,6 +158,28 @@ export function showExportDialog(
     dialog.addEventListener('close', () => resolve(resolved));
     dialog.showModal();
   });
+}
+
+/** `name — downgrade (line n)` for each extension a file uses. */
+function extensionList(extensions: ExtensionUse[]): HTMLElement {
+  return el(
+    'ul',
+    { class: 'extensionlist' },
+    extensions.map((use) =>
+      el('li', {}, [
+        el('code', { text: use.name }),
+        document.createTextNode(` — ${use.downgrade}`),
+        el('span', { class: 'extensionlist__where', text: formatLines(use.lines) }),
+      ]),
+    ),
+  );
+}
+
+function formatLines(lines: number[]): string {
+  if (lines.length === 0) return '';
+  const shown = lines.slice(0, 4).join(', ');
+  const more = lines.length > 4 ? ` +${lines.length - 4} more` : '';
+  return `  line${lines.length === 1 ? '' : 's'} ${shown}${more}`;
 }
 
 // ---------------------------------------------------------------------------

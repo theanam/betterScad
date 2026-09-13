@@ -47,7 +47,12 @@ export function formatNumber(value: number, digits = 2): string {
   if (value === 0) return '0';
   if (Math.abs(value) < 0.01) return value.toExponential(1);
   if (Math.abs(value) >= 1e6) return value.toExponential(2);
-  return value.toFixed(digits).replace(/\.?0+$/, '');
+  // Strip trailing zeros only *after* a decimal point. Without the guard,
+  // `formatNumber(60, 0)` returns "6" and `formatNumber(100, 0)` returns "1".
+  return value
+    .toFixed(digits)
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '');
 }
 
 export function formatDuration(ms: number): string {
@@ -89,6 +94,7 @@ const ICONS: Record<string, string> = {
   plus: 'M8 3v10M3 8h10',
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  caret: 'M4.5 6.5 8 10l3.5-3.5',
   // Crescent: a disc with a second disc subtracted, drawn as one outline. Its
   // ink is asymmetric, so the start point is offset by (+0.52, -0.52) to put
   // the bounding box centre on (8, 8) — otherwise it hangs low and left of the
@@ -142,6 +148,126 @@ export function button(options: ButtonOptions): HTMLButtonElement {
   if (options.iconName) node.appendChild(icon(options.iconName));
   if (options.label) node.appendChild(el('span', { text: options.label }));
   return node;
+}
+
+export interface MenuItem {
+  label: string;
+  /** A second line explaining what the item does, for the less obvious ones. */
+  description?: string;
+  shortcut?: string;
+  onSelect(): void;
+}
+
+/**
+ * Opens a popup menu anchored under an element.
+ *
+ * Positioned `fixed` against the anchor's rect rather than nested inside it:
+ * the toolbar is a flex row with its own overflow, and a nested absolute menu
+ * would be clipped by it. Flipping above the anchor when there is no room
+ * below keeps the last item reachable at short window heights.
+ */
+export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
+  const node = el('div', { class: 'menu', role: 'menu' });
+  const buttons: HTMLButtonElement[] = [];
+
+  const close = (): void => {
+    node.remove();
+    document.removeEventListener('mousedown', onOutside, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', close);
+    window.removeEventListener('scroll', close, true);
+    anchor.setAttribute('aria-expanded', 'false');
+    anchor.focus();
+  };
+
+  const onOutside = (event: MouseEvent): void => {
+    if (!node.contains(event.target as Node) && !anchor.contains(event.target as Node)) close();
+  };
+
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const delta = event.key === 'ArrowDown' ? 1 : -1;
+    const next = (current + delta + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  };
+
+  for (const item of items) {
+    const entry = el('button', {
+      class: 'menu__item',
+      type: 'button',
+      role: 'menuitem',
+      onclick: () => {
+        close();
+        item.onSelect();
+      },
+    }) as HTMLButtonElement;
+    entry.append(
+      el('span', { class: 'menu__label' }, [
+        el('span', { text: item.label }),
+        item.shortcut ? el('span', { class: 'btn__key', text: item.shortcut }) : null,
+      ]),
+    );
+    if (item.description) entry.append(el('span', { class: 'menu__hint', text: item.description }));
+    buttons.push(entry);
+    node.appendChild(entry);
+  }
+
+  document.body.appendChild(node);
+
+  const rect = anchor.getBoundingClientRect();
+  const height = node.offsetHeight;
+  const below = window.innerHeight - rect.bottom;
+  node.style.top = below >= height + 8 ? `${rect.bottom + 4}px` : `${Math.max(8, rect.top - height - 4)}px`;
+  // Right-aligned to the anchor, then pulled back inside the viewport.
+  const left = Math.min(rect.right - node.offsetWidth, window.innerWidth - node.offsetWidth - 8);
+  node.style.left = `${Math.max(8, left)}px`;
+
+  anchor.setAttribute('aria-expanded', 'true');
+  buttons[0]?.focus();
+
+  document.addEventListener('mousedown', onOutside, true);
+  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('resize', close);
+  window.addEventListener('scroll', close, true);
+}
+
+export interface SplitButtonOptions extends ButtonOptions {
+  /** Accessible name for the caret half. */
+  menuLabel: string;
+  /** Built on open, so the menu can reflect the document that is active now. */
+  items(): MenuItem[];
+}
+
+/**
+ * A primary action with a caret beside it for its variants.
+ *
+ * Two real buttons rather than one with a hit-test: the common case (Save)
+ * stays a single click and a single tab stop's worth of muscle memory, and the
+ * variants stay reachable by keyboard without learning a modifier.
+ */
+export function splitButton(options: SplitButtonOptions): HTMLElement {
+  const main = button(options);
+  main.classList.add('splitbtn__main');
+
+  const toggle = el('button', {
+    class: 'btn splitbtn__toggle',
+    type: 'button',
+    'aria-haspopup': 'menu',
+    'aria-expanded': 'false',
+    'aria-label': options.menuLabel,
+    title: options.menuLabel,
+    onclick: () => openMenu(toggle, options.items()),
+  }) as HTMLButtonElement;
+  toggle.appendChild(icon('caret', 13));
+
+  return el('div', { class: 'splitbtn' }, [main, toggle]);
 }
 
 /** Announces a message to screen readers without changing the visual layout. */

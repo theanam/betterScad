@@ -51,6 +51,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
 | **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
 | **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |
+| **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation and click-to-snap standard views. |
 | **Measurement** | Click vertices in the viewport to read coordinates, deltas and distances. |
 | **Animation** | `$t` playback in-app, and frame-sequence export from the CLI. |
 | **Offline / PWA** | Installable, and fully functional with no network. |

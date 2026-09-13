@@ -30,7 +30,8 @@ import {
 } from 'three';
 
 import type { MeshPayload } from '../render/protocol.js';
-import { OrbitCamera } from './controls.js';
+import { OrbitCamera, type StandardView } from './controls.js';
+import { ViewGizmo } from './view-gizmo.js';
 
 export interface Measurement {
   /** The clicked point, in model space. */
@@ -66,6 +67,7 @@ export class Viewport {
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
 
+  private readonly gizmo: ViewGizmo;
   private needsRender = true;
   private disposed = false;
   private resizeObserver?: ResizeObserver;
@@ -97,12 +99,18 @@ export class Viewport {
       onChange: () => this.invalidate(),
     });
 
+    this.gizmo = new ViewGizmo((view) => this.setView(view));
+
     this.scene.add(this.modelGroup, this.annotationGroup, this.helperGroup, this.measureGroup);
     this.setupLights();
     this.rebuildHelpers();
     this.applyTheme();
 
     this.renderer.domElement.addEventListener('click', this.onClick);
+    // Capture phase, so a press on the gizmo never also starts an orbit drag.
+    this.renderer.domElement.addEventListener('pointerdown', this.onGizmoPointerDown, true);
+    this.renderer.domElement.addEventListener('pointermove', this.onGizmoPointerMove);
+    this.renderer.domElement.addEventListener('pointerleave', this.onGizmoPointerLeave);
     this.observeResize();
     this.loop();
   }
@@ -145,9 +153,18 @@ export class Viewport {
 
   private loop = (): void => {
     if (this.disposed) return;
+    // A running view transition needs a frame per step; `update` reports when
+    // it still has work, which keeps the render-on-demand model intact.
+    if (this.controls.update()) this.needsRender = true;
+
     if (this.needsRender) {
       this.needsRender = false;
+      const width = this.container.clientWidth;
+      const height = this.container.clientHeight;
+      // CSS pixels: the renderer applies its own pixel ratio.
+      this.renderer.setViewport(0, 0, width, height);
       this.renderer.render(this.scene, this.camera);
+      this.gizmo.render(this.renderer, this.controls.orientation, width, height);
     }
     requestAnimationFrame(this.loop);
   };
@@ -155,6 +172,10 @@ export class Viewport {
   dispose(): void {
     this.disposed = true;
     this.renderer.domElement.removeEventListener('click', this.onClick);
+    this.renderer.domElement.removeEventListener('pointerdown', this.onGizmoPointerDown, true);
+    this.renderer.domElement.removeEventListener('pointermove', this.onGizmoPointerMove);
+    this.renderer.domElement.removeEventListener('pointerleave', this.onGizmoPointerLeave);
+    this.gizmo.dispose();
     this.resizeObserver?.disconnect();
     this.controls.dispose();
     this.clearGroup(this.modelGroup);
@@ -170,6 +191,7 @@ export class Viewport {
   applyTheme(): void {
     this.scene.background = new Color(token('--bs-viewport-bg', '#12181f'));
     this.rebuildHelpers();
+    this.gizmo?.refreshTheme();
     this.invalidate();
   }
 
@@ -352,9 +374,45 @@ export class Viewport {
     }
   }
 
-  setView(view: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso'): void {
+  setView(view: StandardView): void {
     this.controls.setStandardView(view);
   }
+
+  // -- gizmo input ----------------------------------------------------------
+
+  private gizmoPick(event: PointerEvent): StandardView | undefined {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return this.gizmo.pick(
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      rect.width,
+      rect.height,
+    );
+  }
+
+  private onGizmoPointerDown = (event: PointerEvent): void => {
+    const view = this.gizmoPick(event);
+    if (!view) return;
+    // Claim the press outright: orbiting from inside the cube would be a
+    // surprise, and the capture-phase stop is what prevents it.
+    event.stopPropagation();
+    event.preventDefault();
+    this.setView(view);
+  };
+
+  private onGizmoPointerMove = (event: PointerEvent): void => {
+    const view = this.gizmoPick(event);
+    // Suspending the controls also stops the wheel zooming while the pointer
+    // is over the cube, which otherwise feels like the model jumped.
+    this.controls.suspended = view !== undefined;
+    this.renderer.domElement.style.cursor = view ? 'pointer' : this.measuring ? 'crosshair' : '';
+    if (this.gizmo.setHovered(view)) this.invalidate();
+  };
+
+  private onGizmoPointerLeave = (): void => {
+    this.controls.suspended = false;
+    if (this.gizmo.setHovered(undefined)) this.invalidate();
+  };
 
   // -- measurement (spec feature 19) ----------------------------------------
 
@@ -373,6 +431,18 @@ export class Viewport {
 
   private onClick = (event: MouseEvent): void => {
     if (!this.measuring) return;
+    // A click that landed on the gizmo has already been handled as a view change.
+    const canvasRect = this.renderer.domElement.getBoundingClientRect();
+    if (
+      this.gizmo.pick(
+        event.clientX - canvasRect.left,
+        event.clientY - canvasRect.top,
+        canvasRect.width,
+        canvasRect.height,
+      )
+    ) {
+      return;
+    }
 
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(

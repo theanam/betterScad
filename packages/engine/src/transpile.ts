@@ -454,26 +454,50 @@ export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions 
   return { source: header + body, rewrites };
 }
 
+/** One BetterSCAD extension found in a file, and how it downgrades. */
+export interface ExtensionUse {
+  /** How the extension is written, e.g. `negative()`. */
+  name: string;
+  /** What the legacy `.scad` export rewrites it to. */
+  downgrade: string;
+  /** 1-based line of every occurrence, in source order. */
+  lines: number[];
+}
+
 /**
- * Reports which extensions a file uses, for a UI warning before saving as
- * legacy `.scad`.
+ * Reports which extensions a file uses.
+ *
+ * Two callers want this: the legacy `.scad` export, which warns before
+ * rewriting, and opening a `.scad` file, which warns that the file is not
+ * actually stock OpenSCAD. Both want to say *where*, so occurrences are
+ * collected rather than merely counted.
  */
-export function describeExtensions(file: ScadFile): { name: string; downgrade: string }[] {
-  const found = new Map<string, { name: string; downgrade: string }>();
+export function describeExtensions(file: ScadFile): ExtensionUse[] {
+  const found = new Map<string, ExtensionUse>();
+
+  const record = (key: string, name: string, downgrade: string, line: number): void => {
+    const existing = found.get(key);
+    if (existing) existing.lines.push(line);
+    else found.set(key, { name, downgrade, lines: [line] });
+  };
 
   const visitStatement = (stmt: Statement): void => {
     if (stmt.kind === 'module-call' && stmt.name === 'negative') {
       const role = getRole('negative');
-      found.set('negative', {
-        name: 'negative()',
-        downgrade: role?.legacy.transpile ?? 'Rewritten as difference().',
-      });
+      record(
+        'negative',
+        'negative()',
+        role?.legacy.transpile ?? 'Rewritten as difference().',
+        stmt.span.start.line,
+      );
     }
     if (stmt.kind === 'for-c') {
-      found.set('for-c', {
-        name: 'C-style for(...)',
-        downgrade: 'Rewritten as a bounded range for with the condition as a guard.',
-      });
+      record(
+        'for-c',
+        'C-style for(...)',
+        'Rewritten as a bounded range for with the condition as a guard.',
+        stmt.span.start.line,
+      );
     }
     if ('children' in stmt) for (const child of stmt.children) visitStatement(child);
     if (stmt.kind === 'block') for (const child of stmt.body) visitStatement(child);
@@ -490,5 +514,6 @@ export function describeExtensions(file: ScadFile): { name: string; downgrade: s
   };
 
   for (const stmt of file.body) visitStatement(stmt);
+  for (const use of found.values()) use.lines.sort((a, b) => a - b);
   return [...found.values()];
 }
