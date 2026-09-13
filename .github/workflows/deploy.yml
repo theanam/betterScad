@@ -30,7 +30,15 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # The only place this is set. It is what puts the analytics tag in the
+      # published build and nowhere else — not in CI's build, not in a local
+      # `npm run build`, not in a fork's. A GA4 measurement id is public by
+      # nature (it ships in the page), so it lives here rather than in secrets,
+      # where it would be invisible to anyone reading the workflow.
       - run: npm run build
+        env:
+          BETTERSCAD_GA_ID: G-EM1KP504VK
 
       # Branch-based Pages runs the site through Jekyll unless told not to.
       - run: touch packages/app/dist/.nojekyll

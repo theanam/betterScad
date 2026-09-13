@@ -52,13 +52,65 @@ function serviceWorkerManifest(): Plugin {
 }
 
 /**
+ * Injects Google Analytics — and only into the deployed betterscad.org build.
+ *
+ * Gated on an environment variable that *only* `.github/workflows/deploy.yml`
+ * sets, deliberately not on `import.meta.env.PROD`. A local `npm run build`
+ * produces the same `dist/` the deploy publishes, so a production check would
+ * put a tracking tag into every self-hosted and forked build of an MIT,
+ * local-first tool. Anyone who builds this themselves gets no analytics, and
+ * gets that without having to know to turn anything off.
+ *
+ * `apply: 'build'` keeps it out of the dev server even if the variable is
+ * exported in the shell.
+ */
+function analyticsTag(): Plugin {
+  const id = process.env.BETTERSCAD_GA_ID?.trim();
+  // The id is interpolated into an inline script, so it is matched against the
+  // exact shape of a GA4 measurement id rather than trusted.
+  const valid = !!id && /^G-[A-Z0-9]{4,20}$/.test(id);
+
+  return {
+    name: 'betterscad:analytics',
+    apply: 'build',
+    transformIndexHtml() {
+      if (!id) return;
+      if (!valid) {
+        throw new Error(
+          `BETTERSCAD_GA_ID is set to "${id}", which is not a GA4 measurement id (G-XXXXXXXXXX). ` +
+            'Refusing to inject it.',
+        );
+      }
+      return {
+        tags: [
+          {
+            tag: 'script',
+            attrs: { async: true, src: `https://www.googletagmanager.com/gtag/js?id=${id}` },
+            injectTo: 'head' as const,
+          },
+          {
+            tag: 'script',
+            children:
+              'window.dataLayer = window.dataLayer || [];\n' +
+              'function gtag(){dataLayer.push(arguments);}\n' +
+              "gtag('js', new Date());\n" +
+              `gtag('config', '${id}');`,
+            injectTo: 'head' as const,
+          },
+        ],
+      };
+    },
+  };
+}
+
+/**
  * BetterSCAD is a fully static site (spec features 1 and 7), so `base` is
  * relative: the same build works from a domain root, from a GitHub Pages
  * project path, and from `file://` in the desktop shell.
  */
 export default defineConfig({
   base: './',
-  plugins: [serviceWorkerManifest()],
+  plugins: [serviceWorkerManifest(), analyticsTag()],
   build: {
     target: 'es2022',
     sourcemap: true,

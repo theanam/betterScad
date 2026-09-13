@@ -42,7 +42,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 
 | | |
 | --- | --- |
-| **Local-first** | Fully static. No backend, no database, no telemetry. Deploys to GitHub Pages. |
+| **Local-first** | Fully static. No backend, no database, no account. Your models never leave the machine. Deploys to GitHub Pages. |
 | **Complete OpenSCAD language** | Existing `.scad` files open and render with zero modification. |
 | **Real file access** | Opens and saves files directly on disk via the File System Access API, with a download/upload fallback for Firefox and Safari. |
 | **Live customizer** | Auto-generates sliders, dropdowns and checkboxes from `//` parameter annotations, using OpenSCAD's own conventions. |
@@ -217,6 +217,22 @@ covered by tests. Not yet done:
 - **`surface()` with image heightmaps** works in the browser, which has an image decoder;
   the CLI reports a clear error rather than bundling an image codec.
 - **Brand assets are provisional** — see [Brand](#brand) below.
+
+## Analytics
+
+The hosted site at [betterscad.org](https://betterscad.org) loads Google
+Analytics for page-view counts. **Nothing else is sent** — no model source, no
+geometry, no file names, no file contents; the app has no code that reads your
+work and transmits it, and the service worker ignores cross-origin requests
+entirely.
+
+The tag is injected at build time, and only when `BETTERSCAD_GA_ID` is set —
+which happens in exactly one place, the `npm run build` step of
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). It is
+deliberately **not** keyed off a production build, because a local
+`npm run build` produces the same `dist/` the deploy publishes. So a fork, a
+self-hosted copy, a desktop build and the dev server all carry no analytics at
+all, without anyone having to know to switch it off.
 
 ## Deploying
 
