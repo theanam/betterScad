@@ -11,6 +11,7 @@ import { setHint } from './tooltip.js';
 import { formatShortcut } from './command-palette.js';
 import type { Document, DocumentFormat } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
+import type { ExtensionUse } from '@betterscad/engine';
 
 // ---------------------------------------------------------------------------
 // Theme toggle
@@ -140,14 +141,19 @@ export class Toolbar {
       label: 'Preview',
       iconName: 'play',
       shortcut: 'F5',
-      variant: 'primary',
+      variant: 'ghost',
       title: 'Re-render with $preview = true',
       onClick: () => actions.preview(),
     });
+    // Render carries the accent, not Preview: it is the one that produces the
+    // geometry Export writes, and it is the end of the loop rather than a step
+    // in it. Preview is also the button that hides itself under auto-render,
+    // which is no place for the only primary action in the toolbar.
     this.renderButton = button({
       label: 'Render',
       iconName: 'render',
       shortcut: 'F6',
+      variant: 'primary',
       title: 'Re-render with $preview = false — the geometry Export produces',
       onClick: () => actions.render(),
     });
@@ -155,7 +161,9 @@ export class Toolbar {
     this.element = el('header', { class: 'toolbar', role: 'toolbar' }, [
       el('div', { class: 'toolbar__brand' }, [
         el('img', { src: './betterscad-mark.svg', width: '22', height: '22', alt: '' }),
-        el('span', { html: 'Better<em>SCAD</em>' }),
+        // One colour: an amber `SCAD` would spend the accent on decoration,
+        // and the accent is reserved for state and action.
+        el('span', { text: 'BetterSCAD' }),
       ]),
       el('div', { class: 'toolbar__group' }, [
         button({ label: 'New', iconName: 'plus', shortcut: formatShortcut('Mod+N'), onClick: () => actions.newFile() }),
@@ -176,16 +184,23 @@ export class Toolbar {
         button({ label: 'Export', iconName: 'download', shortcut: formatShortcut('Mod+E'), onClick: () => actions.export() }),
       ]),
       el('div', { class: 'toolbar__spacer' }),
+      // A search field rather than a button: it names what the palette is for,
+      // and it is the only affordance in the toolbar that a newcomer can use to
+      // find the things the toolbar has no room for.
+      el('button', {
+        class: 'toolbar__search',
+        type: 'button',
+        title: 'Search or run a command',
+        onclick: () => actions.openPalette(),
+      }, [
+        icon('search', 13),
+        el('span', { class: 'toolbar__searchlabel', text: 'Search or run a command' }),
+        el('span', { class: 'btn__key', text: formatShortcut('Mod+K') }),
+      ]),
       el('div', { class: 'toolbar__group' }, [
         this.customizerButton,
         this.consoleButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
-        button({
-          label: 'Commands',
-          title: 'Command palette',
-          shortcut: formatShortcut('Mod+Shift+P'),
-          onClick: () => actions.openPalette(),
-        }),
         el('div', { class: 'toolbar__divider' }),
         this.themeToggle.element,
       ]),
@@ -346,6 +361,10 @@ export class TabStrip {
 // ---------------------------------------------------------------------------
 
 export interface StatusState {
+  /** Active document name, and whether it still matches what is on disk. */
+  document?: { name: string; dirty: boolean; onDisk: boolean };
+  /** Whether the file is stock OpenSCAD, or uses extensions. */
+  compatibility: 'full' | 'extended';
   cursor: { line: number; column: number };
   errors: number;
   warnings: number;
@@ -366,8 +385,33 @@ export class StatusBar {
   update(state: StatusState): void {
     clear(this.element);
 
+    // Left to right, the questions people actually ask of a status bar: is my
+    // work safe, what am I editing, where am I, and is anything wrong.
+    if (state.document) {
+      const { dirty, onDisk, name } = state.document;
+      const label = dirty ? 'Unsaved changes' : onDisk ? 'Saved to disk' : 'Not saved to a file';
+      this.element.appendChild(
+        el('span', { class: `statusbar__item statusbar__save${dirty ? ' statusbar__save--dirty' : ''}` }, [
+          el('span', { class: 'dot' }),
+          el('span', { text: label }),
+        ]),
+      );
+      this.element.appendChild(el('span', { class: 'statusbar__item statusbar__path', text: name }));
+    }
+
     this.element.appendChild(
       el('span', { class: 'statusbar__item', text: `Ln ${state.cursor.line}, Col ${state.cursor.column}` }),
+    );
+
+    this.element.appendChild(
+      el('span', {
+        class: 'statusbar__item',
+        title:
+          state.compatibility === 'full'
+            ? 'Every construct in this file is stock OpenSCAD'
+            : 'This file uses BetterSCAD extensions; saving as .scad rewrites them',
+        text: `OpenSCAD compat: ${state.compatibility}`,
+      }),
     );
 
     if (state.errors > 0) {
@@ -547,4 +591,77 @@ export class Toasts {
       );
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Extension banner (spec feature 21)
+// ---------------------------------------------------------------------------
+
+/**
+ * A strip under the editor naming the BetterSCAD syntax the open file uses.
+ *
+ * The alternative is silence until export, which is the wrong moment: by then
+ * the file is written and the author has stopped thinking about it. Shown while
+ * the code is on screen, it reads as a property of the file rather than as an
+ * error about it — which is what it is. Absent entirely for a stock file, so it
+ * costs nothing to anyone not using an extension.
+ */
+export class ExtensionBanner {
+  readonly element: HTMLElement;
+  private readonly body: HTMLElement;
+  private signature = '';
+
+  constructor(private readonly onPreview: () => void) {
+    this.body = el('span', { class: 'extbanner__text' });
+    this.element = el('div', { class: 'extbanner', hidden: true }, [
+      el('span', { class: 'extbanner__badge', text: 'EXT' }),
+      this.body,
+    ]);
+  }
+
+  update(extensions: ExtensionUse[]): void {
+    // Rebuilt only when the content actually changes: this is asked on every
+    // keystroke, and replacing the DOM each time would drop the link mid-click.
+    const next = extensions.map((e) => `${e.name}@${e.lines.join(',')}`).join('|');
+    if (next === this.signature) return;
+    this.signature = next;
+
+    this.element.hidden = extensions.length === 0;
+    if (extensions.length === 0) return;
+
+    clear(this.body);
+    // The precise rewrite is long and belongs in the preview, which is one
+    // click away. Here the job is to say *that* this file is not stock, and
+    // where — a banner nobody finishes reading has told them nothing.
+    for (const [index, use] of extensions.entries()) {
+      if (index > 0) this.body.append(document.createTextNode(' '));
+      this.body.append(
+        document.createTextNode(
+          `${formatLineList(use.lines)} ${use.lines.length === 1 ? 'uses' : 'use'} `,
+        ),
+        el('code', { text: use.name }),
+        document.createTextNode(
+          index === extensions.length - 1
+            ? `, ${extensions.length === 1 ? 'a BetterSCAD extension' : 'BetterSCAD extensions'}. Rewritten when you save as OpenSCAD .scad.`
+            : ',',
+        ),
+      );
+    }
+    this.body.append(
+      document.createTextNode(' '),
+      el('button', {
+        class: 'extbanner__link',
+        type: 'button',
+        onclick: () => this.onPreview(),
+        text: 'Preview downgrade',
+      }),
+    );
+  }
+}
+
+/** "Line 19" / "Lines 19, 24" / "Lines 19, 24 and 3 more". */
+function formatLineList(lines: number[]): string {
+  const shown = lines.slice(0, 2).join(', ');
+  const rest = lines.length > 2 ? ` and ${lines.length - 2} more` : '';
+  return `${lines.length === 1 ? 'Line' : 'Lines'} ${shown}${rest}`;
 }

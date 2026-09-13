@@ -51,7 +51,7 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 | **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
 | **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
 | **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |
-| **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation and click-to-snap standard views. |
+| **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation: click a face to snap to that view, or drag the cube to orbit freely. |
 | **Measurement** | Click vertices in the viewport to read coordinates, deltas and distances. |
 | **Animation** | `$t` playback in-app, and frame-sequence export from the CLI. |
 | **Offline / PWA** | Installable, and fully functional with no network. |
@@ -273,11 +273,12 @@ Brand assets live in [`brand/`](brand/) — see [`brand/README.md`](brand/README
 
 ## Brand
 
-The mark is the canonical CSG operation drawn literally: an isometric cube with a
-spherical cavity cut out of it. Amber is *solid*, cyan is *cut*, and that pairing runs
-from the logo through to the viewport's default material and the `#` highlight colour.
+The mark is the canonical CSG operation drawn literally: an isometric cube with a hole
+bored through its top face. The palette is warm-neutral — amber, terracotta, warm
+off-white and greys mixed from the same warmth — so nothing in the chrome fights the
+model in the middle of it. **Amber is reserved for state and action**: the primary
+button, focus, the active tab, a dirty dot, the `EXT` badge.
 
-These assets were authored from scratch as a **provisional** identity. Everything
-downstream reads from [`brand/tokens.css`](brand/tokens.css), so replacing them is a
-one-file change. See [`brand/README.md`](brand/README.md) for the full system and usage
-rules.
+Everything downstream reads from [`brand/tokens.css`](brand/tokens.css), so a revision
+is a one-file change. See [`brand/README.md`](brand/README.md) for the full system and
+usage rules.

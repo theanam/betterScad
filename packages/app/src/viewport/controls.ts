@@ -22,6 +22,20 @@ export interface ControlsOptions {
 
 export type StandardView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso';
 
+/**
+ * A camera pose, in a form that survives JSON.
+ *
+ * Stored per document so each tab keeps the view it was left at: a camera that
+ * fits one model is usually nonsense for the next, which is what makes
+ * switching tabs without this feel broken.
+ */
+export interface CameraState {
+  azimuth: number;
+  polar: number;
+  radius: number;
+  target: [number, number, number];
+}
+
 /** Kept just inside the poles: exactly at one, `lookAt` has no defined roll. */
 const POLAR_LIMIT = 1e-3;
 
@@ -141,6 +155,37 @@ export class OrbitCamera {
     this.options.onChange();
   }
 
+  snapshot(): CameraState {
+    return {
+      azimuth: this.azimuth,
+      polar: this.polar,
+      radius: this.radius,
+      target: [this.target.x, this.target.y, this.target.z],
+    };
+  }
+
+  /**
+   * Restores a pose. Clip planes are derived from the distance rather than
+   * stored, so a restored view cannot inherit a near plane that no longer suits
+   * the model it is looking at.
+   */
+  restore(state: CameraState): void {
+    if (!Number.isFinite(state.radius) || state.radius <= 0) return;
+    this.animation = undefined;
+    this.azimuth = state.azimuth;
+    this.polar = state.polar;
+    this.radius = state.radius;
+    this.target.set(...state.target);
+    this.updateClipPlanes();
+    this.apply();
+  }
+
+  private updateClipPlanes(): void {
+    this.camera.near = Math.max(this.radius / 5000, 0.01);
+    this.camera.far = this.radius * 100;
+    this.camera.updateProjectionMatrix();
+  }
+
   /** Frames a bounding box, leaving a comfortable margin. */
   frame(min: Vector3, max: Vector3): void {
     const center = new Vector3().addVectors(min, max).multiplyScalar(0.5);
@@ -154,9 +199,7 @@ export class OrbitCamera {
     const distance = radius / Math.sin(Math.min(fov, horizontalFov) / 2);
 
     this.radius = distance * 1.12;
-    this.camera.near = Math.max(distance / 5000, 0.01);
-    this.camera.far = distance * 100;
-    this.camera.updateProjectionMatrix();
+    this.updateClipPlanes();
     this.apply();
   }
 
@@ -184,6 +227,24 @@ export class OrbitCamera {
       start: performance.now(),
       duration: 280,
     };
+  }
+
+  /**
+   * Orbits by a screen-space drag, in pixels.
+   *
+   * Public so the view gizmo can drive the same orbit the viewport does: a cube
+   * you can only click is a worse cube, and duplicating the angle maths behind
+   * it is how the two drift apart.
+   */
+  orbitBy(dx: number, dy: number): void {
+    // A drag always wins over a running transition; without this, grabbing the
+    // cube mid-snap fights the animation for the next few frames.
+    this.animation = undefined;
+    // Dragging right turns the model right; dragging down lifts the eye, as in
+    // every orbit control people will already have used.
+    this.azimuth -= dx * this.rotateSpeed;
+    this.polar -= dy * this.rotateSpeed;
+    this.apply();
   }
 
   /** Advances a running view transition. Returns true while more frames are needed. */
@@ -243,11 +304,7 @@ export class OrbitCamera {
     this.lastSingle.set(event.clientX, event.clientY);
 
     if (this.mode === 'orbit') {
-      // Dragging right turns the model right; dragging down lifts the eye, as
-      // in every orbit control people will already have used.
-      this.azimuth -= dx * this.rotateSpeed;
-      this.polar -= dy * this.rotateSpeed;
-      this.apply();
+      this.orbitBy(dx, dy);
     } else if (this.mode === 'pan') {
       this.panBy(dx, dy);
     }

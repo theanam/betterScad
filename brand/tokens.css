@@ -1,13 +1,21 @@
 /**
  * BetterSCAD design tokens.
  *
- * The palette is built around the product's own metaphor: warm amber is
- * *solid*, cool cyan is *cut*. Those two roles run all the way from the logo
- * through to the viewport's default material and the highlight colour used by
- * the `#` modifier.
+ * The palette is warm-neutral rather than blue-black: five brand colours —
+ * amber, terracotta, warm off-white, warm dark grey, near-black — with the
+ * greys mixed from the same warmth as the amber, so nothing in the chrome
+ * fights the model sitting in the middle of it.
  *
- * Light is the base definition; dark overrides only the surface and text
- * ramps, so a new token added to `:root` cannot go missing in dark mode.
+ * **Amber is reserved.** It marks state and action: the primary button, focus,
+ * the active tab, a dirty dot, an extension badge. Using it for decoration is
+ * what makes it stop meaning anything.
+ *
+ * Functional colours — axes, measurement, the `#` highlight modifier — sit
+ * outside the brand palette on purpose. They have to be told apart from the
+ * model, and the model is amber.
+ *
+ * Light is the base definition; the themes below override only the surface,
+ * text and syntax ramps, so a new token added to `:root` cannot go missing.
  */
 
 :root {
@@ -15,46 +23,49 @@
      controls follow the chosen theme rather than the OS setting. */
   color-scheme: light;
 
-  /* --- brand ------------------------------------------------------------ */
-  --bs-solid-100: #ffe7c2;
-  --bs-solid-300: #ffc46b;
-  --bs-solid-500: #e8862a;
-  --bs-solid-700: #be5a10;
-  --bs-solid-900: #7a390a;
+  /* --- brand ------------------------------------------------------------
+     `solid` is the amber ramp; 700 is the terracotta it deepens into. */
+  --bs-solid-100: #fbe6cb;
+  --bs-solid-300: #f5c584;
+  --bs-solid-500: #efa84e;
+  --bs-solid-700: #c96b3c;
+  --bs-solid-900: #8a4526;
 
-  --bs-cut-100: #c8f3fb;
-  --bs-cut-300: #5fe3f7;
-  --bs-cut-500: #12718a;
-  --bs-cut-700: #083c4c;
+  /* `cut` is the counterpart to solid: negative space, measurement, the `#`
+     highlight. Cool on purpose — it must never be mistaken for geometry. */
+  --bs-cut-100: #cdeef2;
+  --bs-cut-300: #5cd3e0;
+  --bs-cut-500: #14748a;
+  --bs-cut-700: #0a3d4c;
 
   --bs-brand: var(--bs-solid-500);
-  --bs-brand-contrast: #ffffff;
+  /* Amber is a light colour: its contrast partner is ink, not white. */
+  --bs-brand-contrast: #1a1512;
 
   /* --- semantic --------------------------------------------------------- */
-  --bs-danger: #d64545;
-  --bs-warning: #d99000;
-  --bs-success: #2f9e63;
+  --bs-danger: #d2453f;
+  --bs-warning: #c07c14;
+  --bs-success: #2f8f5b;
   --bs-info: var(--bs-cut-500);
 
   /* --- surfaces (light) ------------------------------------------------- */
-  --bs-bg: #f5f7f9;
-  --bs-surface: #ffffff;
+  --bs-bg: #f4efe9;
+  --bs-surface: #fffdfb;
   --bs-surface-raised: #ffffff;
-  --bs-surface-sunken: #eceff3;
-  --bs-border: #d6dde5;
-  --bs-border-strong: #b6c2ce;
+  --bs-surface-sunken: #ede8e2;
+  --bs-border: #ded5cb;
+  --bs-border-strong: #bfb3a6;
 
   /* --- text (light) ----------------------------------------------------- */
-  --bs-text: #12202e;
-  --bs-text-muted: #5c7285;
-  --bs-text-faint: #8b9bab;
-
+  --bs-text: #1c1815;
+  --bs-text-muted: #6b6159;
+  --bs-text-faint: #948980;
 
   /* --- editor syntax ----------------------------------------------------
      Split from the brand ramps because those are tuned for UI chrome, where a
      tint on a surface is fine. Code is dense body text: every one of these
      clears WCAG AA (4.5:1) against the editor surface in its own theme. */
-  --bs-syntax-comment: #66788a;
+  --bs-syntax-comment: #857a70;
   --bs-syntax-keyword: #9a4708;
   --bs-syntax-type: #0b6379;
   --bs-syntax-transform: #12708a;
@@ -66,11 +77,14 @@
   --bs-syntax-modifier: #bf2020;
 
   /* --- viewport --------------------------------------------------------- */
-  --bs-viewport-bg: #e7ebef;
-  --bs-viewport-grid: #c3ccd6;
-  --bs-viewport-axis-x: #d64545;
-  --bs-viewport-axis-y: #2f9e63;
-  --bs-viewport-axis-z: #3b82f6;
+  --bs-viewport-bg: #e8e2da;
+  /* Centre of the viewport's radial wash — a pool of light under the model,
+     so the silhouette separates from the ground without needing an outline. */
+  --bs-viewport-glow: #f8f5f1;
+  --bs-viewport-grid: #cbc0b3;
+  --bs-viewport-axis-x: #d2453f;
+  --bs-viewport-axis-y: #2f8f5b;
+  --bs-viewport-axis-z: #3b74df;
 
   /* --- typography ------------------------------------------------------- */
   --bs-font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -80,6 +94,10 @@
   --bs-font-size: 13px;
   --bs-font-size-sm: 11.5px;
   --bs-line-height: 1.5;
+  /* The editor is read for minutes at a time, not glanced at. */
+  --bs-line-height-code: 1.65;
+  /* Panel headers and other small-caps labels. */
+  --bs-tracking-label: 0.09em;
 
   /* --- geometry --------------------------------------------------------- */
   --bs-radius-sm: 4px;
@@ -91,9 +109,9 @@
   --bs-space-4: 16px;
   --bs-space-5: 24px;
 
-  --bs-shadow-1: 0 1px 2px rgb(16 26 38 / 8%);
-  --bs-shadow-2: 0 4px 16px rgb(16 26 38 / 12%);
-  --bs-shadow-3: 0 16px 48px rgb(16 26 38 / 20%);
+  --bs-shadow-1: 0 1px 2px rgb(38 30 24 / 8%);
+  --bs-shadow-2: 0 4px 16px rgb(38 30 24 / 12%);
+  --bs-shadow-3: 0 16px 48px rgb(38 30 24 / 20%);
 
   --bs-transition: 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -102,59 +120,57 @@
 :root:not([data-theme='light']) {
   color-scheme: dark;
 
-  --bs-bg: #0d1117;
-  --bs-surface: #151b23;
-  --bs-surface-raised: #1c242e;
-  --bs-surface-sunken: #0a0e13;
-  --bs-border: #262f3b;
-  --bs-border-strong: #3a4654;
+  --bs-bg: #0e0c0b;
+  --bs-surface: #161311;
+  --bs-surface-raised: #1f1b18;
+  --bs-surface-sunken: #0a0908;
+  --bs-border: #2a2523;
+  --bs-border-strong: #3f3833;
 
-  --bs-text: #f2f6fa;
-  --bs-text-muted: #8fa5b8;
-  --bs-text-faint: #61768a;
+  --bs-text: #ede8e2;
+  --bs-text-muted: #9a8f86;
+  --bs-text-faint: #6e655e;
 
-  --bs-viewport-bg: #12181f;
-  --bs-viewport-grid: #232d38;
+  --bs-viewport-bg: #0e0c0b;
+  --bs-viewport-glow: #241d19;
+  --bs-viewport-grid: #2b2522;
 
-  --bs-syntax-comment: #7a8fa3;
-  --bs-syntax-keyword: #e8862a;
-  --bs-syntax-type: #5fe3f7;
-  --bs-syntax-transform: #3fd3ea;
-  --bs-syntax-builtin: #ffc46b;
-  --bs-syntax-number: #82c8a0;
-  --bs-syntax-string: #e0a878;
-  --bs-syntax-special: #c792ea;
-  --bs-syntax-call: #7fb3ff;
-  --bs-syntax-modifier: #ff7a7a;
+  --bs-syntax-comment: #877d74;
+  --bs-syntax-keyword: #efa84e;
+  --bs-syntax-type: #5cd3e0;
+  --bs-syntax-transform: #45c3d4;
+  --bs-syntax-builtin: #f5c584;
+  --bs-syntax-number: #6fcfae;
+  --bs-syntax-string: #e2a06f;
+  --bs-syntax-special: #c79ae8;
+  --bs-syntax-call: #8fb8e8;
+  --bs-syntax-modifier: #e8756c;
 
-  --bs-shadow-1: 0 1px 2px rgb(0 0 0 / 40%);
-  --bs-shadow-2: 0 4px 16px rgb(0 0 0 / 50%);
-  --bs-shadow-3: 0 16px 48px rgb(0 0 0 / 60%);
+  --bs-shadow-1: 0 1px 2px rgb(0 0 0 / 45%);
+  --bs-shadow-2: 0 4px 16px rgb(0 0 0 / 55%);
+  --bs-shadow-3: 0 16px 48px rgb(0 0 0 / 65%);
 }
 
 /* An explicit light choice must beat the dark default above. */
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --bs-bg: #f5f7f9;
-  --bs-surface: #ffffff;
+  --bs-bg: #f4efe9;
+  --bs-surface: #fffdfb;
   --bs-surface-raised: #ffffff;
-  --bs-surface-sunken: #eceff3;
-  --bs-border: #d6dde5;
-  --bs-border-strong: #b6c2ce;
+  --bs-surface-sunken: #ede8e2;
+  --bs-border: #ded5cb;
+  --bs-border-strong: #bfb3a6;
 
-  --bs-text: #12202e;
-  --bs-text-muted: #5c7285;
-  --bs-text-faint: #8b9bab;
+  --bs-text: #1c1815;
+  --bs-text-muted: #6b6159;
+  --bs-text-faint: #948980;
 
-  --bs-viewport-bg: #e7ebef;
-  --bs-viewport-grid: #c3ccd6;
+  --bs-viewport-bg: #e8e2da;
+  --bs-viewport-glow: #f8f5f1;
+  --bs-viewport-grid: #cbc0b3;
 
-  /* --- editor syntax ----------------------------------------------------
-     Split from the brand ramps because those are tuned for UI chrome, where a
-     tint on a surface is fine. Code is dense body text: every one of these
-     clears WCAG AA (4.5:1) against the editor surface in its own theme. */
-  --bs-syntax-comment: #66788a;
+  --bs-syntax-comment: #857a70;
   --bs-syntax-keyword: #9a4708;
   --bs-syntax-type: #0b6379;
   --bs-syntax-transform: #12708a;

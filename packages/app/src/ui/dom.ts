@@ -97,6 +97,7 @@ const ICONS: Record<string, string> = {
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
   caret: 'M4.5 6.5 8 10l3.5-3.5',
+  search: 'M7.2 2.5a4.7 4.7 0 1 0 0 9.4 4.7 4.7 0 0 0 0-9.4zM10.6 10.6 14 14',
   // Crescent: a disc with a second disc subtracted, drawn as one outline. Its
   // ink is asymmetric, so the start point is offset by (+0.52, -0.52) to put
   // the bounding box centre on (8, 8) — otherwise it hangs low and left of the

@@ -124,9 +124,8 @@ textarea {
   display: block;
 }
 
-.toolbar__brand span em {
-  font-style: normal;
-  color: var(--bs-solid-500);
+.toolbar__brand span {
+  color: var(--bs-text);
 }
 
 .toolbar__spacer {
@@ -143,6 +142,55 @@ textarea {
   width: 1px;
   height: 20px;
   background: var(--bs-border);
+}
+
+/* The palette's front door: a field, not a button, because what it opens is a
+   search. Wide enough to read as one at desktop widths, and collapsed to its
+   icon when the toolbar runs out of room. */
+.toolbar__search {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  min-width: 0;
+  max-width: 320px;
+  flex: 0 1 260px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-faint);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--bs-transition), color var(--bs-transition);
+}
+
+.toolbar__search:hover {
+  border-color: var(--bs-border-strong);
+  color: var(--bs-text-muted);
+}
+
+.toolbar__search:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: 1px;
+}
+
+.toolbar__searchlabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+@media (max-width: 1100px) {
+  .toolbar__search {
+    flex: 0 0 auto;
+  }
+  .toolbar__searchlabel,
+  .toolbar__search .btn__key {
+    display: none;
+  }
 }
 
 /* --- buttons -------------------------------------------------------------- */
@@ -176,17 +224,24 @@ textarea {
   cursor: default;
 }
 
+/* Amber is a light colour, so the label on it is ink. White here would sit at
+   about 2:1 against the fill — legible only because the words are short. */
 .btn--primary {
   background: var(--bs-solid-500);
   border-color: var(--bs-solid-500);
-  color: #fff;
+  color: var(--bs-brand-contrast);
   font-weight: 600;
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--bs-solid-700);
-  border-color: var(--bs-solid-700);
-  color: #fff;
+  background: var(--bs-solid-300);
+  border-color: var(--bs-solid-300);
+  color: var(--bs-brand-contrast);
+}
+
+.btn--primary .btn__key {
+  background: rgb(26 21 18 / 16%);
+  opacity: 1;
 }
 
 .btn--ghost {
@@ -320,6 +375,12 @@ textarea {
   white-space: nowrap;
 }
 
+/* A rule along the top edge, the way the design marks the live document. Drawn
+   with a box-shadow so it does not shift the tab's own text by a pixel. */
+.tab--active {
+  box-shadow: inset 0 2px 0 var(--bs-solid-500);
+}
+
 .tab--active {
   background: var(--bs-surface);
   border-top-color: var(--bs-solid-500);
@@ -422,11 +483,12 @@ textarea {
   padding: 5px var(--bs-space-3);
   background: var(--bs-surface-sunken);
   border-bottom: 1px solid var(--bs-border);
+  font-family: var(--bs-font-mono);
   font-size: var(--bs-font-size-sm);
-  font-weight: 600;
-  letter-spacing: 0.4px;
+  font-weight: 500;
+  letter-spacing: var(--bs-tracking-label);
   text-transform: uppercase;
-  color: var(--bs-text-muted);
+  color: var(--bs-text-faint);
 }
 
 .panel__body {
@@ -439,6 +501,61 @@ textarea {
   padding: var(--bs-space-5) var(--bs-space-4);
   color: var(--bs-text-faint);
   text-align: center;
+}
+
+/* Panel tabs: the header itself becomes the tab strip, so the panel has one
+   row of chrome rather than a title and a set of controls under it. */
+.panel__header--tabs {
+  padding: 0 var(--bs-space-2) 0 0;
+}
+
+.paneltabs {
+  display: flex;
+  align-items: stretch;
+}
+
+.paneltab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--bs-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--bs-text-faint);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color var(--bs-transition), border-color var(--bs-transition);
+}
+
+.paneltab:hover {
+  color: var(--bs-text-muted);
+}
+
+.paneltab[aria-selected='true'] {
+  border-bottom-color: var(--bs-solid-500);
+  color: var(--bs-text);
+}
+
+.paneltab:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: -2px;
+}
+
+.paneltab__count {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bs-surface-raised);
+  color: var(--bs-text-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.paneltab__count--error {
+  background: var(--bs-danger);
+  color: #fff;
 }
 
 /* --- editor --------------------------------------------------------------- */
@@ -456,11 +573,85 @@ textarea {
 .editor .cm-scroller {
   font-family: var(--bs-font-mono);
   font-size: 13px;
-  line-height: 1.55;
+  /* Code is read for minutes at a time; the extra leading is the single
+     cheapest thing that makes a dense file scannable. */
+  line-height: var(--bs-line-height-code);
 }
 
 .editor .cm-focused {
   outline: none;
+}
+
+/* --- extension banner ------------------------------------------------------ */
+
+/* Sits between the code and the customizer, on the sunken surface, so it reads
+   as a note attached to the file rather than a toolbar or a problem. */
+.extbanner {
+  display: flex;
+  align-items: baseline;
+  gap: var(--bs-space-2);
+  flex: none;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border-top: 1px solid var(--bs-border);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-muted);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.5;
+}
+
+.extbanner__badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-solid-500);
+  color: var(--bs-brand-contrast);
+  font-family: var(--bs-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.extbanner__text code {
+  color: var(--bs-text);
+  font-family: var(--bs-font-mono);
+}
+
+.extbanner__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bs-solid-500);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.extbanner__link:hover {
+  color: var(--bs-solid-300);
+}
+
+.downgrade {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.downgrade__code {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: var(--bs-space-3) 0 0;
+  padding: var(--bs-space-3);
+  overflow: auto;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  line-height: var(--bs-line-height-code);
+  tab-size: 2;
 }
 
 /* --- viewport ------------------------------------------------------------- */
@@ -783,6 +974,30 @@ textarea {
   flex: none;
 }
 
+.statusbar__save {
+  color: var(--bs-text-muted);
+}
+
+.statusbar__save .dot {
+  background: var(--bs-success);
+}
+
+.statusbar__save--dirty {
+  color: var(--bs-solid-500);
+}
+
+.statusbar__save--dirty .dot {
+  background: var(--bs-solid-500);
+}
+
+.statusbar__path {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--bs-font-mono);
+}
+
 /* --- animation bar -------------------------------------------------------- */
 
 .animbar {
@@ -950,6 +1165,187 @@ dialog::backdrop {
   font-family: var(--bs-font-mono);
   font-size: var(--bs-font-size-sm);
   color: var(--bs-text-faint);
+}
+
+/* --- welcome -------------------------------------------------------------- */
+
+/* Wider than the utility dialogs and with no header bar of its own: this is a
+   page, not a prompt, and the wordmark is its title. */
+.welcome {
+  width: min(760px, 92vw);
+  max-width: min(760px, 92vw);
+  padding: var(--bs-space-5);
+  border-radius: var(--bs-radius-lg);
+}
+
+.welcome__head {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+}
+
+.welcome__mark {
+  display: block;
+  flex: none;
+}
+
+.welcome__wordmark {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+  color: var(--bs-text);
+}
+
+.welcome__tagline {
+  margin-top: 3px;
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+  color: var(--bs-text-faint);
+}
+
+.welcome__lede {
+  margin: var(--bs-space-4) 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--bs-text-muted);
+}
+
+.welcome__choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--bs-space-3);
+  margin-top: var(--bs-space-4);
+}
+
+@media (max-width: 640px) {
+  .welcome__choices {
+    grid-template-columns: 1fr;
+  }
+}
+
+.welcomecard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: var(--bs-space-4);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface);
+  color: var(--bs-text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--bs-transition), background var(--bs-transition),
+    transform var(--bs-transition);
+}
+
+.welcomecard:hover {
+  border-color: var(--bs-border-strong);
+  background: var(--bs-surface-raised);
+}
+
+/* The recommended path carries the accent, in the one place on the card that
+   cannot be mistaken for a piece of the content. */
+.welcomecard--primary {
+  border-color: var(--bs-solid-500);
+}
+
+.welcomecard--primary .welcomecard__eyebrow {
+  color: var(--bs-solid-500);
+}
+
+.welcomecard:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: 2px;
+}
+
+.welcomecard:active {
+  transform: translateY(1px);
+}
+
+.welcomecard__eyebrow {
+  font-family: var(--bs-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+  color: var(--bs-text-faint);
+}
+
+.welcomecard__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bs-text);
+}
+
+.welcomecard__body {
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.55;
+}
+
+.welcomecard__preview {
+  margin-top: var(--bs-space-2);
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-faint);
+  overflow: hidden;
+}
+
+.welcomecard__preview code {
+  display: block;
+  font-family: var(--bs-font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.welcome__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bs-space-2) var(--bs-space-4);
+  margin: var(--bs-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-text-muted);
+}
+
+.welcome__facts li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.welcome__facts svg {
+  color: var(--bs-text-faint);
+}
+
+.welcome__compat {
+  margin: var(--bs-space-4) 0 0;
+  padding-top: var(--bs-space-4);
+  border-top: 1px solid var(--bs-border);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.6;
+  color: var(--bs-text-muted);
+}
+
+.welcome__compat strong {
+  color: var(--bs-text);
+}
+
+.welcome__link {
+  color: var(--bs-solid-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.welcome__link:hover {
+  color: var(--bs-solid-300);
 }
 
 /* --- font picker ---------------------------------------------------------- */

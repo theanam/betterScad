@@ -63,9 +63,10 @@ function faceTexture(label: string, highlighted: boolean): CanvasTexture {
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
 
-  const face = highlighted ? token('--bs-solid-500', '#e8862a') : token('--bs-surface-raised', '#1c242e');
-  const ink = highlighted ? '#ffffff' : token('--bs-text-muted', '#8fa5b8');
-  const edge = token('--bs-border-strong', '#3a4654');
+  const face = highlighted ? token('--bs-solid-500', '#efa84e') : token('--bs-surface-raised', '#1f1b18');
+  // Amber is a light colour, so a highlighted face takes ink, not white.
+  const ink = highlighted ? token('--bs-brand-contrast', '#1a1512') : token('--bs-text-muted', '#9a8f86');
+  const edge = token('--bs-border-strong', '#3f3833');
 
   ctx.fillStyle = face;
   ctx.fillRect(0, 0, size, size);
@@ -107,7 +108,7 @@ export class ViewGizmo {
     // A slightly inset core, so the six label planes read as faces of a solid.
     const core = new Mesh(
       new BoxGeometry(0.98, 0.98, 0.98),
-      new MeshBasicMaterial({ color: token('--bs-surface-sunken', '#0a0e13') }),
+      new MeshBasicMaterial({ color: token('--bs-surface-sunken', '#0a0908') }),
     );
     this.root.add(core);
 
@@ -146,7 +147,7 @@ export class ViewGizmo {
   /** Rebuilds the label textures after a theme change. */
   refreshTheme(): void {
     const core = this.root.children[0] as Mesh;
-    (core.material as MeshBasicMaterial).color.set(token('--bs-surface-sunken', '#0a0e13'));
+    (core.material as MeshBasicMaterial).color.set(token('--bs-surface-sunken', '#0a0908'));
     for (const face of this.faces) {
       const material = face.mesh.material as MeshBasicMaterial;
       material.map?.dispose();

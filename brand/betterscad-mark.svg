@@ -1,39 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="BetterSCAD">
   <title>BetterSCAD</title>
-  <desc>An isometric cube with a spherical cavity cut into it: difference() { cube(); sphere(); }</desc>
+  <desc>An isometric cube with a round hole bored through its top face: difference() { cube(); cylinder(); }</desc>
 
-  <defs>
-    <!-- Concave lighting: a real cavity is darkest where a convex sphere would
-         be brightest, so the gradient runs opposite to the cube's own shading. -->
-    <radialGradient id="bs-cavity" cx="0.72" cy="0.78" r="0.95">
-      <stop offset="0" stop-color="#2AA7C4"/>
-      <stop offset="0.55" stop-color="#12718A"/>
-      <stop offset="1" stop-color="#083C4C"/>
-    </radialGradient>
+  <!--
+    Three flat faces, no gradients: the shading *is* the isometric read, and a
+    gradient on top of it only muddies the silhouette at favicon sizes.
 
-    <!-- The cube silhouette, used to keep the cut from spilling outside it. -->
-    <clipPath id="bs-body">
-      <path d="M 64 12 L 109.03 38 L 109.03 90 L 64 116 L 18.97 90 L 18.97 38 Z"/>
-    </clipPath>
-
-    <mask id="bs-cut">
-      <rect x="0" y="0" width="128" height="128" fill="#fff"/>
-      <circle cx="64" cy="84" r="21" fill="#000"/>
-    </mask>
-  </defs>
-
-  <g clip-path="url(#bs-body)">
-    <!-- The cavity wall, revealed through the cut. -->
-    <circle cx="64" cy="84" r="21" fill="url(#bs-cavity)"/>
-    <!-- Only the upper rim catches the light, which is what makes it read as
-         hollow rather than as a ball sitting in front of the cube. -->
-    <path d="M 45.5 74 A 21 21 0 0 1 82.5 74" fill="none" stroke="#5FE3F7"
-          stroke-width="3" stroke-linecap="round" opacity="0.9"/>
-
-    <g mask="url(#bs-cut)">
-      <path d="M 64 12 L 109.03 38 L 64 64 L 18.97 38 Z" fill="#FFC46B"/>
-      <path d="M 18.97 38 L 64 64 L 64 116 L 18.97 90 Z" fill="#E8862A"/>
-      <path d="M 109.03 38 L 64 64 L 64 116 L 109.03 90 Z" fill="#BE5A10"/>
-    </g>
+    The hole is drawn as a true circle rather than the ellipse a bored hole
+    would project to. Correct projection costs legibility at 16px, which is
+    where this mark spends most of its life, and the cube around it already
+    establishes the axonometry.
+  -->
+  <g>
+    <!-- top -->
+    <path d="M 64 12 L 109.03 38 L 64 64 L 18.97 38 Z" fill="#efa84e"/>
+    <!-- left -->
+    <path d="M 18.97 38 L 64 64 L 64 116 L 18.97 90 Z" fill="#d9883c"/>
+    <!-- right -->
+    <path d="M 109.03 38 L 64 64 L 64 116 L 109.03 90 Z" fill="#b4682e"/>
   </g>
+
+  <!-- Sunk into the top face, left of its centre so it sits clear of the
+       cube's front vertical edge. -->
+  <circle cx="57" cy="33" r="9.5" fill="#171310"/>
 </svg>

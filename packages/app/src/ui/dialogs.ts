@@ -515,6 +515,40 @@ export function showSaveAsScadDialog(
   dialog.showModal();
 }
 
+/**
+ * Shows the stock `.scad` this file downgrades to.
+ *
+ * Claims about a rewrite are cheap; the rewritten code is the only thing that
+ * actually answers "what will OpenSCAD see?". Read-only and selectable rather
+ * than editable — it is a derivative of the tab, not a second copy of it.
+ */
+export function showDowngradePreviewDialog(
+  filename: string,
+  extensions: ExtensionUse[],
+  source: string,
+  verbatim: boolean,
+): void {
+  const body = el('div', { class: 'downgrade' }, [
+    el('p', {
+      class: 'param__hint',
+      style: 'margin-top: 0',
+      text: verbatim
+        ? 'This file is already stock OpenSCAD, so the downgrade is a straight copy — shown here unchanged.'
+        : 'Saving as OpenSCAD .scad produces this:',
+    }),
+    verbatim || extensions.length === 0 ? null : extensionList(extensions),
+    el('pre', { class: 'downgrade__code' }, [el('code', { text: source })]),
+  ]);
+
+  const dialog = shell(
+    `Downgrade preview — ${filename}`,
+    body,
+    [button({ label: 'Close', variant: 'primary', onClick: () => dialog.close() })],
+    'dialog__body--flush',
+  );
+  dialog.showModal();
+}
+
 export interface NonStandardFile {
   name: string;
   extensions: ExtensionUse[];

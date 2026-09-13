@@ -7,6 +7,8 @@
  */
 
 import { EditorState } from '@codemirror/state';
+
+import type { CameraState } from '../viewport/controls.js';
 import { parseBscad, serializeBscad, type BscadMetadata, type Value } from '@betterscad/engine';
 
 /** What a document writes to disk: `.bscad` carries metadata, `.scad` does not. */
@@ -37,6 +39,14 @@ export interface Document {
   hadMetadata: boolean;
   /** Customizer values, overriding the script's own assignments. */
   parameters: Record<string, Value>;
+  /**
+   * The viewport pose this tab was last left at.
+   *
+   * Absent until the document has been shown once, which is what tells the app
+   * to give it the isometric, fitted view rather than inheriting whatever the
+   * previously active model happened to need.
+   */
+  camera?: CameraState;
 }
 
 export interface LayoutState {
@@ -65,10 +75,16 @@ export const DEFAULT_LAYOUT: LayoutState = {
 
 const STORAGE_KEY = 'betterscad.workspace.v1';
 
+/** What "start blank" and File ▸ New produce. */
+export const BLANK_DOCUMENT = `// New model
+
+cube(10, center = true);
+`;
+
 export const STARTER_DOCUMENT = `// Welcome to BetterSCAD.
 // Everything runs in your browser — nothing is uploaded.
 //
-// F5 preview · F6 render · Ctrl/Cmd+Shift+P for the command palette
+// F5 preview · F6 render · Ctrl/Cmd+K to search or run a command
 
 /* [Shape] */
 // Outer size of the block

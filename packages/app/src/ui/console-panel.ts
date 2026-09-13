@@ -25,37 +25,54 @@ const ICON: Record<ConsoleEntry['severity'], string> = {
   echo: '›',
 };
 
+type Filter = 'all' | 'problems';
+
 export class ConsolePanel {
   readonly element: HTMLElement;
   private readonly list: HTMLElement;
-  private readonly countLabel: HTMLElement;
+  private readonly tabs: Record<Filter, HTMLButtonElement>;
+  private readonly problemCount: HTMLElement;
   private entries: ConsoleEntry[] = [];
-  private filter: 'all' | 'problems' = 'all';
+  private filter: Filter = 'all';
 
   constructor(private readonly onJump: (line: number, column: number) => void) {
     this.list = el('ul', { class: 'console__list' });
-    this.countLabel = el('span', { text: '' });
+    this.problemCount = el('span', { class: 'paneltab__count', hidden: true });
 
-    const filterButton = button({
-      label: 'Problems only',
-      title: 'Show only errors and warnings',
-      onClick: () => {
-        this.filter = this.filter === 'all' ? 'problems' : 'all';
-        filterButton.classList.toggle('btn--active', this.filter === 'problems');
-        this.render();
-      },
-    });
+    // Tabs rather than a filter toggle: "Problems" is a destination people go
+    // looking for, and a count on it answers the question from across the room.
+    const tab = (filter: Filter, label: string, extra?: Node): HTMLButtonElement => {
+      const node = el('button', {
+        class: 'paneltab',
+        type: 'button',
+        role: 'tab',
+        'aria-selected': filter === this.filter,
+        onclick: () => this.setFilter(filter),
+      }) as HTMLButtonElement;
+      node.append(el('span', { text: label }));
+      if (extra) node.append(extra);
+      return node;
+    };
+
+    this.tabs = {
+      all: tab('all', 'Console'),
+      problems: tab('problems', 'Problems', this.problemCount),
+    };
 
     this.element = el('div', { class: 'panel' }, [
-      el('div', { class: 'panel__header' }, [
-        el('span', { text: 'Console' }),
-        this.countLabel,
+      el('div', { class: 'panel__header panel__header--tabs' }, [
+        el('div', { class: 'paneltabs', role: 'tablist' }, [this.tabs.all, this.tabs.problems]),
         el('span', { class: 'toolbar__spacer' }),
-        filterButton,
         button({ label: 'Clear', title: 'Clear the console', onClick: () => this.clear() }),
       ]),
       el('div', { class: 'panel__body' }, [this.list]),
     ]);
+  }
+
+  private setFilter(filter: Filter): void {
+    if (this.filter === filter) return;
+    this.filter = filter;
+    this.render();
   }
 
   /** Replaces the log with the results of one render. */
@@ -109,10 +126,13 @@ export class ConsolePanel {
         : this.entries;
 
     const { errors, warnings } = this.counts;
-    this.countLabel.textContent =
-      errors || warnings
-        ? `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`
-        : '';
+    const problems = errors + warnings;
+    this.problemCount.textContent = String(problems);
+    this.problemCount.hidden = problems === 0;
+    this.problemCount.classList.toggle('paneltab__count--error', errors > 0);
+    for (const [name, node] of Object.entries(this.tabs)) {
+      node.setAttribute('aria-selected', String(name === this.filter));
+    }
 
     if (visible.length === 0) {
       this.list.appendChild(

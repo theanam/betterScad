@@ -14,7 +14,7 @@ cp betterscad-mark.svg favicon.svg
 rsvg-convert -w 192 -h 192 betterscad-mark.svg -o betterscad-icon-192.png
 rsvg-convert -w 512 -h 512 betterscad-mark.svg -o betterscad-icon-512.png
 rsvg-convert -w 512 -h 512 betterscad-icon-maskable.svg -o betterscad-icon-maskable-512.png
-rsvg-convert -w 180 -h 180 -b '#111A24' betterscad-mark.svg -o apple-touch-icon.png
-rsvg-convert -w 1280 -h 640 -b '#0d1117' betterscad-logo-dark.svg -o betterscad-social.png
+rsvg-convert -w 180 -h 180 -b '#161311' betterscad-mark.svg -o apple-touch-icon.png
+rsvg-convert -w 1280 -h 640 -b '#0e0c0b' betterscad-logo-dark.svg -o betterscad-social.png
 
 echo "Brand rasters regenerated."

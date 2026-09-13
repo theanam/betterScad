@@ -1,10 +1,8 @@
 # BetterSCAD brand assets
 
-> **Provisional.** These were authored from scratch because the Claude Design
-> project (`BetterSCAD Brand + App.dc.html`) could not be reached — see
-> [Brand provenance](#brand-provenance) below. Replace them with the imported
-> design when access is available; everything downstream reads from
-> [`tokens.css`](tokens.css), so a swap is a one-file change.
+These follow the Claude Design project *BetterSCAD Brand + App*, supplied as
+reference renders. Everything downstream reads from [`tokens.css`](tokens.css),
+so a future revision is a one-file change.
 
 ## The idea
 
@@ -13,20 +11,36 @@ The mark is the canonical CSG operation, drawn literally:
 ```scad
 difference() {
   cube(10, center = true);
-  translate([0, -5, -5]) sphere(4.5);
+  cylinder(h = 20, r = 2, center = true);
 }
 ```
 
-An isometric cube with a spherical cavity cut out of its near edge. It says
-what the tool does in one shape, and it survives being scaled to 16px.
+An isometric cube with a hole bored through its top face. It says what the tool
+does in one shape, and it survives being scaled to 16px — which is why the hole
+is drawn as a true circle rather than the ellipse the projection calls for.
 
-The palette follows from the same metaphor and carries through the whole
-product:
+## Palette
+
+Five colours. The greys are mixed warm, from the same family as the amber, so
+nothing in the chrome fights the model in the middle of it.
 
 | Role | Colour | Used for |
 | --- | --- | --- |
-| **Solid** | amber `#E8862A` | the mark's faces, the default viewport material, primary actions |
-| **Cut** | cyan `#12718A` → `#5FE3F7` | the cavity, the `#` highlight modifier, informational UI |
+| **Amber** | `#EFA84E` | the mark's top face, the default viewport material, and — reserved — state and action: primary button, focus ring, active tab, dirty dot, `EXT` badge |
+| **Terracotta** | `#C96B3C` | the amber ramp's deep end; the mark's shaded faces |
+| **Off-white** | `#EDE8E2` | text on dark, the sunken surface on light |
+| **Warm dark grey** | `#2A2523` → `#3F3833` | borders and raised surfaces on dark |
+| **Near-black** | `#0E0C0B` | the page and the viewport ground |
+
+Amber is the only accent. Spending it on decoration is what makes it stop
+meaning anything, so a second emphasis colour is a bug, not an addition.
+
+**Functional colours sit outside the palette** on purpose — the axis red/green/
+blue, the `cut` cyan used by measurement and the `#` highlight modifier. They
+have to be told apart from the model, and the model is amber.
+
+The tagline is **CODE IT. SEE IT. PRINT IT.**, set in the mono stack with wide
+tracking.
 
 ## Files
 
@@ -45,10 +59,14 @@ product:
 ## Usage
 
 - Keep clear space around the mark equal to **half the cube's width**.
-- Do not recolour the cavity to match the faces — the amber/cyan contrast *is*
-  the mark; without it the shape reads as a plain cube.
-- On backgrounds between roughly `#3A4654` and `#8B9BAB`, neither lockup has
-  enough contrast. Put the mark on a solid surface instead.
+- Do not fill the hole, or lighten it toward the faces. The hole is the whole
+  idea: without it the mark is a cube, which is every other CAD logo.
+- The wordmark is one weight and one colour. An amber `SCAD` would spend the
+  accent on decoration.
+- On mid-tone backgrounds between roughly `#3F3833` and `#948980`, neither
+  lockup has enough contrast. Put the mark on a solid surface instead.
+- Amber is a light colour: text and icons on an amber fill take
+  `--bs-brand-contrast` (near-black), never white.
 - The `--bs-syntax-*` tokens are separate from the brand ramps on purpose. The
   ramps are tuned for UI chrome, where a tint on a surface reads fine; code is
   dense body text, so every syntax colour clears WCAG AA (4.5:1) against the
@@ -67,11 +85,7 @@ The PNGs are derived from the SVGs. After editing any SVG:
 
 ## Brand provenance
 
-These assets are a from-scratch stand-in, not the imported Claude Design
-project. To replace them:
-
-1. Run `/design-login` once in an interactive Claude Code session.
-2. Re-run the import against
-   `claude.ai/design/p/8eeef3dd-eeaf-4d93-a206-690473e43252`.
-3. Update `tokens.css` and the SVGs; nothing else in the app hardcodes brand
-   colours.
+The design source is the Claude Design project *BetterSCAD Brand + App*
+(`claude.ai/design/p/8eeef3dd-eeaf-4d93-a206-690473e43252`). The SVGs here are
+rebuilt to match its reference renders rather than exported from it, so they
+stay small, themeable and legible at 16px.

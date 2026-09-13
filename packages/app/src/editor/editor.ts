@@ -112,6 +112,9 @@ export class ScadEditor {
       { key: 'Mod-o', run: () => this.shortcut('open'), preventDefault: true },
       { key: 'Mod-e', run: () => this.shortcut('export'), preventDefault: true },
       { key: 'Mod-Shift-p', run: () => this.shortcut('palette'), preventDefault: true },
+      // ⌘K is what the toolbar's search field advertises, and what people
+      // arriving from any other editor will reach for first.
+      { key: 'Mod-k', run: () => this.shortcut('palette'), preventDefault: true },
       { key: 'Mod-Enter', run: () => this.shortcut('render'), preventDefault: true },
     ];
 

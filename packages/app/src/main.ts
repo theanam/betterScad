@@ -43,13 +43,14 @@ import {
 import { RenderClient } from './render/client.js';
 import type { RenderResponse, RenderStats } from './render/protocol.js';
 import {
+  BLANK_DOCUMENT,
   STARTER_DOCUMENT,
   Workspace,
   withFormatExtension,
   type Document,
   type DocumentFormat,
 } from './state/workspace.js';
-import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
+import { AnimationBar, ExtensionBanner, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
@@ -58,6 +59,7 @@ import {
   showConfirm,
   showExportDialog,
   showFontDialog,
+  showDowngradePreviewDialog,
   showNonStandardSyntaxDialog,
   showSaveAsScadDialog,
   type NonStandardFile,
@@ -65,7 +67,9 @@ import {
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
+import { showWelcome } from './ui/welcome.js';
 import { Viewport } from './viewport/viewport.js';
+import type { CameraState } from './viewport/controls.js';
 
 class App {
   private readonly workspace = new Workspace();
@@ -84,6 +88,7 @@ class App {
   private statusBar!: StatusBar;
   private consolePanel!: ConsolePanel;
   private customizerPanel!: CustomizerPanel;
+  private extensionBanner!: ExtensionBanner;
   private animationBar?: AnimationBar;
 
   private mainSplit!: Split;
@@ -98,6 +103,20 @@ class App {
   private lastDimension: 2 | 3 | 0 = 0;
   /** Whether what is on screen came from a full render rather than a preview. */
   private showingFinalRender = false;
+  /**
+   * Documents still waiting for their opening view.
+   *
+   * A model cannot be framed until its geometry exists, so the isometric fit is
+   * deferred to the first render that produces something.
+   */
+  private readonly awaitingInitialView = new Set<string>();
+  /**
+   * A pose waiting to be applied alongside the next render.
+   *
+   * Restoring it at switch time would move the camera while the *previous*
+   * tab's geometry is still on screen, which reads as the model jumping.
+   */
+  private pendingCamera?: CameraState;
   private customizerModel: CustomizerModel = { parameters: [], groups: [] };
   private fontFamilies: string[] = [];
   private fontFaces: { family: string; style: string }[] = [];
@@ -105,13 +124,20 @@ class App {
   private animationTime = 0;
   /** True until the first render completes, so the boot screen can stay up. */
   private booting = true;
+  /** Last `extensionsIn` answer, keyed by the exact text it was computed from. */
+  private extensionCache?: { text: string; extensions: ExtensionUse[] };
 
   private readonly scheduleRender = debounce(() => void this.render(true), 320);
+  /** Camera moves are continuous; persisting every frame would be wasteful. */
+  private readonly persistSoon = debounce(() => this.workspace.persist(), 900);
 
   // -- boot -----------------------------------------------------------------
 
   async start(): Promise<void> {
-    if (!this.workspace.restore()) {
+    // No persisted session means a first visit — or a deliberate reset, which
+    // deserves the same greeting.
+    const firstRun = !this.workspace.restore();
+    if (firstRun) {
       this.workspace.createDocument('model.bscad', STARTER_DOCUMENT);
     }
     this.applyTheme(this.workspace.layout.theme);
@@ -128,12 +154,19 @@ class App {
     await this.client.ready;
     await this.loadBundledFonts();
 
+    const first = this.workspace.active;
+    if (first && !first.camera) this.awaitingInitialView.add(first.id);
+
     this.refreshChrome();
     await this.render(false);
 
     this.finishBoot();
     this.registerServiceWorker();
     this.installGlobalHandlers();
+
+    // After the boot screen is gone and the sample has rendered, so the choice
+    // is made against a working app rather than an empty frame.
+    if (firstRun) this.openWelcome();
   }
 
   private finishBoot(): void {
@@ -143,7 +176,18 @@ class App {
     if (app) app.hidden = false;
     // The viewport was sized while hidden, so it needs one explicit resize.
     this.viewport.resize();
-    this.viewport.frameAll();
+
+    // Settle the camera now that the viewport has its real aspect ratio: a fit
+    // computed against the pre-layout size frames the model wrongly.
+    const doc = this.workspace.active;
+    if (doc?.camera) {
+      this.viewport.restoreCamera(doc.camera);
+    } else if (doc) {
+      this.viewport.applyInitialView();
+      this.awaitingInitialView.delete(doc.id);
+    }
+    this.rememberCamera();
+
     this.editor.focus();
   }
 
@@ -228,8 +272,15 @@ class App {
         this.viewport.resize();
       },
     });
+    this.extensionBanner = new ExtensionBanner(() => this.previewDowngrade());
+
     this.mainSplit.first.classList.add('pane--editor');
-    this.mainSplit.first.append(this.tabs.element, editorHost, this.customizerHost);
+    this.mainSplit.first.append(
+      this.tabs.element,
+      editorHost,
+      this.extensionBanner.element,
+      this.customizerHost,
+    );
     this.mainSplit.second.append(this.rightSplit.element);
 
     this.statusBar = new StatusBar(() => {
@@ -255,7 +306,10 @@ class App {
       onMeasure: (measurement) => this.showMeasurement(measurement),
       // Guarded: the Viewport constructor applies the camera once, before
       // `paintHud` below has been assigned.
-      onCamera: () => paintHud?.(),
+      onCamera: () => {
+        paintHud?.();
+        this.rememberCamera();
+      },
     });
     this.viewport.controls.apply();
 
@@ -394,14 +448,27 @@ class App {
       this.viewport.setModel(result.meshes, result.annotations, result.bounds);
     }
 
-    // Frame the very first successful render; after that the camera is the
-    // user's to control, and stealing it on every keystroke is maddening.
-    if (this.booting && result.meshes.length > 0) this.viewport.frameAll();
+    const doc = this.workspace.active;
+
+    // A tab's remembered pose lands in the same frame as its geometry. No
+    // bounds are needed for this, so it applies even to an empty render.
+    if (this.pendingCamera) {
+      this.viewport.restoreCamera(this.pendingCamera);
+      this.pendingCamera = undefined;
+    }
+
+    // A document gets the isometric, fitted view once, on the first render that
+    // produces geometry. After that the camera belongs to the user, and
+    // stealing it on every keystroke would be maddening.
+    if (doc && this.awaitingInitialView.has(doc.id) && result.dimension !== 0) {
+      this.awaitingInitialView.delete(doc.id);
+      this.viewport.applyInitialView();
+      this.rememberCamera();
+    }
 
     this.editor.setDiagnostics(result.diagnostics);
     this.consolePanel.setDiagnostics(result.diagnostics, result.stats);
 
-    const doc = this.workspace.active;
     if (doc) this.customizerPanel.update(result.customizer, doc.parameters);
 
     this.refreshChrome();
@@ -434,7 +501,40 @@ class App {
 
   private newDocument(): void {
     this.stashEditorState();
-    const doc = this.workspace.createDocument('untitled.bscad', '// New model\n\ncube(10, center = true);\n');
+    const doc = this.workspace.createDocument('untitled.bscad', BLANK_DOCUMENT);
+    this.activate(doc);
+  }
+
+  private openWelcome(): void {
+    showWelcome({
+      // The sample is already open; choosing it is just getting out of the way.
+      sample: () => undefined,
+      blank: () => this.replaceWithBlank(),
+    });
+  }
+
+  /**
+   * Swaps the sample for an empty file.
+   *
+   * Reuses the open document rather than closing it and opening another: on a
+   * first run there is exactly one tab, and creating a second would leave the
+   * sample sitting there as a tab nobody asked for.
+   */
+  private replaceWithBlank(): void {
+    const doc = this.workspace.active;
+    if (!doc) {
+      this.newDocument();
+      return;
+    }
+    doc.name = 'untitled.bscad';
+    doc.text = BLANK_DOCUMENT;
+    doc.savedText = BLANK_DOCUMENT;
+    doc.metadata = { version: 1 };
+    doc.hadMetadata = false;
+    doc.parameters = {};
+    // Dropping the saved state is what gives the new file a clean undo history;
+    // otherwise Ctrl+Z would walk back into the sample.
+    doc.editorState = undefined;
     this.activate(doc);
   }
 
@@ -452,15 +552,42 @@ class App {
     if (!doc) return;
     doc.editorState = this.editor.state;
     doc.text = this.editor.source;
+    if (!this.awaitingInitialView.has(doc.id)) doc.camera = this.viewport.cameraState;
   }
 
   private activate(doc: Document): void {
     // Restoring the saved state keeps that tab's undo history and selection.
     this.editor.swapState(doc.editorState ?? this.editor.createState(doc.text));
     this.customizerPanel.update(this.customizerModel, doc.parameters);
+
+    // Drop the outgoing model straight away, so nothing is on screen that does
+    // not belong to this tab.
+    this.viewport.clearModel();
+
+    // Each tab keeps its own pose. Without this a new tab would inherit the
+    // previous model's camera, which for a differently-sized model means
+    // opening onto empty space or the inside of the part. It is applied with
+    // the new geometry rather than now, so the two change in one frame.
+    if (doc.camera) {
+      this.pendingCamera = doc.camera;
+    } else {
+      this.pendingCamera = undefined;
+      this.awaitingInitialView.add(doc.id);
+    }
+
     this.workspace.persist();
     this.refreshChrome();
     void this.render(true);
+  }
+
+  /** Stores the live camera on the active document. */
+  private rememberCamera(): void {
+    const doc = this.workspace.active;
+    // Nothing to remember until the opening view has been applied, and nothing
+    // worth recording mid-boot, when the viewport is still the wrong size.
+    if (!doc || this.booting || this.awaitingInitialView.has(doc.id)) return;
+    doc.camera = this.viewport.cameraState;
+    this.persistSoon();
   }
 
   private async closeDocument(id: string): Promise<void> {
@@ -476,6 +603,7 @@ class App {
       if (!confirmed) return;
     }
 
+    this.awaitingInitialView.delete(id);
     this.workspace.closeDocument(id);
     if (this.workspace.documents.length === 0) {
       this.workspace.createDocument('model.bscad', STARTER_DOCUMENT);
@@ -594,15 +722,37 @@ class App {
    * A file that does not parse has no reliable answer, so it reports none: a
    * warning derived from a broken tree would be guesswork, and the parse errors
    * are already in the console.
+   *
+   * Memoised on the exact text because the status bar asks on every keystroke,
+   * and this parses the whole file to answer.
    */
   private extensionsIn(doc: Document): ExtensionUse[] {
+    if (this.extensionCache?.text === doc.text) return this.extensionCache.extensions;
+    let extensions: ExtensionUse[] = [];
     try {
       const parsed = parse(doc.text, doc.name);
-      if (parsed.diagnostics.some((d) => d.severity === 'error')) return [];
-      return describeExtensions(parsed.file);
+      if (!parsed.diagnostics.some((d) => d.severity === 'error')) {
+        extensions = describeExtensions(parsed.file);
+      }
     } catch {
-      return [];
+      // A crash in the parser is still "no reliable answer".
     }
+    this.extensionCache = { text: doc.text, extensions };
+    return extensions;
+  }
+
+  /** Shows the stock `.scad` the open file downgrades to (spec feature 21). */
+  private previewDowngrade(): void {
+    const doc = this.workspace.active;
+    if (!doc) return;
+    doc.text = this.editor.source;
+
+    const result = toStockScad(doc.text, doc.name);
+    if (result.errors.length > 0) {
+      this.reportError(`Cannot preview the downgrade with parse errors: ${result.errors[0].message}`);
+      return;
+    }
+    showDowngradePreviewDialog(doc.name, result.extensions, result.source, result.verbatim);
   }
 
   private cameraMetadata(): { rotation: [number, number, number]; target: [number, number, number]; distance: number } {
@@ -992,7 +1142,7 @@ class App {
     document.documentElement.dataset.theme = theme;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', theme === 'dark' ? '#0d1117' : '#f5f7f9');
+      ?.setAttribute('content', theme === 'dark' ? '#0e0c0b' : '#f4efe9');
     // The viewport samples CSS variables, so it must be told to re-read them.
     this.viewport?.applyTheme();
   }
@@ -1003,12 +1153,18 @@ class App {
     );
     const counts = this.consolePanel.counts;
     const active = this.workspace.active;
+    const extensions = active ? this.extensionsIn(active) : [];
+    this.extensionBanner.update(extensions);
     this.toolbar.update({
       ...this.workspace.layout,
       showingFinalRender: this.showingFinalRender,
       documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
     });
     this.statusBar.update({
+      document: active
+        ? { name: active.name, dirty: this.workspace.isDirty(active), onDisk: !!active.handle }
+        : undefined,
+      compatibility: extensions.length > 0 ? 'extended' : 'full',
       cursor: this.cursor,
       errors: counts.errors,
       warnings: counts.warnings,
@@ -1146,6 +1302,15 @@ class App {
       { id: 'edit.undo', category: 'Edit', title: 'Undo', run: () => this.editor.undo() },
       { id: 'edit.redo', category: 'Edit', title: 'Redo', run: () => this.editor.redo() },
 
+      {
+        id: 'view.palette',
+        category: 'View',
+        title: 'Search or run a command',
+        shortcut: 'Mod+K',
+        run: () => this.palette.open(),
+      },
+
+      { id: 'help.welcome', category: 'Help', title: 'Welcome to BetterSCAD', run: () => this.openWelcome() },
       { id: 'help.about', category: 'Help', title: 'About BetterSCAD', run: () => showAboutDialog(ENGINE_VERSION) },
       {
         id: 'help.reset',
@@ -1170,8 +1335,9 @@ class App {
       // The editor has its own keymap; let it win while it has focus, except
       // for the palette, which must be reachable from anywhere.
       const inEditor = this.editor.view.dom.contains(document.activeElement);
-      const isPalette =
-        (event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p';
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      const isPalette = mod && ((event.shiftKey && key === 'p') || (!event.shiftKey && key === 'k'));
       if (inEditor && !isPalette) return;
       if (this.palette.isOpen) return;
       if (this.registry.handleKey(event)) event.preventDefault();

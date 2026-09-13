@@ -10,6 +10,7 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
+  CanvasTexture,
   Color,
   DirectionalLight,
   DoubleSide,
@@ -24,14 +25,22 @@ import {
   Raycaster,
   Scene,
   SphereGeometry,
+  SRGBColorSpace,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
 
 import type { MeshPayload } from '../render/protocol.js';
-import { OrbitCamera, type StandardView } from './controls.js';
+import { OrbitCamera, type CameraState, type StandardView } from './controls.js';
 import { ViewGizmo } from './view-gizmo.js';
+
+/**
+ * How far the pointer may travel before a press on the view cube counts as a
+ * drag rather than a click. Small enough that a deliberate click still snaps
+ * with an unsteady hand, large enough that it is not triggered by one.
+ */
+const GIZMO_DRAG_SLOP = 4;
 
 export interface Measurement {
   /** The clicked point, in model space. */
@@ -76,7 +85,18 @@ export class Viewport {
   private readonly pointer = new Vector2();
 
   private readonly gizmo: ViewGizmo;
+  /** Live press on the view cube, until it resolves into a snap or an orbit. */
+  private gizmoDrag?: { pointerId: number; view: StandardView; x: number; y: number; moved: boolean };
+  /**
+   * Set when a gesture belonged to the view cube, so the `click` that trails it
+   * does not also land in the measurement tool. Cleared by any press that is
+   * not on the cube, so it can never go stale in browsers that suppress the
+   * compatibility click after `preventDefault()` on pointerdown.
+   */
+  private gizmoHandledClick = false;
   private needsRender = true;
+  /** The viewport's gradient background, disposed when the theme changes. */
+  private backdrop?: CanvasTexture;
   private disposed = false;
   private resizeObserver?: ResizeObserver;
 
@@ -121,6 +141,8 @@ export class Viewport {
     // Capture phase, so a press on the gizmo never also starts an orbit drag.
     this.renderer.domElement.addEventListener('pointerdown', this.onGizmoPointerDown, true);
     this.renderer.domElement.addEventListener('pointermove', this.onGizmoPointerMove);
+    this.renderer.domElement.addEventListener('pointerup', this.onGizmoPointerUp, true);
+    this.renderer.domElement.addEventListener('pointercancel', this.onGizmoPointerUp, true);
     this.renderer.domElement.addEventListener('pointerleave', this.onGizmoPointerLeave);
     this.observeResize();
     this.loop();
@@ -129,15 +151,19 @@ export class Viewport {
   // -- lifecycle ------------------------------------------------------------
 
   private setupLights(): void {
-    this.scene.add(new AmbientLight(0xffffff, 1.6));
+    // Low ambient on purpose. Enough of it and every face receives the same
+    // light, which is exactly the information a CAD preview exists to show —
+    // the model turns into a flat silhouette of its own colour, and a chamfer
+    // becomes indistinguishable from a painted line.
+    this.scene.add(new AmbientLight(0xffffff, 0.55));
 
     // Three keys, deliberately not attached to the camera: fixed lighting makes
     // it far easier to judge a shape's form while orbiting around it.
-    const key = new DirectionalLight(0xffffff, 2.1);
+    const key = new DirectionalLight(0xffffff, 2);
     key.position.set(1, 0.6, 1.4);
-    const fill = new DirectionalLight(0xffffff, 0.9);
+    const fill = new DirectionalLight(0xffffff, 0.55);
     fill.position.set(-1.2, -0.4, 0.6);
-    const rim = new DirectionalLight(0xffffff, 0.6);
+    const rim = new DirectionalLight(0xffffff, 0.45);
     rim.position.set(0, 1, -1);
     this.scene.add(key, fill, rim);
   }
@@ -185,6 +211,8 @@ export class Viewport {
     this.renderer.domElement.removeEventListener('click', this.onClick);
     this.renderer.domElement.removeEventListener('pointerdown', this.onGizmoPointerDown, true);
     this.renderer.domElement.removeEventListener('pointermove', this.onGizmoPointerMove);
+    this.renderer.domElement.removeEventListener('pointerup', this.onGizmoPointerUp, true);
+    this.renderer.domElement.removeEventListener('pointercancel', this.onGizmoPointerUp, true);
     this.renderer.domElement.removeEventListener('pointerleave', this.onGizmoPointerLeave);
     this.gizmo.dispose();
     this.resizeObserver?.disconnect();
@@ -199,8 +227,48 @@ export class Viewport {
 
   // -- theme ----------------------------------------------------------------
 
+  /**
+   * A radial wash instead of a flat fill.
+   *
+   * The model sits in the middle of the viewport, and a pool of slightly
+   * lighter ground beneath it separates silhouette from background without a
+   * border, a panel or an outline. Flat dark reads as a hole punched in the
+   * app; this reads as a room.
+   *
+   * A texture rather than a real gradient mesh: it costs one 2D canvas at theme
+   * changes and nothing per frame, and three stretches it to any aspect ratio
+   * on its own.
+   */
+  private buildBackdrop(): CanvasTexture {
+    const base = token('--bs-viewport-bg', '#0e0c0b');
+    const lift = token('--bs-viewport-glow', '#241d19');
+
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, size, size);
+
+    // Centred a little above the middle, where the model's mass usually sits.
+    const gradient = ctx.createRadialGradient(size / 2, size * 0.46, 0, size / 2, size * 0.46, size * 0.62);
+    gradient.addColorStop(0, lift);
+    gradient.addColorStop(1, base);
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    this.backdrop?.dispose();
+    this.backdrop = texture;
+    return texture;
+  }
+
   applyTheme(): void {
-    this.scene.background = new Color(token('--bs-viewport-bg', '#12181f'));
+    this.scene.background = this.buildBackdrop();
     this.rebuildHelpers();
     this.gizmo?.refreshTheme();
     this.invalidate();
@@ -224,6 +292,18 @@ export class Viewport {
       : null;
 
     if (this.lastBounds) this.scaleHelpersTo(this.lastBounds);
+    this.invalidate();
+  }
+
+  /**
+   * Empties the viewport without touching the camera.
+   *
+   * Used on a tab switch: leaving the previous model on screen while the next
+   * one renders means watching the wrong part move to the new tab's camera.
+   */
+  clearModel(): void {
+    this.clearGroup(this.modelGroup);
+    this.clearGroup(this.annotationGroup);
     this.invalidate();
   }
 
@@ -277,7 +357,7 @@ export class Viewport {
     const transparent = payload.display === 'transparent';
 
     const material = new MeshStandardMaterial({
-      color: highlight ? new Color(token('--bs-cut-300', '#5fe3f7')) : new Color(r, g, b),
+      color: highlight ? new Color(token('--bs-cut-300', '#5cd3e0')) : new Color(r, g, b),
       roughness: 0.62,
       metalness: 0.04,
       flatShading: false,
@@ -314,7 +394,7 @@ export class Viewport {
 
     if (this.showGrid) {
       const divisions = 20;
-      const gridColor = new Color(token('--bs-viewport-grid', '#232d38'));
+      const gridColor = new Color(token('--bs-viewport-grid', '#2b2522'));
       this.grid = new GridHelper(size * 2, divisions, gridColor, gridColor);
       // GridHelper is built on the XZ plane; OpenSCAD's ground plane is XY.
       this.grid.rotation.x = Math.PI / 2;
@@ -389,6 +469,25 @@ export class Viewport {
     this.controls.setStandardView(view);
   }
 
+  get cameraState(): CameraState {
+    return this.controls.snapshot();
+  }
+
+  restoreCamera(state: CameraState): void {
+    this.controls.restore(state);
+  }
+
+  /**
+   * The view a model gets the first time it is shown: isometric, fitted.
+   *
+   * Not animated — there is no previous view to explain the movement from, so a
+   * transition would just be a lurch on open.
+   */
+  applyInitialView(): void {
+    this.controls.setStandardView('iso', false);
+    this.frameAll();
+  }
+
   // -- gizmo input ----------------------------------------------------------
 
   private gizmoPick(event: PointerEvent): StandardView | undefined {
@@ -401,17 +500,53 @@ export class Viewport {
     );
   }
 
+  /**
+   * Press on the cube: the start of either a snap or an orbit.
+   *
+   * Which one it is cannot be known yet, so the press is claimed and the
+   * decision deferred to pointerup — under the slop threshold it was a click
+   * and snaps, over it the cube was being dragged and has already orbited.
+   * A cube that only snaps is a cube you cannot use to look at anything the
+   * six named views do not already show.
+   */
   private onGizmoPointerDown = (event: PointerEvent): void => {
+    // One press at a time: a second finger landing on the cube would replace
+    // the first one's state and strand its pointer capture.
+    if (this.gizmoDrag) return;
     const view = this.gizmoPick(event);
-    if (!view) return;
-    // Claim the press outright: orbiting from inside the cube would be a
-    // surprise, and the capture-phase stop is what prevents it.
+    if (!view) {
+      this.gizmoHandledClick = false;
+      return;
+    }
+    // Claim the press outright: the viewport's own orbit must not also start,
+    // and the capture-phase stop is what prevents it.
     event.stopPropagation();
     event.preventDefault();
-    this.setView(view);
+
+    this.gizmoDrag = { pointerId: event.pointerId, view, x: event.clientX, y: event.clientY, moved: false };
+    // Captured so the drag survives leaving the cube — which it does almost
+    // immediately, the gizmo being 104px across.
+    this.renderer.domElement.setPointerCapture(event.pointerId);
   };
 
   private onGizmoPointerMove = (event: PointerEvent): void => {
+    const drag = this.gizmoDrag;
+    if (drag && event.pointerId === drag.pointerId) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+
+      if (!drag.moved && Math.hypot(dx, dy) > GIZMO_DRAG_SLOP) {
+        drag.moved = true;
+        // Stop highlighting a face: past this point the cube is a handle, and
+        // the faces spinning under the pointer are not targets.
+        if (this.gizmo.setHovered(undefined)) this.invalidate();
+      }
+      if (drag.moved) this.controls.orbitBy(dx, dy);
+      return;
+    }
+
     const view = this.gizmoPick(event);
     // Suspending the controls also stops the wheel zooming while the pointer
     // is over the cube, which otherwise feels like the model jumped.
@@ -420,7 +555,30 @@ export class Viewport {
     if (this.gizmo.setHovered(view)) this.invalidate();
   };
 
+  private onGizmoPointerUp = (event: PointerEvent): void => {
+    const drag = this.gizmoDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.gizmoDrag = undefined;
+    this.gizmoHandledClick = true;
+
+    if (this.renderer.domElement.hasPointerCapture(event.pointerId)) {
+      this.renderer.domElement.releasePointerCapture(event.pointerId);
+    }
+    // A press that never moved was a click on that face.
+    if (!drag.moved) this.setView(drag.view);
+
+    // The cube has turned under the pointer, so hover has to be re-read from
+    // where the pointer actually ended up rather than left as it was.
+    const view = this.gizmoPick(event);
+    this.controls.suspended = view !== undefined;
+    this.renderer.domElement.style.cursor = view ? 'pointer' : this.measuring ? 'crosshair' : '';
+    if (this.gizmo.setHovered(view)) this.invalidate();
+  };
+
   private onGizmoPointerLeave = (): void => {
+    // Mid-drag the pointer is captured, so leaving the canvas is not the end of
+    // anything; clearing state here would strand the drag.
+    if (this.gizmoDrag) return;
     this.controls.suspended = false;
     if (this.gizmo.setHovered(undefined)) this.invalidate();
   };
@@ -441,6 +599,12 @@ export class Viewport {
   }
 
   private onClick = (event: MouseEvent): void => {
+    // A gesture the cube already consumed — a snap, or an orbit that happened
+    // to end over the model — must not also drop a measurement point.
+    if (this.gizmoHandledClick) {
+      this.gizmoHandledClick = false;
+      return;
+    }
     if (!this.measuring) return;
     // A click that landed on the gizmo has already been handled as a view change.
     const canvasRect = this.renderer.domElement.getBoundingClientRect();
@@ -522,8 +686,8 @@ export class Viewport {
       const marker = new Mesh(
         new SphereGeometry(markerRadius, 12, 8),
         new MeshStandardMaterial({
-          color: new Color(token('--bs-cut-300', '#5fe3f7')),
-          emissive: new Color(token('--bs-cut-300', '#5fe3f7')),
+          color: new Color(token('--bs-cut-300', '#5cd3e0')),
+          emissive: new Color(token('--bs-cut-300', '#5cd3e0')),
           emissiveIntensity: 0.6,
           depthTest: false,
         }),
@@ -538,7 +702,7 @@ export class Viewport {
       const line = new Line(
         geometry,
         new LineBasicMaterial({
-          color: new Color(token('--bs-cut-300', '#5fe3f7')),
+          color: new Color(token('--bs-cut-300', '#5cd3e0')),
           depthTest: false,
         }),
       );
