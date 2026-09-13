@@ -190,6 +190,25 @@ covered by tests. Not yet done:
   the CLI reports a clear error rather than bundling an image codec.
 - **Brand assets are provisional** — see [Brand](#brand) below.
 
+## Deploying
+
+The site is fully static, so it can be served from anywhere. `npm run build`
+writes `packages/app/dist`; copy that wherever you like.
+
+For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+builds and publishes on every push to `main`. **It needs Pages switched on once,
+by hand:**
+
+> **Settings → Pages → Build and deployment → Source: _GitHub Actions_**
+
+The workflow asks `actions/configure-pages` to enable Pages itself, but the
+default `GITHUB_TOKEN` usually lacks the admin rights to *create* a Pages site,
+so the first run fails until that switch is flipped. After that it is automatic.
+
+`base` is `'./'` in [`vite.config.ts`](packages/app/vite.config.ts), so the same
+build works from a domain root, from a project subpath like
+`/betterScad/`, and from `file://` in the desktop shell.
+
 ## Contributing
 
 Issues and pull requests are welcome. The one non-negotiable rule: **any new language
