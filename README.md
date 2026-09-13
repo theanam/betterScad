@@ -12,6 +12,10 @@ Write parametric models in the OpenSCAD language, see them render instantly, and
 to STL, 3MF, OFF, AMF, SVG or DXF. Everything runs on your machine. There is no server,
 no account, and nothing is uploaded.
 
+### [→ Try it in your browser](https://theanam.github.io/betterScad/)
+
+No install, no sign-up. It loads a starter model you can edit straight away.
+
 [Quick start](#quick-start) · [Why](#why-another-openscad) · [Architecture](#architecture) · [CLI](#command-line) · [Contributing](#contributing)
 
 </div>
@@ -51,8 +55,8 @@ ships with a defined way back to plain `.scad`**. Nothing gets added without an 
 ## Quick start
 
 ```sh
-git clone https://github.com/<you>/betterscad.git
-cd betterscad
+git clone https://github.com/theanam/betterScad.git
+cd betterScad
 npm install
 npm run dev          # http://localhost:5173
 ```

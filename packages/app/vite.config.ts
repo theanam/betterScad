@@ -1,6 +1,55 @@
 import { fileURLToPath } from 'node:url';
 
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * Emits `sw-manifest.json`: the list of files the service worker precaches.
+ *
+ * Without it, offline support silently does not work. Asset filenames are
+ * content-hashed, so the worker cannot know them; and on a first visit the
+ * worker is not yet controlling the page, so its lazy cache-first path never
+ * sees the app's own requests. Precaching at install is the only thing that
+ * makes the very first visit survive going offline.
+ */
+function serviceWorkerManifest(): Plugin {
+  // Files copied verbatim from `public/`, which never reach the bundle graph.
+  const PUBLIC_ASSETS = [
+    './',
+    'manifest.webmanifest',
+    'favicon.svg',
+    // Brand art the UI references directly: the toolbar mark, the About
+    // dialog's lockup, and the icons the install prompt reads.
+    'betterscad-mark.svg',
+    'betterscad-logo-dark.svg',
+    'betterscad-logo-light.svg',
+    'betterscad-icon-192.png',
+    'betterscad-icon-512.png',
+    'betterscad-icon-maskable-512.png',
+    'apple-touch-icon.png',
+    // The bundled fonts, so `text()` keeps working with no network.
+    'fonts/NotoSans.ttf',
+    'fonts/NotoSerif.ttf',
+    'fonts/Inter.ttf',
+    'fonts/JetBrainsMono.ttf',
+    'fonts/google-fonts-index.json',
+  ];
+
+  return {
+    name: 'betterscad:sw-manifest',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const emitted = Object.keys(bundle).filter(
+        // The worker must not precache itself, and source maps are dead weight.
+        (name) => name !== 'sw.js' && !name.endsWith('.map'),
+      );
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw-manifest.json',
+        source: JSON.stringify([...PUBLIC_ASSETS, ...emitted], null, 2),
+      });
+    },
+  };
+}
 
 /**
  * BetterSCAD is a fully static site (spec features 1 and 7), so `base` is
@@ -9,6 +58,7 @@ import { defineConfig } from 'vite';
  */
 export default defineConfig({
   base: './',
+  plugins: [serviceWorkerManifest()],
   build: {
     target: 'es2022',
     sourcemap: true,

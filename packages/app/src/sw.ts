@@ -22,9 +22,36 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(VERSION);
-      // Precache only the entry point; the rest is filled in as it is used,
-      // which avoids guessing at hashed bundle names from here.
-      await cache.addAll([SHELL, './manifest.webmanifest', './favicon.svg']).catch(() => undefined);
+
+      // `sw-manifest.json` is generated at build time and lists every emitted
+      // asset. Precaching here rather than relying on the lazy fetch path is
+      // what makes the *first* visit survive going offline: on that visit the
+      // worker is not yet controlling the page, so it never sees the app's own
+      // requests for its JS and WASM.
+      let files: string[] = [SHELL, './manifest.webmanifest', './favicon.svg'];
+      try {
+        const response = await fetch('./sw-manifest.json', { cache: 'no-cache' });
+        if (response.ok) {
+          const listed = (await response.json()) as string[];
+          if (Array.isArray(listed) && listed.length > 0) files = listed;
+        }
+      } catch {
+        // Fall back to the shell alone; the app still works online.
+      }
+
+      // One failed asset must not abort the whole install, so each is cached
+      // independently rather than through `addAll`.
+      await Promise.all(
+        files.map(async (file) => {
+          try {
+            const response = await fetch(file, { cache: 'reload' });
+            if (response.ok) await cache.put(file, response);
+          } catch {
+            // Skip it; the lazy fetch handler will pick it up later.
+          }
+        }),
+      );
+
       await self.skipWaiting();
     })(),
   );

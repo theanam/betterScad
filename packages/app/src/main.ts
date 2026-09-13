@@ -1011,13 +1011,21 @@ class App {
     // Offline support (spec feature 17). Dev has no service worker, and
     // registering one there would cache the dev server's own module graph.
     if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
-    window.addEventListener('load', () => {
+
+    const register = (): void => {
       // `./sw.js` relative to the page, so the scope matches wherever the
       // static site is deployed (domain root or a GitHub Pages project path).
-      navigator.serviceWorker.register('./sw.js', { type: 'module' }).catch(() => {
-        // Offline support is a bonus; the app works without it.
+      navigator.serviceWorker.register('./sw.js', { type: 'module' }).catch((err: unknown) => {
+        // Offline support is a bonus; the app works fine without it. Logged
+        // rather than swallowed, so a broken worker is at least diagnosable.
+        console.warn('Service worker registration failed; offline support is unavailable.', err);
       });
-    });
+    };
+
+    // Boot finishes after the WASM kernel loads, which is well past `load`, so
+    // waiting for that event unconditionally would mean never registering.
+    if (document.readyState === 'complete') register();
+    else window.addEventListener('load', register, { once: true });
   }
 }
 
