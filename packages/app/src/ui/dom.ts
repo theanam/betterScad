@@ -97,6 +97,9 @@ const ICONS: Record<string, string> = {
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
   caret: 'M4.5 6.5 8 10l3.5-3.5',
+  // GitHub's own mark (Octicons `mark-github-16`), filled rather than stroked.
+  github:
+    'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.27-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.71-2.33-.5-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8z',
   search: 'M7.2 2.5a4.7 4.7 0 1 0 0 9.4 4.7 4.7 0 0 0 0-9.4zM10.6 10.6 14 14',
   // Crescent: a disc with a second disc subtracted, drawn as one outline. Its
   // ink is asymmetric, so the start point is offset by (+0.52, -0.52) to put
@@ -111,6 +114,15 @@ const ICONS: Record<string, string> = {
   cube: 'M8 1.8 13.4 4.9 13.4 11.1 8 14.2 2.6 11.1 2.6 4.9Z M8 8 13.4 4.9M8 8 2.6 4.9M8 8v6.2',
 };
 
+/**
+ * Icons drawn as a filled silhouette rather than a stroked outline.
+ *
+ * The rest of the set is hand-drawn to one stroke weight; a borrowed logo is
+ * not. Stroking the GitHub mark would trace every contour of its silhouette and
+ * read as noise at 16px, so it is filled the way its owner draws it.
+ */
+const FILLED_ICONS = new Set(['github']);
+
 /** Inline SVG icon; `stroke` style keeps them crisp at 16px. */
 export function icon(name: keyof typeof ICONS | string, size = 15): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -122,11 +134,16 @@ export function icon(name: keyof typeof ICONS | string, size = 15): SVGSVGElemen
 
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', ICONS[name] ?? ICONS.gear);
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '1.4');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
+
+  if (FILLED_ICONS.has(name)) {
+    path.setAttribute('fill', 'currentColor');
+  } else {
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.4');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+  }
   svg.appendChild(path);
   return svg;
 }

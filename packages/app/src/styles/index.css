@@ -193,6 +193,34 @@ textarea {
   }
 }
 
+/* The one control in the toolbar that leaves the app. Round, so it reads as a
+   different kind of thing from the square buttons beside it, and sized to match
+   the theme switch it sits next to. */
+.toolbar__github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--bs-border);
+  border-radius: 999px;
+  color: var(--bs-text-muted);
+  transition: background var(--bs-transition), color var(--bs-transition),
+    border-color var(--bs-transition);
+}
+
+.toolbar__github:hover {
+  background: var(--bs-surface-sunken);
+  border-color: var(--bs-border-strong);
+  color: var(--bs-text);
+}
+
+.toolbar__github:focus-visible {
+  outline: 2px solid var(--bs-solid-500);
+  outline-offset: 2px;
+}
+
 /* --- buttons -------------------------------------------------------------- */
 
 .btn {

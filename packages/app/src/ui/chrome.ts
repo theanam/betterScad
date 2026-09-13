@@ -11,6 +11,9 @@ import { setHint } from './tooltip.js';
 import { formatShortcut } from './command-palette.js';
 import type { Document, DocumentFormat } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
+
+/** The project's source. */
+export const REPO_URL = 'https://github.com/theanam/betterScad';
 import type { ExtensionUse } from '@betterscad/engine';
 
 // ---------------------------------------------------------------------------
@@ -203,6 +206,7 @@ export class Toolbar {
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
         el('div', { class: 'toolbar__divider' }),
         this.themeToggle.element,
+        githubLink(),
       ]),
     ]);
   }
@@ -664,4 +668,23 @@ function formatLineList(lines: number[]): string {
   const shown = lines.slice(0, 2).join(', ');
   const rest = lines.length > 2 ? ` and ${lines.length - 2} more` : '';
   return `${lines.length === 1 ? 'Line' : 'Lines'} ${shown}${rest}`;
+}
+
+/**
+ * Link to the source, as a round icon at the end of the toolbar.
+ *
+ * An anchor rather than a button: it navigates, so it should behave like a link
+ * — middle-click, copy address, open in a new tab. Round because it is the one
+ * control here that leaves the app, and the shape says so before the glyph does.
+ */
+function githubLink(): HTMLAnchorElement {
+  const node = el('a', {
+    class: 'toolbar__github',
+    href: REPO_URL,
+    target: '_blank',
+    rel: 'noreferrer noopener',
+  }) as HTMLAnchorElement;
+  node.appendChild(icon('github', 15));
+  setHint(node, 'Source on GitHub');
+  return node;
 }
