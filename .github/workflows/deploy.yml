@@ -5,10 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Publishing to a branch needs only `contents: write`, which the default
+# GITHUB_TOKEN has. The `actions/deploy-pages` route needs Pages to have been
+# switched on by hand first — `configure-pages` cannot create the site, because
+# the default token has no admin rights — so this publishes to `gh-pages`
+# instead and works on a fresh clone of the repo with no setup at all.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Let an in-progress deploy finish rather than cancelling it half-published.
 concurrency:
@@ -16,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,22 +32,27 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # `enablement` turns Pages on via the API on the first run, so the repo
-      # does not need someone to flip Settings -> Pages -> Source by hand.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      # Branch-based Pages runs the site through Jekyll unless told not to.
+      - run: touch packages/app/dist/.nojekyll
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: packages/app/dist
+      - name: Publish to gh-pages
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          # Build the commit with plumbing against a scratch index, so the
+          # checkout and its real index are never touched.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/gh-pages.index"
+          git --work-tree=packages/app/dist add -A
+          tree=$(git write-tree)
+          unset GIT_INDEX_FILE
+
+          # A root commit each time: the branch only ever needs to hold the
+          # current site, and keeping history would grow the repo by a full
+          # copy of the bundle on every push.
+          commit=$(git commit-tree "$tree" -m "Deploy ${GITHUB_SHA:0:7}")
+          git push -f origin "${commit}:refs/heads/gh-pages"
+
+          echo "Published ${GITHUB_SHA:0:7} to gh-pages" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_STEP_SUMMARY"

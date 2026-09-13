@@ -196,14 +196,13 @@ The site is fully static, so it can be served from anywhere. `npm run build`
 writes `packages/app/dist`; copy that wherever you like.
 
 For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
-builds and publishes on every push to `main`. **It needs Pages switched on once,
-by hand:**
+builds and publishes to a `gh-pages` branch on every push to `main`. **No repo
+settings need changing** — pushing that branch enables Pages on its own.
 
-> **Settings → Pages → Build and deployment → Source: _GitHub Actions_**
-
-The workflow asks `actions/configure-pages` to enable Pages itself, but the
-default `GITHUB_TOKEN` usually lacks the admin rights to *create* a Pages site,
-so the first run fails until that switch is flipped. After that it is automatic.
+It deliberately does not use `actions/deploy-pages`, which requires someone to
+set *Settings → Pages → Source* to "GitHub Actions" first: the default
+`GITHUB_TOKEN` has no admin rights, so `configure-pages` cannot create the site
+and the first run fails. Publishing to a branch needs only `contents: write`.
 
 `base` is `'./'` in [`vite.config.ts`](packages/app/vite.config.ts), so the same
 build works from a domain root, from a project subpath like

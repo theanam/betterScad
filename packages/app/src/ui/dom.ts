@@ -89,8 +89,11 @@ const ICONS: Record<string, string> = {
   plus: 'M8 3v10M3 8h10',
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
-  // Crescent: a disc with a second disc subtracted, drawn as one outline.
-  moon: 'M13.4 9.8A6 6 0 0 1 6.2 2.6a6 6 0 1 0 7.2 7.2z',
+  // Crescent: a disc with a second disc subtracted, drawn as one outline. Its
+  // ink is asymmetric, so the start point is offset by (+0.52, -0.52) to put
+  // the bounding box centre on (8, 8) — otherwise it hangs low and left of the
+  // sun beside it.
+  moon: 'M13.92 9.28A6 6 0 0 1 6.72 2.08a6 6 0 1 0 7.2 7.2z',
   sun: 'M8 5.3a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zM8 1.2v1.5M8 13.3v1.5M14.8 8h-1.5M2.7 8H1.2M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1M12.8 12.8l-1.1-1.1M4.3 4.3 3.2 3.2',
 };
 
