@@ -38,6 +38,43 @@ export interface TranspileResult {
   rewrites: string[];
 }
 
+/**
+ * Single-axis transforms, and the stock call each becomes.
+ *
+ * `translatex(d)` is `translate([d, 0, 0])` and nothing more, so the rewrite is
+ * exact: the argument expression is dropped into the right slot and the other
+ * two are zero. The mirrors take no argument and name their axis outright.
+ */
+const AXIS_SUGAR: Record<string, { stock: string; slot: number; fill: number; constant?: number }> = {
+  translatex: { stock: 'translate', slot: 0, fill: 0 },
+  translatey: { stock: 'translate', slot: 1, fill: 0 },
+  translatez: { stock: 'translate', slot: 2, fill: 0 },
+  rotatex: { stock: 'rotate', slot: 0, fill: 0 },
+  rotatey: { stock: 'rotate', slot: 1, fill: 0 },
+  rotatez: { stock: 'rotate', slot: 2, fill: 0 },
+  mirrorx: { stock: 'mirror', slot: 0, fill: 0, constant: 1 },
+  mirrory: { stock: 'mirror', slot: 1, fill: 0, constant: 1 },
+  mirrorz: { stock: 'mirror', slot: 2, fill: 0, constant: 1 },
+};
+
+/** Transforms that also accept loose numbers in place of a vector. */
+const LOOSE_VECTOR_CALLS = new Set(['translate', 'mirror', 'rotate']);
+
+/**
+ * True when a call is written in the loose-number form this rewrites.
+ *
+ * Two or more positional arguments, none of them named and none a list. For
+ * `rotate` that also excludes the stock `rotate(a, v)` axis form, whose second
+ * argument is a vector — which is exactly what tells them apart at runtime too.
+ */
+function isLooseVectorCall(name: string, args: Argument[]): boolean {
+  if (!LOOSE_VECTOR_CALLS.has(name)) return false;
+  if (args.length < 2 || args.length > 3) return false;
+  if (args.some((a) => a.name)) return false;
+  if (args.some((a) => a.value.kind === 'list' || a.value.kind === 'range')) return false;
+  return true;
+}
+
 /** Role name -> the stock modifier character that reproduces it. */
 const ROLE_TO_MODIFIER = new Map<string, string>(
   Object.entries(MODIFIER_ROLES).map(([char, role]) => [role, char]),
@@ -141,7 +178,7 @@ class Printer {
         return;
 
       case 'module-call': {
-        const call = `${prefix}${stmt.name}(${this.args(stmt.args)})`;
+        const call = `${prefix}${this.moduleCall(stmt.name, stmt.args)}`;
         if (stmt.children.length === 0) {
           this.line(depth, `${call};`);
           return;
@@ -233,6 +270,37 @@ class Printer {
   }
 
   // -- fragments ------------------------------------------------------------
+
+  /**
+   * Prints a module call, rewriting the transform sugar to its stock form.
+   *
+   * Both rewrites are exact — the same matrix by construction — so neither
+   * changes geometry, but both are reported so the export says what it touched.
+   */
+  private moduleCall(name: string, args: Argument[]): string {
+    const axis = AXIS_SUGAR[name];
+    if (axis) {
+      this.rewrites.add(`${name}() rewritten as ${axis.stock}([…])`);
+      const parts = [String(axis.fill), String(axis.fill), String(axis.fill)];
+      // A call with no argument (`translatex()`) degrades to a zero offset,
+      // which is what the evaluator does with a missing one.
+      parts[axis.slot] =
+        axis.constant !== undefined
+          ? String(axis.constant)
+          : args[0]
+            ? this.expr(args[0].value)
+            : '0';
+      return `${axis.stock}([${parts.join(', ')}])`;
+    }
+
+    if (isLooseVectorCall(name, args)) {
+      this.rewrites.add(`${name}(x, y, z) rewritten as ${name}([x, y, z])`);
+      const parts = [0, 1, 2].map((i) => (args[i] ? this.expr(args[i].value) : '0'));
+      return `${name}([${parts.join(', ')}])`;
+    }
+
+    return `${name}(${this.args(args)})`;
+  }
 
   private params(params: Parameter[]): string {
     return params
@@ -497,6 +565,23 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
         'for-c',
         'C-style for(...)',
         'Rewritten as a bounded range for with the condition as a guard.',
+        stmt.span.start.line,
+      );
+    }
+    if (stmt.kind === 'module-call' && AXIS_SUGAR[stmt.name]) {
+      const { stock } = AXIS_SUGAR[stmt.name];
+      record(
+        stmt.name,
+        `${stmt.name}()`,
+        `Rewritten as ${stock}([…]) on that axis.`,
+        stmt.span.start.line,
+      );
+    }
+    if (stmt.kind === 'module-call' && isLooseVectorCall(stmt.name, stmt.args)) {
+      record(
+        `${stmt.name}-loose`,
+        `${stmt.name}(x, y, z)`,
+        `Rewritten as ${stmt.name}([x, y, z]).`,
         stmt.span.start.line,
       );
     }

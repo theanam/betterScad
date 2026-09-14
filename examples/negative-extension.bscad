@@ -33,13 +33,14 @@ union() {
 
   // Everything below is negative space, subtracted from both of the above.
   negative() {
-    // Centre bore.
-    translate([0, 0, -1]) cylinder(h = thickness + 8, r = 5);
+    // Centre bore. `translatez` is BetterSCAD sugar for translate([0, 0, d]).
+    translatez(-1) cylinder(h = thickness + 8, r = 5);
 
-    // A ring of mounting holes.
+    // A ring of mounting holes. `rotatez` and the loose-number translate are
+    // sugar too; both export to the stock spelling.
     for (i = [0 : holes - 1]) {
-      rotate([0, 0, i * 360 / holes])
-        translate([plate / 2 - 12, 0, -1])
+      rotatez(i * 360 / holes)
+        translate(plate / 2 - 12, 0, -1)
           cylinder(h = thickness + 2, r = 2.5);
     }
   }

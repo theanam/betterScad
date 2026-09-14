@@ -1370,6 +1370,43 @@ function transformNode(matrix: Mat4, children: SceneNode[], span: SourceSpan): S
   return node('transform', { matrix }, children, [], span);
 }
 
+/**
+ * Reads the loose-number form of a vector argument — `translate(x, y, z)` in
+ * place of `translate([x, y, z])` (BetterSCAD extension).
+ *
+ * Returns undefined unless a *second* positional argument is present, which is
+ * what keeps every stock call shape on its original path: `translate([1,2,3])`,
+ * `translate(v = [1,2,3])` and even `translate(5)` all reach the code they
+ * always did. The third component defaults to 0, so `translate(x, y)` works the
+ * way a 2D-minded reader expects.
+ */
+function looseVector(
+  args: Map<string, Value>,
+  first: string,
+  fallback: number,
+): [number, number, number] | undefined {
+  const y = args.get('y');
+  const z = args.get('z');
+  if (y === undefined && z === undefined) return undefined;
+  return [asNumber(args.get(first), fallback), asNumber(y, fallback), asNumber(z, fallback)];
+}
+
+/**
+ * A single-axis transform: `translatex(10)`, `rotatez(45)`, `mirrory()`
+ * (BetterSCAD extension).
+ *
+ * These exist because the axis is the thing being said, and `[0, 0, 45]` says
+ * it by counting commas. `takesAmount` is false for the mirrors, which name a
+ * plane rather than a distance and so take nothing.
+ */
+function axisTransform(matrix: (amount: number) => Mat4, takesAmount = true): BuiltinModule {
+  return {
+    params: takesAmount ? ['d'] : [],
+    build: (args, children, _scope, _interp, span) =>
+      transformNode(matrix(takesAmount ? asNumber(args.get('d'), 0) : 0), children, span),
+  };
+}
+
 /** OpenSCAD's cylinder parameter juggling: r/d, r1/r2, d1/d2. */
 function cylinderRadii(args: Map<string, Value>): { r1: number; r2: number } {
   const r = args.get('r');
@@ -1530,19 +1567,35 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   },
 
   // --- transforms ---
+  // `translate`, `rotate` and `mirror` also take loose numbers — `translate(x, y, z)`
+  // rather than `translate([x, y, z])` (BetterSCAD extension). The extra slots are
+  // only read when a second positional argument is actually present, so every
+  // stock call shape reaches exactly the code it always did.
   translate: {
-    params: ['v'],
+    params: ['v', 'y', 'z'],
     build: (args, children, _scope, _interp, span) => {
-      const v = asVector(args.get('v') ?? 0, 3, 0) ?? [0, 0, 0];
+      const loose = looseVector(args, 'v', 0);
+      const v = loose ?? asVector(args.get('v') ?? 0, 3, 0) ?? [0, 0, 0];
       return transformNode(translation(v[0], v[1], v[2]), children, span);
     },
   },
 
   rotate: {
-    params: ['a', 'v'],
+    params: ['a', 'v', 'z'],
     build: (args, children, _scope, _interp, span) => {
       const a = args.get('a');
       const axis = args.get('v');
+
+      // `rotate(x, y, z)`: three loose numbers. Checked before the axis form
+      // because `rotate(a, v)` is stock syntax whose second argument is a
+      // vector, which is what tells the two apart.
+      if (args.get('z') !== undefined && typeof axis === 'number') {
+        return transformNode(
+          rotationXYZ(asNumber(a, 0), axis, asNumber(args.get('z'), 0)),
+          children,
+          span,
+        );
+      }
       if (axis !== undefined) {
         const v = asVector(axis, 3, 0) ?? [0, 0, 1];
         return transformNode(rotationAxis([v[0], v[1], v[2]], asNumber(a, 0)), children, span);
@@ -1556,6 +1609,19 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
     },
   },
 
+  translatex: axisTransform((d) => translation(d, 0, 0)),
+  translatey: axisTransform((d) => translation(0, d, 0)),
+  translatez: axisTransform((d) => translation(0, 0, d)),
+
+  rotatex: axisTransform((a) => rotationXYZ(a, 0, 0)),
+  rotatey: axisTransform((a) => rotationXYZ(0, a, 0)),
+  rotatez: axisTransform((a) => rotationXYZ(0, 0, a)),
+
+  // Mirroring names a plane, not a distance, so these take no argument.
+  mirrorx: axisTransform(() => mirrorMatrix(1, 0, 0), false),
+  mirrory: axisTransform(() => mirrorMatrix(0, 1, 0), false),
+  mirrorz: axisTransform(() => mirrorMatrix(0, 0, 1), false),
+
   scale: {
     params: ['v'],
     build: (args, children, _scope, _interp, span) => {
@@ -1565,9 +1631,10 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   },
 
   mirror: {
-    params: ['v'],
+    params: ['v', 'y', 'z'],
     build: (args, children, _scope, _interp, span) => {
-      const v = asVector(args.get('v') ?? [1, 0, 0], 3, 0) ?? [1, 0, 0];
+      const loose = looseVector(args, 'v', 0);
+      const v = loose ?? asVector(args.get('v') ?? [1, 0, 0], 3, 0) ?? [1, 0, 0];
       return transformNode(mirrorMatrix(v[0], v[1], v[2]), children, span);
     },
   },

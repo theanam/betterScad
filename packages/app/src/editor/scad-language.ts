@@ -29,7 +29,11 @@ const TRANSFORMS = new Set([
   'translate', 'rotate', 'scale', 'resize', 'mirror', 'multmatrix', 'color',
   'offset', 'hull', 'minkowski', 'linear_extrude', 'rotate_extrude',
   'projection', 'render', 'union', 'difference', 'intersection', 'group',
+  // BetterSCAD additions.
   'negative',
+  'translatex', 'translatey', 'translatez',
+  'rotatex', 'rotatey', 'rotatez',
+  'mirrorx', 'mirrory', 'mirrorz',
 ]);
 
 const PRIMITIVES = new Set([

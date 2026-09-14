@@ -164,12 +164,21 @@ mapping is not claimed.
 ## Extensions
 
 Every extension has a defined downgrade path to plain `.scad`, enforced at role
-registration and implemented in `transpile.ts`.
+registration and implemented in `transpile.ts`. `is_range()` is the one
+exception, and is called out as such below.
+
+| Extension | Downgrade |
+| --- | --- |
+| [`negative()`](#negative) | `difference()` around the scope |
+| [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
+| [Single-axis transforms](#single-axis-transforms) | the stock call with zeros in the other slots |
+| [C-style statement `for`](#c-style-statement-for) | bounded range `for` with the condition as a guard |
+| [`is_range()`](#is_range) | none — left as written |
 
 ### `negative()`
 
-Turns a subtree into negative space, subtracted from every sibling in the
-enclosing scope:
+Turns anything inside it into negative space. It is carved out of everything
+else in the same scope, so the holes can sit next to the thing they go through:
 
 ```scad
 union() {
@@ -226,12 +235,51 @@ comprehensions. BetterSCAD also accepts it as a statement.
 and the original is preserved in a comment. This is exact only for the common
 `i = start; i < limit; i = i + step` shape, so the export reports it.
 
+### Loose-number transforms
+
+`translate`, `rotate` and `mirror` also take their components as separate
+numbers, for when the brackets are just noise:
+
+```scad
+translate(10, 5, 2) cube(4);     // same as translate([10, 5, 2])
+rotate(0, 0, 90) cube(4);        // same as rotate([0, 0, 90])
+mirror(1, 0, 0) cube(4);         // same as mirror([1, 0, 0])
+translate(10, 5) cube(4);        // z defaults to 0
+```
+
+Stock spellings are untouched. `rotate(a, v)` is still the axis rotation, and a
+single argument still means what it always did — the loose form only applies from
+the second argument onwards.
+
+**Downgrade:** the numbers are collected back into a vector. Exact.
+
+### Single-axis transforms
+
+One call per axis, so the axis is named rather than counted out in commas:
+
+| | | |
+| --- | --- | --- |
+| `translatex(d)` | `translatey(d)` | `translatez(d)` |
+| `rotatex(a)` | `rotatey(a)` | `rotatez(a)` |
+| `mirrorx()` | `mirrory()` | `mirrorz()` |
+
+```scad
+translatex(20) rotatez(45) cube(4);
+mirrorx() part();                    // flipped across the YZ plane
+```
+
+The mirrors take no argument: they name a plane, not a distance.
+
+**Downgrade:** `translatex(d)` becomes `translate([d, 0, 0])`, `mirrorz()`
+becomes `mirror([0, 0, 1])`, and so on. Exact.
+
 ### `is_range()`
 
 A type predicate for range values, matching the other `is_*` functions.
 
-**Downgrade:** no equivalent exists; calls are left as-is and will evaluate to
-`undef` in stock OpenSCAD. Avoid it in files you intend to export.
+**Downgrade:** none — this is the one extension without a way back. Calls are
+left as written and evaluate to `undef` in stock OpenSCAD, and you are *not*
+warned about it on export, so avoid it in files you intend to share.
 
 ## Limits
 
