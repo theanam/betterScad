@@ -119,6 +119,12 @@ difference() {
 echo("volume target", size, bite);
 `;
 
+/** The number in a `doc-N` id, or 0 for anything that is not one. */
+function idNumber(doc: { id: string }): number {
+  const match = /^doc-(\d+)$/.exec(doc.id ?? '');
+  return match ? Number(match[1]) : 0;
+}
+
 export class Workspace {
   documents: Document[] = [];
   activeId = '';
@@ -132,10 +138,25 @@ export class Workspace {
     return this.documents.find((d) => d.id === this.activeId);
   }
 
+  /**
+   * A document id nothing else is using.
+   *
+   * The counter alone is not enough. It is rebuilt on every restore, and a
+   * session whose ids have gaps in it — close any tab, then reload — used to
+   * leave it pointing below the highest id still in use. Checking is cheap and
+   * a duplicate id is not a cosmetic fault: two documents that share one are
+   * one document as far as every lookup here is concerned.
+   */
+  private mintId(): string {
+    let id = `doc-${this.nextId++}`;
+    while (this.documents.some((d) => d.id === id)) id = `doc-${this.nextId++}`;
+    return id;
+  }
+
   createDocument(name: string, text: string, handle?: FileSystemFileHandle): Document {
     const parsed = parseBscad(text);
     const doc: Document = {
-      id: `doc-${this.nextId++}`,
+      id: this.mintId(),
       name: this.uniqueName(name),
       text: parsed.source,
       savedText: parsed.source,
@@ -290,7 +311,24 @@ export class Workspace {
         hadMetadata: d.hadMetadata ?? false,
         parameters: d.parameters ?? {},
       }));
-      this.nextId = this.documents.length + 1;
+      // From the highest id present, not the number of documents. Those agree
+      // only while the ids run 1..N with no gaps, and closing a tab before
+      // reloading puts a gap in them — after which the next new document was
+      // minted with an id another tab was still using. The two then shared an
+      // identity: `active` resolved both to the first, clicking the second did
+      // nothing at all because its id already matched `activeId`, and closing
+      // it closed the other one.
+      this.nextId = Math.max(0, ...this.documents.map(idNumber)) + 1;
+
+      // Repair a session the old rule already broke. Without this the fix only
+      // helps after the damaged session has been thrown away, which is not
+      // something anyone would think to do.
+      const seen = new Set<string>();
+      for (const doc of this.documents) {
+        if (!doc.id || seen.has(doc.id)) doc.id = this.mintId();
+        seen.add(doc.id);
+      }
+
       this.activeId =
         payload.activeId && this.documents.some((d) => d.id === payload.activeId)
           ? payload.activeId

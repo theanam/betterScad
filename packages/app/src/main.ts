@@ -38,6 +38,7 @@ import {
   openScadFiles,
   saveBinaryAs,
   saveTextAs,
+  wroteAFile,
   supportsFileOpen,
   writeToHandle,
 } from './files/fs-access.js';
@@ -328,6 +329,15 @@ class App {
       },
     });
     this.viewport.controls.apply();
+
+    // Push the restored display preferences into the viewport, not just into
+    // the toggle's appearance. Without this the saved setting survived a reload
+    // in `localStorage` and nowhere else: the grid and axes came back on while
+    // the button beside them still read "off".
+    this.viewport.setHelperVisibility({
+      grid: this.workspace.layout.showGrid,
+      axes: this.workspace.layout.showAxes,
+    });
 
     // The HUD tracks the camera, which changes far more often than anything
     // else on screen, so it updates directly rather than through refreshChrome.
@@ -753,10 +763,20 @@ class App {
     const text = this.workspace.serialize(doc, this.cameraMetadata(), target);
 
     try {
-      const handle = await saveTextAs(suggested, text);
-      if (handle) {
-        doc.handle = handle;
-        doc.name = handle.name;
+      const outcome = await saveTextAs(suggested, text);
+
+      // Cancelling is not a save. Falling through here used to mark the
+      // document clean and announce a file that was never written, which took
+      // the dirty dot and the unsaved-changes warning with it.
+      if (outcome.status === 'cancelled') return;
+      if (outcome.status === 'failed') {
+        this.reportError(outcome.reason);
+        return;
+      }
+
+      if (outcome.status === 'saved' && outcome.handle) {
+        doc.handle = outcome.handle;
+        doc.name = outcome.handle.name;
       } else if (format) {
         // The download fallback wrote `suggested`, so the tab should follow it;
         // otherwise the next plain Save would silently change format again.
@@ -861,8 +881,9 @@ class App {
         assets: this.workspace.assetMap(),
         time: this.animationTime,
       });
-      await saveBinaryAs(choice.filename, result.data, result.mimeType);
-      this.toasts.show(`Exported ${choice.filename}.`, 'success');
+      const outcome = await saveBinaryAs(choice.filename, result.data, result.mimeType);
+      if (outcome.status === 'failed') this.reportError(outcome.reason);
+      else if (wroteAFile(outcome)) this.toasts.show(`Exported ${choice.filename}.`, 'success');
     } catch (err) {
       this.reportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -904,7 +925,13 @@ class App {
 
     const suggested = withFormatExtension(doc.name, 'scad');
     try {
-      const handle = await saveTextAs(suggested, result.source);
+      const outcome = await saveTextAs(suggested, result.source);
+      if (outcome.status === 'cancelled') return;
+      if (outcome.status === 'failed') {
+        this.reportError(outcome.reason);
+        return;
+      }
+      const handle = outcome.status === 'saved' ? outcome.handle : undefined;
 
       if (result.verbatim) {
         if (handle) {
@@ -939,8 +966,9 @@ class App {
     }
     const doc = this.workspace.active;
     const name = `${(doc?.name ?? 'model').replace(/\.[^.]+$/, '')}.png`;
-    await saveBinaryAs(name, new Uint8Array(await blob.arrayBuffer()), 'image/png');
-    this.toasts.show(`Saved ${name}.`, 'success');
+    const outcome = await saveBinaryAs(name, new Uint8Array(await blob.arrayBuffer()), 'image/png');
+    if (outcome.status === 'failed') this.reportError(outcome.reason);
+    else if (wroteAFile(outcome)) this.toasts.show(`Saved ${name}.`, 'success');
   }
 
   // -- customizer -----------------------------------------------------------
@@ -1164,15 +1192,26 @@ class App {
     const base = doc.name.replace(/\.[^.]+$/, '');
     this.setBusy(true);
     try {
+      let written = 0;
       for (let frame = 0; frame < steps; frame++) {
         this.animationTime = frame / steps;
         await this.render(false);
         const blob = await this.viewport.capture();
         if (!blob) continue;
         const name = `${base}-${String(frame).padStart(4, '0')}.png`;
-        await saveBinaryAs(name, new Uint8Array(await blob.arrayBuffer()), 'image/png');
+        const outcome = await saveBinaryAs(name, new Uint8Array(await blob.arrayBuffer()), 'image/png');
+        // Cancelling one frame's picker means stopping, not silently rendering
+        // out the remaining fifty-nine and asking about each of them.
+        if (outcome.status === 'cancelled') break;
+        if (outcome.status === 'failed') {
+          this.reportError(outcome.reason);
+          break;
+        }
+        written++;
       }
-      this.toasts.show(`Exported ${steps} frames.`, 'success');
+      if (written > 0) {
+        this.toasts.show(`Exported ${written} frame${written === 1 ? '' : 's'}.`, 'success');
+      }
     } finally {
       this.setBusy(false);
     }

@@ -176,49 +176,92 @@ export async function writeToHandle(handle: FileSystemFileHandle, text: string):
   }
 }
 
-export async function saveTextAs(
-  suggestedName: string,
-  text: string,
-): Promise<FileSystemFileHandle | undefined> {
+/**
+ * What a save attempt actually did.
+ *
+ * Four outcomes, not two. These used to collapse into "a handle, or nothing",
+ * and nothing meant both "the user cancelled the picker" and "this browser has
+ * no picker, so a file was downloaded instead" — opposite results. Every caller
+ * read the second and so reported a save that had not happened; worse, Save As
+ * also marked the document clean, which took away the dirty dot and the
+ * unsaved-changes warning on a file that was never written.
+ *
+ * Making the two distinguishable in the type is what stops the next caller
+ * getting it wrong the same way.
+ */
+export type SaveOutcome =
+  /** Written to disk in place. `handle` is present for the text picker. */
+  | { status: 'saved'; handle?: FileSystemFileHandle }
+  /** No picker here, so a file was handed to the browser's downloads. */
+  | { status: 'downloaded' }
+  /** The user backed out. Nothing was written and nothing should be claimed. */
+  | { status: 'cancelled' }
+  | { status: 'failed'; reason: string };
+
+/** Whether bytes actually reached the user, by either route. */
+export function wroteAFile(outcome: SaveOutcome): boolean {
+  return outcome.status === 'saved' || outcome.status === 'downloaded';
+}
+
+export async function saveTextAs(suggestedName: string, text: string): Promise<SaveOutcome> {
   if (supportsFileSystemWrite) {
+    let handle: FileSystemFileHandle;
     try {
-      const handle = await window.showSaveFilePicker!({ suggestedName, types: SCAD_TYPES });
-      await writeToHandle(handle, text);
-      return handle;
+      handle = await window.showSaveFilePicker!({ suggestedName, types: SCAD_TYPES });
     } catch (err) {
-      if (isAbort(err)) return undefined;
+      if (isAbort(err)) return { status: 'cancelled' };
       throw err;
     }
+    // Choosing a file is not the same as writing to it: permission can be
+    // withdrawn, or the disk can be full, between the two. That was swallowed
+    // before, and reported as a successful save.
+    if (!(await writeToHandle(handle, text))) {
+      return { status: 'failed', reason: `Could not write to ${handle.name}.` };
+    }
+    return { status: 'saved', handle };
   }
   downloadBlob(new Blob([text], { type: 'text/plain' }), suggestedName);
-  return undefined;
+  return { status: 'downloaded' };
 }
 
 export async function saveBinaryAs(
   suggestedName: string,
   data: Uint8Array,
   mimeType: string,
-): Promise<boolean> {
+): Promise<SaveOutcome> {
   const blob = new Blob([data as BlobPart], { type: mimeType });
+
   if (supportsFileSystemWrite) {
+    let handle: FileSystemFileHandle | undefined;
     try {
       const extension = suggestedName.split('.').pop() ?? '';
-      const handle = await window.showSaveFilePicker!({
+      handle = await window.showSaveFilePicker!({
         suggestedName,
         types: [{ description: extension.toUpperCase(), accept: { [mimeType]: [`.${extension}`] } }],
       });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return true;
     } catch (err) {
-      if (isAbort(err)) return false;
+      if (isAbort(err)) return { status: 'cancelled' };
       // A rejected picker (unsupported type, sandboxed context) should still
-      // produce a file rather than an error.
+      // produce a file rather than an error, so fall through to the download.
+    }
+
+    if (handle) {
+      try {
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return { status: 'saved', handle };
+      } catch (err) {
+        return {
+          status: 'failed',
+          reason: `Could not write ${handle.name}: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
     }
   }
+
   downloadBlob(blob, suggestedName);
-  return true;
+  return { status: 'downloaded' };
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

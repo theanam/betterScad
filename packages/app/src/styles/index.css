@@ -2005,17 +2005,27 @@ kbd {
   line-height: 1.6;
 }
 
+/* Two panes of equal height rather than two boxes that happen to sit side by
+   side. A one-line example against a 300px picture left the whole left half of
+   the row empty, which read as a layout fault; stretching the code to match
+   turns that space into part of the pane it belongs to. */
 .reference__example {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--bs-space-3);
-  align-items: start;
+  align-items: stretch;
   margin-top: var(--bs-space-4);
 }
 
 .reference__codewrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+}
+
+.reference__codewrap .reference__code {
+  flex: 1 1 auto;
 }
 
 .reference__code,
@@ -2060,6 +2070,15 @@ kbd {
   display: block;
   width: 100%;
   height: auto;
+  /* Capped, and letterboxed on its own surface when the cap bites. The
+     screenshots are 7:5, so at half the content width an example row was as
+     tall as the picture and left the short code block beside it sitting in a
+     column of nothing. Shorter rows also put the next example on screen. */
+  max-height: 300px;
+  object-fit: contain;
+  /* `contain` letterboxes inside the box the grid row gives it, and the row is
+     now as tall as the code beside it. */
+  object-position: center;
   border: 1px solid var(--bs-border);
   border-radius: var(--bs-radius);
   background: var(--bs-surface-sunken);

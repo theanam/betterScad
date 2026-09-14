@@ -14,11 +14,12 @@
     "dev": "npm run dev -w @betterscad/app",
     "build": "npm run build -w @betterscad/engine && npm run build -w @betterscad/app",
     "build:engine": "npm run build -w @betterscad/engine",
-    "test": "npm run test -w @betterscad/engine",
+    "test": "npm run test -w @betterscad/engine && npm run test -w @betterscad/app",
     "typecheck": "tsc -b packages/engine packages/app packages/cli",
     "bscad": "node packages/cli/bin/bscad.js",
     "reference": "node scripts/reference/build.mjs",
-    "reference:check": "node scripts/reference/build.mjs --check"
+    "reference:check": "node scripts/reference/build.mjs --check",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

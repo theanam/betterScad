@@ -20,7 +20,7 @@ No install, no sign-up. It loads a starter model you can edit straight away.
 
 <br>
 
-<img src="docs/images/screenshot.png" alt="The BetterSCAD editor: OpenSCAD source on the left with the Customizer beneath it, a shaded 3D preview of a parametric project box and its lid on the right, and a console showing echo output and render statistics." width="900">
+<img src="docs/images/screenshot.png" alt="The BetterSCAD editor: OpenSCAD source on the left with the Customizer and its generated sliders beneath it, a shaded 3D preview of a parametric project box and its lid on the right with an orientation cube in the corner, and a console showing echo output and render statistics." width="900">
 
 </div>
 
@@ -54,6 +54,18 @@ you.
 | **Animation** | `$t` playback in the app, frame export from the CLI. |
 | **Works offline** | Installable, and fully functional with no network. |
 | **Headless CLI** | `bscad model.scad -o model.stl`, for batch jobs and CI. |
+
+## Reference
+
+Every element of the language — the whole of OpenSCAD, plus everything BetterSCAD
+adds — written for someone who has never used CAD, with a rendered example of
+each. **[Read it here](docs/reference.md)**, or press `F1` in the app.
+
+<img src="docs/images/reference-view.png" alt="The Help and Reference view: a searchable list of every language element on the left, and on the right the entry for cube() with its signature, a plain-language description, and two code examples each beside a rendered picture of the shape it makes." width="900">
+
+The document and the app's Help view are generated from one catalogue, along with
+every screenshot in them, so they cannot disagree with each other or with the
+engine.
 
 ## Quick start
 
@@ -205,6 +217,7 @@ npm run typecheck
 npm test
 npm run build
 npm run reference     # after adding or changing any element
+npm run screenshot    # retakes the README's app screenshots, needs `npm run dev`
 ```
 
 How it all fits together: [`docs/architecture.md`](docs/architecture.md).
