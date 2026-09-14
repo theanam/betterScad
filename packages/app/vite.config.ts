@@ -1,6 +1,14 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * Where the reference screenshots are served from, matching `IMAGE_DIR` in
+ * `src/reference/index.ts`.
+ */
+const REFERENCE_DIR = 'reference';
 
 /**
  * Emits `sw-manifest.json`: the list of files the service worker precaches.
@@ -40,13 +48,69 @@ function serviceWorkerManifest(): Plugin {
     generateBundle(_options, bundle) {
       const emitted = Object.keys(bundle).filter(
         // The worker must not precache itself, and source maps are dead weight.
-        (name) => name !== 'sw.js' && !name.endsWith('.map'),
+        // Nor the reference screenshots: see `referenceImages` for why.
+        (name) =>
+          name !== 'sw.js' && !name.endsWith('.map') && !name.startsWith(`${REFERENCE_DIR}/`),
       );
       this.emitFile({
         type: 'asset',
         fileName: 'sw-manifest.json',
         source: JSON.stringify([...PUBLIC_ASSETS, ...emitted], null, 2),
       });
+    },
+  };
+}
+
+/**
+ * Serves and publishes the reference screenshots.
+ *
+ * They live in `docs/images/reference/` rather than in `public/`, so that
+ * `docs/reference.md` can reference them by an ordinary relative path and the
+ * app and the document share one set of files. That is outside the app's root,
+ * so dev needs a middleware and the build needs an emit; both are a few lines,
+ * and the alternative is the same images committed twice.
+ *
+ * They are deliberately *not* added to the service worker's precache: seventy
+ * screenshots is a lot to download on a first visit to pay for a dialog that
+ * may never be opened. The worker's lazy cache-first path picks up the ones
+ * actually looked at, which is what makes the reference work offline after it
+ * has been read once.
+ */
+function referenceImages(): Plugin {
+  const dir = fileURLToPath(new URL('../../docs/images/reference', import.meta.url));
+  const prefix = `/${REFERENCE_DIR}/`;
+
+  return {
+    name: 'betterscad:reference-images',
+
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = req.url?.split('?')[0] ?? '';
+        // Only ever a bare `name.png` under the prefix, so a crafted `..` in
+        // the URL cannot walk out of the directory.
+        const name = path.startsWith(prefix) ? path.slice(prefix.length) : undefined;
+        if (!name || !/^[\w-]+\.png$/.test(name)) return next();
+
+        const file = join(dir, name);
+        if (!existsSync(file)) return next();
+        res.setHeader('Content-Type', 'image/png');
+        res.end(readFileSync(file));
+      });
+    },
+
+    generateBundle() {
+      if (!existsSync(dir)) {
+        this.warn('docs/images/reference is missing — run `npm run reference`.');
+        return;
+      }
+      for (const name of readdirSync(dir)) {
+        if (!name.endsWith('.png')) continue;
+        this.emitFile({
+          type: 'asset',
+          fileName: `${REFERENCE_DIR}/${name}`,
+          source: readFileSync(join(dir, name)),
+        });
+      }
     },
   };
 }
@@ -110,7 +174,7 @@ function analyticsTag(): Plugin {
  */
 export default defineConfig({
   base: './',
-  plugins: [serviceWorkerManifest(), analyticsTag()],
+  plugins: [serviceWorkerManifest(), referenceImages(), analyticsTag()],
   build: {
     target: 'es2022',
     sourcemap: true,

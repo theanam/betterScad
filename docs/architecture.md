@@ -216,3 +216,41 @@ definitions are added in front of it. `declaredModuleNames()` collects every
 name the source declares so a helper can never shadow one; a collision takes a
 numbered suffix instead, because redefining a user's module would change their
 geometry rather than their formatting.
+
+## The reference
+
+`packages/app/src/reference/`, `scripts/reference/`
+
+One catalogue of plain data feeds three outputs: the app's **Help & Reference**
+dialog, `docs/reference.md`, and the screenshot beside every example in both.
+`npm run reference` produces the last two.
+
+The alternative — a Help view written by hand and a document written again
+underneath it — has a known failure mode, and it is not that one of them is
+wrong. It is that nobody can tell which. Generating both from the same entries
+makes disagreement impossible rather than merely unlikely.
+
+**Screenshots are rendered, not captured.** `scripts/reference/raster.mjs` is a
+software renderer: the app's iso view, its three-light rig, its crease-aware
+normals and its amber, in about three hundred lines with no browser and no GPU.
+Rendering them from Node is what makes "regenerate every picture" a command
+rather than an afternoon, and it is the only reason the contributing rule — a
+new element ships with its screenshot — is one anybody will actually keep.
+
+They are written with a transparent background, because they appear on a light
+page and a dark one: the Help view in either theme, the document on GitHub in
+either theme. A baked-in backdrop would be wrong in half of those.
+
+The build also **runs every example**, and fails when one produces no geometry
+or when its declared console output is not what the engine actually prints. Two
+mistakes in the first draft of the catalogue were found that way, both in prose
+that read perfectly well. `npm run reference:check` is the same pass without the
+writes, and CI runs it.
+
+The screenshots live in `docs/images/reference/` rather than in the app's
+`public/`, so the document can reference them by an ordinary relative path
+instead of reaching across the repository. A small Vite plugin serves and
+publishes them at `reference/`, and deliberately keeps them out of the service
+worker's precache — seventy images is a lot to download on a first visit to pay
+for a dialog that may never be opened. The worker's lazy path caches the ones
+actually looked at, so the reference works offline once it has been read.

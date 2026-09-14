@@ -4,6 +4,7 @@
 
 import { EXPORT_FORMATS, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
 import { button, clear, el } from './dom.js';
+import { extensionList } from './extension-list.js';
 import type { CatalogEntry } from '../files/font-library.js';
 
 function shell(
@@ -124,28 +125,6 @@ export function showExportDialog(
     dialog.addEventListener('close', () => resolve(resolved));
     dialog.showModal();
   });
-}
-
-/** `name — downgrade (line n)` for each extension a file uses. */
-function extensionList(extensions: ExtensionUse[]): HTMLElement {
-  return el(
-    'ul',
-    { class: 'extensionlist' },
-    extensions.map((use) =>
-      el('li', {}, [
-        el('code', { text: use.name }),
-        document.createTextNode(` — ${use.downgrade}`),
-        el('span', { class: 'extensionlist__where', text: formatLines(use.lines) }),
-      ]),
-    ),
-  );
-}
-
-function formatLines(lines: number[]): string {
-  if (lines.length === 0) return '';
-  const shown = lines.slice(0, 4).join(', ');
-  const more = lines.length > 4 ? ` +${lines.length - 4} more` : '';
-  return `  line${lines.length === 1 ? '' : 's'} ${shown}${more}`;
 }
 
 // ---------------------------------------------------------------------------

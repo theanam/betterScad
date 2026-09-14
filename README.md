@@ -16,7 +16,7 @@ no account, and nothing is uploaded.
 
 No install, no sign-up. It loads a starter model you can edit straight away.
 
-[Quick start](#quick-start) · [What's new in the language](#language-extensions) · [CLI](#command-line) · [Contributing](#contributing)
+[Quick start](#quick-start) · [Reference](docs/reference.md) · [What's new in the language](#language-extensions) · [CLI](#command-line) · [Contributing](#contributing)
 
 <br>
 
@@ -44,6 +44,7 @@ you.
 | **Real files** | Opens and saves straight to disk, with a download/upload fallback on Firefox and Safari. |
 | **Live customizer** | Sliders and dropdowns generated from your `//` parameter comments. |
 | **Modern editor** | Syntax highlighting, autocomplete with real signatures, tabs, inline errors. |
+| **Built-in reference** | Every element of the language explained plainly, with a rendered example of each. `F1`, or the Help button. |
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
 | **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
 | **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
@@ -72,7 +73,8 @@ npm run build        # static site in packages/app/dist — serve it anywhere
 ## Language extensions
 
 Everything OpenSCAD has, plus the following. Save as OpenSCAD `.scad` and these
-are rewritten automatically; the editor shows you which lines will change first.
+are rewritten automatically. The console's **Info** tab lists what a file uses
+and the lines it appears on, and previews the `.scad` it will become.
 
 ### `negative()` — turn anything into negative space
 
@@ -115,7 +117,11 @@ negative never reaches further than the braces it was written in.
 
 Stock syntax is untouched: `rotate(a, v)` is still the axis rotation it always
 was. The shapes get a generated module in the exported file — defined once and
-called, so the export reads like what you wrote. Full details in
+called, so the export reads like what you wrote.
+
+Every one of these, and every element of OpenSCAD itself, is written up with a
+rendered example in [`docs/reference.md`](docs/reference.md) — the same content
+the app shows under **Help** (`F1`). The implementation details are in
 [`docs/language.md`](docs/language.md).
 
 ## File formats
@@ -178,7 +184,7 @@ publishes on every push to `main` with no repo settings to change.
 
 ## Contributing
 
-Issues and pull requests welcome. Two non-negotiable rules:
+Issues and pull requests welcome. Three non-negotiable rules:
 
 1. **Any new language syntax ships with its plain-`.scad` downgrade**,
    implemented in [`transpile.ts`](packages/engine/src/transpile.ts) and covered
@@ -187,11 +193,18 @@ Issues and pull requests welcome. Two non-negotiable rules:
    rewritten in place; anything bigger becomes a generated module, defined once
    and called wherever the shape was used. Generated code is code someone will
    open.
+3. **Any new element is documented before it ships.** Add it to the catalogue in
+   [`packages/app/src/reference/`](packages/app/src/reference/) with a worked
+   example, then run `npm run reference`. That renders its screenshot and
+   regenerates [`docs/reference.md`](docs/reference.md), and the app's Help view
+   picks it up from the same file. An element that is not in the reference is
+   not finished, and CI fails if the reference is out of date.
 
 ```sh
 npm run typecheck
 npm test
 npm run build
+npm run reference     # after adding or changing any element
 ```
 
 How it all fits together: [`docs/architecture.md`](docs/architecture.md).

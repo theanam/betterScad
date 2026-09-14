@@ -51,7 +51,7 @@ import {
   type Document,
   type DocumentFormat,
 } from './state/workspace.js';
-import { AnimationBar, ExtensionBanner, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
+import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
@@ -65,6 +65,7 @@ import {
   showSaveAsScadDialog,
   type NonStandardFile,
 } from './ui/dialogs.js';
+import { showReferenceDialog } from './ui/reference-view.js';
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
@@ -91,7 +92,6 @@ class App {
   private statusBar!: StatusBar;
   private consolePanel!: ConsolePanel;
   private customizerPanel!: CustomizerPanel;
-  private extensionBanner!: ExtensionBanner;
   private editorHost!: HTMLElement;
   /** Shown in place of the editor and the viewport with no document open. */
   private editorEmpty!: HTMLElement;
@@ -222,6 +222,7 @@ class App {
       toggleTheme: () => this.toggleTheme(),
       openPalette: () => this.palette.open(),
       openFonts: () => void this.openFontManager(),
+      openHelp: () => this.openReference(),
     });
 
     this.tabs = new TabStrip(
@@ -264,7 +265,10 @@ class App {
       ]),
     );
 
-    this.consolePanel = new ConsolePanel((line, column) => this.editor.goTo(line, column));
+    this.consolePanel = new ConsolePanel(
+      (line, column) => this.editor.goTo(line, column),
+      () => this.previewDowngrade(),
+    );
 
     this.rightSplit = new Split({
       orientation: 'horizontal',
@@ -289,18 +293,10 @@ class App {
         this.viewport.resize();
       },
     });
-    this.extensionBanner = new ExtensionBanner(() => this.previewDowngrade());
-
     this.editorEmpty = editorEmptyState(this.startChoices());
 
     this.mainSplit.first.classList.add('pane--editor');
-    this.mainSplit.first.append(
-      this.tabs.element,
-      editorHost,
-      this.editorEmpty,
-      this.extensionBanner.element,
-      this.customizerHost,
-    );
+    this.mainSplit.first.append(this.tabs.element, editorHost, this.editorEmpty, this.customizerHost);
     this.mainSplit.second.append(this.rightSplit.element);
 
     this.statusBar = new StatusBar(() => {
@@ -1031,6 +1027,21 @@ class App {
     }
   }
 
+  /**
+   * Help & Reference.
+   *
+   * `insert` drops an example straight into the document, which is what makes
+   * the reference a place you start from rather than only read.
+   */
+  private openReference(): void {
+    showReferenceDialog({
+      insert: (code) => {
+        this.editor.insertAtCursor(code);
+        this.toasts.show('Example inserted', 'success');
+      },
+    });
+  }
+
   private async openFontManager(): Promise<void> {
     if (this.catalog.length === 0) this.catalog = await loadCatalog(document.baseURI);
 
@@ -1172,14 +1183,25 @@ class App {
       this.measureReadout.style.display = 'none';
       return;
     }
-    const { point, distance, delta } = measurement;
+    const { point, distance, delta, snap } = measurement;
+    const SNAP_LABEL: Record<typeof snap, string> = {
+      vertex: 'corner',
+      edge: 'edge',
+      grid: 'grid',
+      surface: 'surface',
+    };
     this.measureReadout.style.display = '';
     this.measureReadout.replaceChildren(
       el('dl', {}, [
         el('dt', { text: 'Point' }),
-        el('dd', {
-          text: `[${formatNumber(point.x, 3)}, ${formatNumber(point.y, 3)}, ${formatNumber(point.z, 3)}]`,
-        }),
+        el('dd', {}, [
+          el('span', {
+            text: `[${formatNumber(point.x, 3)}, ${formatNumber(point.y, 3)}, ${formatNumber(point.z, 3)}]`,
+          }),
+          // Which feature it landed on: a distance taken from a corner means
+          // something a distance taken from mid-surface does not.
+          el('span', { class: 'measure__snap', text: SNAP_LABEL[snap] }),
+        ]),
         ...(distance !== undefined && delta
           ? [
               el('dt', { text: 'Distance' }),
@@ -1250,7 +1272,6 @@ class App {
     this.editorEmpty.hidden = !empty;
     this.viewportEmpty.hidden = !empty;
     this.editorHost.hidden = empty;
-    if (empty) this.extensionBanner.update([]);
     this.viewport.setEmpty(empty);
   }
 
@@ -1262,7 +1283,7 @@ class App {
     const counts = this.consolePanel.counts;
     const active = this.workspace.active;
     const extensions = active ? this.extensionsIn(active) : [];
-    this.extensionBanner.update(extensions);
+    this.consolePanel.setExtensions(extensions, !!active);
     this.toolbar.update({
       ...this.workspace.layout,
       showingFinalRender: this.showingFinalRender,
@@ -1419,6 +1440,13 @@ class App {
         run: () => this.palette.open(),
       },
 
+      {
+        id: 'help.reference',
+        category: 'Help',
+        title: 'Help & Reference',
+        shortcut: 'F1',
+        run: () => this.openReference(),
+      },
       { id: 'help.welcome', category: 'Help', title: 'Welcome to BetterSCAD', run: () => this.openWelcome() },
       { id: 'help.about', category: 'Help', title: 'About BetterSCAD', run: () => showAboutDialog(ENGINE_VERSION) },
       {
@@ -1447,7 +1475,10 @@ class App {
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       const isPalette = mod && ((event.shiftKey && key === 'p') || (!event.shiftKey && key === 'k'));
-      if (inEditor && !isPalette) return;
+      // F1 is not in the editor's keymap and is exactly the key you reach for
+      // while typing the call you have forgotten the arguments to, so it gets
+      // through the same way the palette does.
+      if (inEditor && !isPalette && key !== 'f1') return;
       if (this.palette.isOpen) return;
       if (this.registry.handleKey(event)) event.preventDefault();
     });

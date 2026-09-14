@@ -16,12 +16,14 @@ import {
   DoubleSide,
   GridHelper,
   Group,
+  type Intersection,
   Line,
   LineBasicMaterial,
   LineSegments,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Plane,
   Raycaster,
   Scene,
   SphereGeometry,
@@ -42,9 +44,40 @@ import { ViewGizmo } from './view-gizmo.js';
  */
 const GIZMO_DRAG_SLOP = 4;
 
+/**
+ * How close, in screen pixels, the cursor has to be for a measurement point to
+ * snap to a feature.
+ *
+ * Soft: past these radii the click measures exactly where it landed, so the
+ * tool never refuses to give you the point you asked for. A corner reaches
+ * further than an edge because it is the most useful target and the hardest to
+ * hit dead-on.
+ */
+const SNAP_VERTEX_PX = 14;
+const SNAP_EDGE_PX = 9;
+
+/** Grid divisions drawn across the helper, matching `rebuildHelpers`. */
+const GRID_DIVISIONS = 20;
+
+/**
+ * Above this angle between the two faces along an edge, the edge is a real edge
+ * of the shape rather than a seam through a flat surface. 20° is deliberately
+ * lower than the shading crease angle: a facet worth snapping to is not
+ * necessarily one worth drawing a hard shadow across.
+ */
+const FEATURE_EDGE_COS = Math.cos((20 * Math.PI) / 180);
+
+/** The ground, z = 0, which a click into empty space measures against. */
+const GROUND_PLANE = new Plane(new Vector3(0, 0, 1), 0);
+
+/** What a measured point ended up snapping to, if anything. */
+export type SnapKind = 'vertex' | 'edge' | 'grid' | 'surface';
+
 export interface Measurement {
   /** The clicked point, in model space. */
   point: Vector3;
+  /** What the point was snapped to, so the reading can be trusted or not. */
+  snap: SnapKind;
   /** Distance from the previous measurement, if there is one. */
   distance?: number;
   delta?: Vector3;
@@ -103,6 +136,8 @@ export class Viewport {
   private resizeObserver?: ResizeObserver;
 
   private measurePoints: Vector3[] = [];
+  /** What each measured point snapped to, parallel to `measurePoints`. */
+  private measureSnaps: SnapKind[] = [];
   measuring = false;
   showGrid = true;
   showAxes = true;
@@ -283,6 +318,7 @@ export class Viewport {
     annotations: MeshPayload[],
     bounds: { min: [number, number, number]; max: [number, number, number] } | null,
   ): void {
+    this.featureEdges = undefined;
     this.clearGroup(this.modelGroup);
     this.clearGroup(this.annotationGroup);
 
@@ -439,6 +475,12 @@ export class Viewport {
   }
 
   private helperSize = 50;
+  /**
+   * Model edges worth snapping to, as flat [ax,ay,az, bx,by,bz, …] world-space
+   * segments. Built on first use and dropped when the model changes — measuring
+   * is off by default, so a file nobody measures never pays for this.
+   */
+  private featureEdges?: Float32Array;
 
   /** Keeps the grid and axes proportionate to whatever is on screen. */
   private scaleHelpersTo(bounds: { min: Vector3; max: Vector3 }): void {
@@ -612,6 +654,7 @@ export class Viewport {
 
   clearMeasurements(): void {
     this.measurePoints = [];
+    this.measureSnaps = [];
     this.clearGroup(this.measureGroup);
     this.callbacks.onMeasure(null);
     this.invalidate();
@@ -646,43 +689,98 @@ export class Viewport {
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     const hits = this.raycaster.intersectObjects(this.modelGroup.children, true);
-    if (hits.length === 0) return;
+    const snapped = hits.length > 0 ? this.snap(hits[0]) : this.snapToGroundGrid();
+    if (!snapped) return;
 
-    // Snap to the nearest vertex of the hit triangle when the cursor is close
-    // to one; picking exact corners is what measurement is usually for.
-    const hit = hits[0];
-    const point = this.snapToVertex(hit.object as Mesh, hit.point, hit.face?.a, hit.face?.b, hit.face?.c);
-
-    this.measurePoints.push(point);
-    if (this.measurePoints.length > 2) this.measurePoints = [point];
+    this.measurePoints.push(snapped.point);
+    this.measureSnaps.push(snapped.kind);
+    if (this.measurePoints.length > 2) {
+      this.measurePoints = [snapped.point];
+      this.measureSnaps = [snapped.kind];
+    }
 
     this.drawMeasurement();
 
     const [a, b] = this.measurePoints;
     this.callbacks.onMeasure(
       b
-        ? { point: b, distance: a.distanceTo(b), delta: new Vector3().subVectors(b, a) }
-        : { point: a },
+        ? {
+            point: b,
+            snap: this.measureSnaps[1],
+            distance: a.distanceTo(b),
+            delta: new Vector3().subVectors(b, a),
+          }
+        : { point: a, snap: this.measureSnaps[0] },
     );
   };
 
-  private snapToVertex(
-    mesh: Mesh,
-    point: Vector3,
-    a?: number,
-    b?: number,
-    c?: number,
-  ): Vector3 {
-    if (a === undefined || b === undefined || c === undefined) return point.clone();
+  /**
+   * How far, in world units, a pixel covers at a given depth.
+   *
+   * Snap tolerances are quoted in pixels so they feel the same zoomed in or
+   * out: a radius fixed in model units is either unusable up close or grabs
+   * half the part from far away.
+   */
+  private worldPerPixel(depth: number): number {
+    const height = this.renderer.domElement.clientHeight || 1;
+    return (2 * depth * Math.tan((this.camera.fov * Math.PI) / 360)) / height;
+  }
+
+  /**
+   * Chooses what a click on the model actually measures.
+   *
+   * Ordered by how specific the feature is — a corner beats an edge beats the
+   * bare surface — because the more specific one is nearly always what someone
+   * aiming near it meant. Each has its own pixel radius: corners grab from
+   * furthest away, being the most useful and the hardest to hit exactly.
+   */
+  private snap(hit: Intersection): { point: Vector3; kind: SnapKind } | undefined {
+    const surface = hit.point.clone();
+    const scale = this.worldPerPixel(hit.distance);
+    const mesh = hit.object as Mesh;
+
+    const vertex = this.nearestVertex(mesh, surface, hit.face);
+    if (vertex && vertex.distanceTo(surface) < SNAP_VERTEX_PX * scale) {
+      return { point: vertex, kind: 'vertex' };
+    }
+
+    const edge = this.nearestFeatureEdgePoint(surface, SNAP_EDGE_PX * scale);
+    if (edge) return { point: edge, kind: 'edge' };
+
+    return { point: surface, kind: 'surface' };
+  }
+
+  /**
+   * A point on the ground plane when the ray misses the model.
+   *
+   * Measuring against the grid — an offset from the origin, a clearance — is
+   * half of what the tool is for, and before this a click into empty space
+   * simply did nothing.
+   */
+  private snapToGroundGrid(): { point: Vector3; kind: SnapKind } | undefined {
+    const target = new Vector3();
+    if (!this.raycaster.ray.intersectPlane(GROUND_PLANE, target)) return undefined;
+
+    const step = this.gridStep();
+    return {
+      point: new Vector3(Math.round(target.x / step) * step, Math.round(target.y / step) * step, 0),
+      kind: 'grid',
+    };
+  }
+
+  /** The spacing of one grid square, matching what `rebuildHelpers` draws. */
+  private gridStep(): number {
+    return (this.helperSize * 2) / GRID_DIVISIONS;
+  }
+
+  private nearestVertex(mesh: Mesh, point: Vector3, face: Intersection['face']): Vector3 | undefined {
+    if (!face) return undefined;
     const positions = mesh.geometry.getAttribute('position');
-    if (!positions) return point.clone();
+    if (!positions) return undefined;
 
-    // Snap radius scales with zoom, so it stays roughly constant on screen.
-    const threshold = this.controls.distance * 0.02;
-    let best = point.clone();
-    let bestDistance = threshold;
-
-    for (const index of [a, b, c]) {
+    let best: Vector3 | undefined;
+    let bestDistance = Infinity;
+    for (const index of [face.a, face.b, face.c]) {
       const vertex = new Vector3(
         positions.getX(index),
         positions.getY(index),
@@ -695,6 +793,105 @@ export class Viewport {
       }
     }
     return best;
+  }
+
+  /** The closest point on any feature edge, if one is within `radius`. */
+  private nearestFeatureEdgePoint(point: Vector3, radius: number): Vector3 | undefined {
+    const edges = this.ensureFeatureEdges();
+    if (edges.length === 0) return undefined;
+
+    const a = new Vector3();
+    const b = new Vector3();
+    const ab = new Vector3();
+    const ap = new Vector3();
+    const candidate = new Vector3();
+
+    let best: Vector3 | undefined;
+    let bestDistance = radius;
+
+    for (let i = 0; i < edges.length; i += 6) {
+      a.set(edges[i], edges[i + 1], edges[i + 2]);
+      b.set(edges[i + 3], edges[i + 4], edges[i + 5]);
+      ab.subVectors(b, a);
+      const lengthSq = ab.lengthSq();
+      if (lengthSq < 1e-12) continue;
+
+      // Clamped projection: the nearest point on the segment, not on the
+      // infinite line it lies along.
+      ap.subVectors(point, a);
+      const t = Math.min(1, Math.max(0, ap.dot(ab) / lengthSq));
+      candidate.copy(a).addScaledVector(ab, t);
+
+      const distance = candidate.distanceTo(point);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = candidate.clone();
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The model's real edges, built once per model.
+   *
+   * Every triangle edge is not an edge of the *shape*: a flat face is two
+   * triangles with a diagonal through it, and snapping to that diagonal would
+   * drop a point in the middle of a flat surface. So edges are kept only where
+   * the two faces meeting along them actually turn — or where there is only one
+   * face, which is a boundary.
+   *
+   * Positions are quantised into the key so the two triangles either side of an
+   * edge agree on it despite float noise.
+   */
+  private ensureFeatureEdges(): Float32Array {
+    if (this.featureEdges) return this.featureEdges;
+
+    const edges = new Map<string, { a: Vector3; b: Vector3; normals: Vector3[] }>();
+    const key = (p: Vector3): string =>
+      `${Math.round(p.x * 1e4)},${Math.round(p.y * 1e4)},${Math.round(p.z * 1e4)}`;
+
+    for (const child of this.modelGroup.children) {
+      const mesh = child as Mesh;
+      const positions = mesh.geometry?.getAttribute('position');
+      const index = mesh.geometry?.getIndex();
+      if (!positions || !index) continue;
+
+      const corner = (i: number): Vector3 =>
+        new Vector3(positions.getX(i), positions.getY(i), positions.getZ(i)).applyMatrix4(
+          mesh.matrixWorld,
+        );
+
+      for (let t = 0; t < index.count; t += 3) {
+        const p = [corner(index.getX(t)), corner(index.getX(t + 1)), corner(index.getX(t + 2))];
+        const normal = new Vector3()
+          .subVectors(p[1], p[0])
+          .cross(new Vector3().subVectors(p[2], p[0]))
+          .normalize();
+
+        for (let e = 0; e < 3; e++) {
+          const a = p[e];
+          const b = p[(e + 1) % 3];
+          const ka = key(a);
+          const kb = key(b);
+          const id = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+          const existing = edges.get(id);
+          if (existing) existing.normals.push(normal);
+          else edges.set(id, { a, b, normals: [normal] });
+        }
+      }
+    }
+
+    const kept: number[] = [];
+    for (const { a, b, normals } of edges.values()) {
+      const isFeature =
+        normals.length === 1 ||
+        normals.some((n) => n.dot(normals[0]) < FEATURE_EDGE_COS);
+      if (!isFeature) continue;
+      kept.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+
+    this.featureEdges = new Float32Array(kept);
+    return this.featureEdges;
   }
 
   private drawMeasurement(): void {

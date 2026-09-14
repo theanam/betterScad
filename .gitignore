@@ -5,3 +5,4 @@ dist/
 .vite/
 packages/app/dev-dist/
 coverage/
+blog.md

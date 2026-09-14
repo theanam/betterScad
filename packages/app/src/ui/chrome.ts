@@ -14,7 +14,6 @@ import type { RenderStats } from '../render/protocol.js';
 
 /** The project's source. */
 export const REPO_URL = 'https://github.com/theanam/betterScad';
-import type { ExtensionUse } from '@betterscad/engine';
 
 // ---------------------------------------------------------------------------
 // Theme toggle
@@ -115,6 +114,7 @@ export interface ToolbarActions {
   toggleTheme(): void;
   openPalette(): void;
   openFonts(): void;
+  openHelp(): void;
 }
 
 export class Toolbar {
@@ -223,6 +223,16 @@ export class Toolbar {
         this.customizerButton,
         this.consoleButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
+        // Help sits with the panels rather than out by the GitHub link: it is
+        // part of the app, not a way out of it, and a newcomer looking for
+        // "where do I find out what cylinder() takes" looks along this row.
+        button({
+          label: 'Help',
+          iconName: 'help',
+          shortcut: 'F1',
+          title: 'Help & Reference — every element of the language, with examples',
+          onClick: () => actions.openHelp(),
+        }),
         el('div', { class: 'toolbar__divider' }),
         this.themeToggle.element,
         githubLink(),
@@ -626,79 +636,6 @@ export class Toasts {
       );
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Extension banner (spec feature 21)
-// ---------------------------------------------------------------------------
-
-/**
- * A strip under the editor naming the BetterSCAD syntax the open file uses.
- *
- * The alternative is silence until export, which is the wrong moment: by then
- * the file is written and the author has stopped thinking about it. Shown while
- * the code is on screen, it reads as a property of the file rather than as an
- * error about it — which is what it is. Absent entirely for a stock file, so it
- * costs nothing to anyone not using an extension.
- */
-export class ExtensionBanner {
-  readonly element: HTMLElement;
-  private readonly body: HTMLElement;
-  private signature = '';
-
-  constructor(private readonly onPreview: () => void) {
-    this.body = el('span', { class: 'extbanner__text' });
-    this.element = el('div', { class: 'extbanner', hidden: true }, [
-      el('span', { class: 'extbanner__badge', text: 'EXT' }),
-      this.body,
-    ]);
-  }
-
-  update(extensions: ExtensionUse[]): void {
-    // Rebuilt only when the content actually changes: this is asked on every
-    // keystroke, and replacing the DOM each time would drop the link mid-click.
-    const next = extensions.map((e) => `${e.name}@${e.lines.join(',')}`).join('|');
-    if (next === this.signature) return;
-    this.signature = next;
-
-    this.element.hidden = extensions.length === 0;
-    if (extensions.length === 0) return;
-
-    clear(this.body);
-    // The precise rewrite is long and belongs in the preview, which is one
-    // click away. Here the job is to say *that* this file is not stock, and
-    // where — a banner nobody finishes reading has told them nothing.
-    for (const [index, use] of extensions.entries()) {
-      if (index > 0) this.body.append(document.createTextNode(' '));
-      this.body.append(
-        document.createTextNode(
-          `${formatLineList(use.lines)} ${use.lines.length === 1 ? 'uses' : 'use'} `,
-        ),
-        el('code', { text: use.name }),
-        document.createTextNode(
-          index === extensions.length - 1
-            ? `, ${extensions.length === 1 ? 'a BetterSCAD extension' : 'BetterSCAD extensions'}. Rewritten when you save as OpenSCAD .scad.`
-            : ',',
-        ),
-      );
-    }
-    this.body.append(
-      document.createTextNode(' '),
-      el('button', {
-        class: 'extbanner__link',
-        type: 'button',
-        onclick: () => this.onPreview(),
-        text: 'Preview downgrade',
-      }),
-    );
-  }
-}
-
-/** "Line 19" / "Lines 19, 24" / "Lines 19, 24 and 3 more". */
-function formatLineList(lines: number[]): string {
-  const shown = lines.slice(0, 2).join(', ');
-  const rest = lines.length > 2 ? ` and ${lines.length - 2} more` : '';
-  return `${lines.length === 1 ? 'Line' : 'Lines'} ${shown}${rest}`;
 }
 
 /**

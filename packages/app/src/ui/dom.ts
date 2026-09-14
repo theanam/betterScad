@@ -95,6 +95,9 @@ const ICONS: Record<string, string> = {
   close: 'M3.5 3.5 12.5 12.5M12.5 3.5 3.5 12.5',
   plus: 'M8 3v10M3 8h10',
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
+  // A question mark in a ring. The dot is a zero-length segment, which the
+  // round line cap turns into a circle.
+  help: 'M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.1 6.2a1.95 1.95 0 0 1 3.8.6c0 1.3-1.9 1.5-1.9 2.9M8 11.9v.01',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
   caret: 'M4.5 6.5 8 10l3.5-3.5',
   // GitHub's own mark (Octicons `mark-github-16`), filled rather than stroked.

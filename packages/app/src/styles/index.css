@@ -643,24 +643,31 @@ textarea {
   outline: none;
 }
 
-/* --- extension banner ------------------------------------------------------ */
+/* --- the Info tab ---------------------------------------------------------- */
 
-/* Sits between the code and the customizer, on the sunken surface, so it reads
-   as a note attached to the file rather than a toolbar or a problem. */
-.extbanner {
+/* Sits in the console's body, so it is padded like a log entry rather than
+   styled as a panel of its own. */
+.infoview {
+  display: block;
+  padding: var(--bs-space-3) var(--bs-space-3) var(--bs-space-4);
+  line-height: 1.55;
+}
+
+.infoview__lead {
   display: flex;
   align-items: baseline;
   gap: var(--bs-space-2);
-  flex: none;
-  padding: var(--bs-space-2) var(--bs-space-3);
-  border-top: 1px solid var(--bs-border);
-  background: var(--bs-surface-sunken);
-  color: var(--bs-text-muted);
-  font-size: var(--bs-font-size-sm);
-  line-height: 1.5;
+  margin: 0;
+  color: var(--bs-text);
 }
 
-.extbanner__badge {
+.infoview__body {
+  margin: 4px 0 0;
+  color: var(--bs-text-muted);
+  font-size: var(--bs-font-size-sm);
+}
+
+.infoview__badge {
   flex: none;
   padding: 1px 5px;
   border-radius: var(--bs-radius-sm);
@@ -672,24 +679,20 @@ textarea {
   letter-spacing: 0.06em;
 }
 
-.extbanner__text code {
-  color: var(--bs-text);
-  font-family: var(--bs-font-mono);
-}
-
-.extbanner__link {
+.infoview__link {
+  margin-top: var(--bs-space-3);
   padding: 0;
   border: 0;
   background: none;
   color: var(--bs-accent-ink);
   font: inherit;
+  font-size: var(--bs-font-size-sm);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.extbanner__link:hover {
+.infoview__link:hover {
   color: var(--bs-accent-ink-hover);
 }
 
@@ -925,6 +928,19 @@ textarea {
 
 .viewport__measure dd {
   margin: 0;
+}
+
+/* Which feature a measured point landed on. Muted and small: it qualifies the
+   number beside it rather than competing with it. */
+.measure__snap {
+  margin-left: var(--bs-space-2);
+  padding: 0 5px;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 
 /* --- console -------------------------------------------------------------- */
@@ -1739,5 +1755,462 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .hint {
     transition: none;
+  }
+}
+
+/* --- help & reference ------------------------------------------------------ */
+
+/* Wider than every other dialog, because it is the only one that is read rather
+   than answered: a list to navigate, prose to follow, and a picture beside the
+   code that produced it. */
+.dialog--wide {
+  max-width: min(1180px, 95vw);
+  width: 1180px;
+}
+
+/* The shared header and footer are laid out for a title and a row of buttons.
+   This one also carries a note, so both become flex rows. */
+.dialog--wide .dialog__header,
+.dialog--wide .dialog__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+}
+
+/* The header holds the scope tabs, so it stretches them to its full height:
+   that is what lands their 2px active underline exactly on the header's own
+   bottom border instead of floating above it. */
+.reference__header {
+  align-items: stretch;
+  padding-block: 0;
+  gap: var(--bs-space-4);
+}
+
+.reference__heading {
+  display: flex;
+  align-items: center;
+}
+
+.reference {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  min-height: 0;
+  height: min(680px, 74vh);
+}
+
+.reference__nav {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--bs-border);
+  background: var(--bs-surface-sunken);
+}
+
+/* The scope tabs, borrowing the panel header's control so that switching
+   between halves of the language is the same gesture as switching between the
+   Console and its errors.
+
+   They exist because the additions are the shorter half and sit underneath
+   seventy-six OpenSCAD entries: without a way to jump, the answer to "what does
+   BetterSCAD add?" is at the bottom of a long scroll.
+
+   In the header rather than above the list they filter, which is the closer
+   place: three labels and their counts want about 280px, and the navigation
+   column is 272px — near enough to fit that it looked like it should, and every
+   label came out clipped. The header has the whole width of the dialog and was
+   carrying a line of filler, so the control fits without being squeezed and
+   reads as scoping the reference rather than the list. */
+.reference__scopes {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Taller than the panel version: the header's own vertical padding is given up
+   so the tabs can set its height, and at the panel's 6px they would make it
+   two-thirds of what every other dialog header is. */
+.reference__scopes .paneltab {
+  padding: var(--bs-space-3);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 400;
+}
+
+/* The count pill's usual fill is `surface-raised`, which is also the dialog's
+   own background — it would be an invisible pill. In the Console it works
+   because that header is sunken. */
+.reference__scopes .paneltab__count {
+  background: var(--bs-surface-sunken);
+}
+
+.reference__searchwrap {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3);
+  border-bottom: 1px solid var(--bs-border);
+  color: var(--bs-text-faint);
+}
+
+.reference__search {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-surface);
+}
+
+.reference__search:focus-visible {
+  outline: 2px solid var(--bs-brand);
+  outline-offset: 1px;
+}
+
+.reference__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--bs-space-2) var(--bs-space-2) var(--bs-space-4);
+}
+
+/* Sticky, so a long scroll never leaves you unsure which half of the language
+   you are looking at. */
+.reference__section {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: var(--bs-space-3) 0 var(--bs-space-1);
+  padding: var(--bs-space-1) var(--bs-space-2);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+}
+
+.reference__group {
+  padding: var(--bs-space-3) var(--bs-space-2) var(--bs-space-1);
+  color: var(--bs-text-faint);
+  font-size: var(--bs-font-size-sm);
+}
+
+.reference__item {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  width: 100%;
+  padding: 4px var(--bs-space-2);
+  border: 0;
+  border-radius: var(--bs-radius-sm);
+  background: none;
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.reference__item:hover {
+  background: var(--bs-surface);
+  color: var(--bs-text);
+}
+
+.reference__item--active {
+  background: color-mix(in srgb, var(--bs-brand) 16%, transparent);
+  color: var(--bs-text);
+}
+
+.reference__itemname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one mark of an addition in the list. Amber, because "this is not stock"
+   is state, which is what the accent is reserved for. */
+.reference__badge {
+  flex: none;
+  margin-left: auto;
+  color: var(--bs-accent-ink);
+  font-weight: 700;
+}
+
+.reference__count,
+.reference__footnote {
+  color: var(--bs-text-faint);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 400;
+}
+
+.reference__footnote code {
+  font-family: var(--bs-font-mono);
+}
+
+.reference__content {
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--bs-space-4) var(--bs-space-5);
+}
+
+.reference__content:focus-visible {
+  outline: 2px solid var(--bs-brand);
+  outline-offset: -3px;
+}
+
+.reference__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--bs-space-3);
+}
+
+.reference__title {
+  margin: 0;
+  font-family: var(--bs-font-mono);
+  font-size: 18px;
+}
+
+.reference__tag {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bs-brand) 20%, transparent);
+  color: var(--bs-accent-ink);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+}
+
+/* Stock OpenSCAD is the unremarkable case, so its tag is quiet: it answers the
+   question without claiming the eye the way the addition badge does. */
+.reference__tag--stock {
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-faint);
+  font-weight: 400;
+}
+
+.reference__sig {
+  margin: var(--bs-space-3) 0 0;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-surface-sunken);
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  overflow-x: auto;
+}
+
+/* The plain-language line, set a size up: it is the sentence most readers will
+   stop at, and everything below it is there for when they do not. */
+.reference__plain {
+  margin: var(--bs-space-3) 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.reference__example {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--bs-space-3);
+  align-items: start;
+  margin-top: var(--bs-space-4);
+}
+
+.reference__codewrap {
+  position: relative;
+  min-width: 0;
+}
+
+.reference__code,
+.reference__output {
+  margin: 0;
+  padding: var(--bs-space-3);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  line-height: var(--bs-line-height-code);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.reference__output {
+  grid-column: 1 / -1;
+  color: var(--bs-text-muted);
+}
+
+/* Revealed on hover or keyboard focus. They are useful and they are not what
+   the reader came for, so they stay out of the way until wanted — and a focus
+   anywhere inside the block brings them back for keyboard users. */
+.reference__exampleactions {
+  display: flex;
+  gap: var(--bs-space-2);
+  justify-content: flex-end;
+  margin-top: var(--bs-space-2);
+  opacity: 0;
+  transition: opacity var(--bs-transition);
+}
+
+.reference__codewrap:hover .reference__exampleactions,
+.reference__exampleactions:focus-within {
+  opacity: 1;
+}
+
+/* The screenshots are transparent so they suit both themes, which means they
+   need a surface of their own to sit on. */
+.reference__shot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
+}
+
+.reference__caption {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--bs-text-muted);
+  font-size: var(--bs-font-size-sm);
+}
+
+/* Shown when a search matches nothing in the current scope. Centred and given
+   room, because the useful thing here is the button under it. */
+.reference__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+  align-items: center;
+  padding: var(--bs-space-5) var(--bs-space-4);
+  color: var(--bs-text-muted);
+  text-align: center;
+}
+
+.reference__empty p {
+  margin: 0 0 var(--bs-space-3);
+}
+
+.reference__subhead {
+  margin: var(--bs-space-5) 0 var(--bs-space-2);
+  color: var(--bs-text-faint);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+}
+
+.reference__params {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reference__params th,
+.reference__params td {
+  padding: 5px var(--bs-space-3) 5px 0;
+  border-top: 1px solid var(--bs-border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+}
+
+.reference__params th {
+  width: 1%;
+  white-space: nowrap;
+  font-family: var(--bs-font-mono);
+}
+
+.reference__details p {
+  margin: 0 0 var(--bs-space-3);
+}
+
+.reference__details code,
+.reference__params code,
+.reference__plain code,
+.reference__caption code,
+.reference__downgrade code,
+.reference__origin code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bs-surface-sunken);
+  font-family: var(--bs-font-mono);
+  font-size: 0.92em;
+}
+
+/* The downgrade note, marked off by a rule rather than a box: it is the answer
+   to "what happens when I leave", and every addition has one. */
+.reference__downgrade {
+  margin-top: var(--bs-space-4);
+  padding-left: var(--bs-space-3);
+  border-left: 2px solid var(--bs-brand);
+}
+
+.reference__downgrade p {
+  margin: 0;
+  color: var(--bs-text-muted);
+}
+
+.reference__downgradehead {
+  margin-bottom: 2px;
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+}
+
+.reference__see {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--bs-space-2);
+  margin-top: var(--bs-space-5);
+}
+
+.reference__seelabel {
+  color: var(--bs-text-faint);
+  font-size: var(--bs-font-size-sm);
+}
+
+.reference__link {
+  padding: 2px 6px;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-sm);
+  background: none;
+  color: var(--bs-accent-ink);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.reference__link:hover {
+  border-color: var(--bs-border-strong);
+  color: var(--bs-accent-ink-hover);
+}
+
+.reference__origin {
+  margin: var(--bs-space-5) 0 0;
+  padding-top: var(--bs-space-3);
+  border-top: 1px solid var(--bs-border);
+  color: var(--bs-text-faint);
+  font-size: var(--bs-font-size-sm);
+}
+
+/* Below this the two-column example stops helping: the code wraps to nothing
+   and the picture is too small to read. Stack them, and let the navigation
+   become a short list above the content rather than a column beside it. */
+@media (max-width: 900px) {
+  .reference {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 180px minmax(0, 1fr);
+  }
+
+  .reference__nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--bs-border);
+  }
+
+  .reference__example {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reference__content {
+    padding: var(--bs-space-3);
   }
 }

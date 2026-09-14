@@ -4,6 +4,11 @@ BetterSCAD implements the OpenSCAD language in full. This page covers what is
 supported, the handful of places where behaviour is worth pinning down, and the
 extensions BetterSCAD adds on top.
 
+Looking for what a particular call does, with a picture of what it makes?
+That is [`reference.md`](reference.md), which is generated from the same
+catalogue as the app's **Help & Reference** view. This page is the
+implementation-facing companion to it.
+
 ## Compatibility
 
 Everything below is implemented and covered by tests:

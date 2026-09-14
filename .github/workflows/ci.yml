@@ -31,6 +31,15 @@ jobs:
       - name: Build site
         run: npm run build
 
+      # The reference catalogue is the source for the Help view, docs/reference.md
+      # and every screenshot in it. This fails when a new element was added
+      # without running `npm run reference`, which is the only thing standing
+      # between that rule and a reference that quietly goes stale. It also
+      # re-runs every example that declares console output and checks it against
+      # what the engine actually prints.
+      - name: Check the reference is up to date
+        run: npm run reference:check
+
       # Renders every example headlessly, which exercises the engine, the CLI
       # and the export pipeline against real models rather than fixtures.
       - name: Render examples
