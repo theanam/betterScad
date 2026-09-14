@@ -300,6 +300,24 @@ function isScopeBarrier(node: SceneNode): boolean {
   );
 }
 
+/**
+ * True once a `!` below this node has claimed the render.
+ *
+ * The root modifier does not mean "show only this" — it means *use this subtree
+ * as the design root*. Everything outside the marked subtree is therefore
+ * discarded, and that includes the operations wrapping it: transforms, colour,
+ * resize, the extrudes, projection, offset. Everything inside it still applies.
+ * The manual states the asymmetry directly: in `translate(…) !rotate(…) cube();`
+ * the rotate runs and the translate has no effect.
+ *
+ * Every operation that wraps a child assembly has to ask this before touching
+ * it, and hand the assembly back untouched when it is true — which also keeps
+ * the flag travelling up to the top level.
+ */
+function claimedByRoot(inner: Assembly): boolean {
+  return inner.isolated;
+}
+
 function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
   const operands: Assembly[] = [];
   const annotations: Piece[] = [];
@@ -658,6 +676,7 @@ function applyTransform(
   ctx: Ctx,
   span: SourceSpan | undefined,
 ): Assembly {
+  if (claimedByRoot(input)) return input;
   if (input.pieces.length === 0 && input.annotations.length === 0 && input.negatives.length === 0) {
     return input;
   }
@@ -707,6 +726,7 @@ function applyTransform(
 
 function applyColor(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   const color = parseColor(node.params.color as Value, node.params.alpha as number | undefined);
 
   if (!color) {
@@ -740,6 +760,7 @@ function applyColor(node: SceneNode, ctx: Ctx): Assembly {
  */
 function applyResize(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   if (inner.pieces.length === 0) return inner;
 
   const newsize = node.params.newsize as number[];
@@ -795,6 +816,7 @@ function applyResize(node: SceneNode, ctx: Ctx): Assembly {
 
 function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   const height = node.params.height as number;
   const center = node.params.center as boolean;
   const twist = node.params.twist as number;
@@ -855,6 +877,7 @@ function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
 
 function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   const angle = node.params.angle as number;
   const start = node.params.start as number;
   const res = node.params.resolution as Resolution;
@@ -892,6 +915,7 @@ function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {
 
 function buildProjection(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   const cut = node.params.cut as boolean;
 
   const pieces: Piece[] = [];
@@ -913,6 +937,7 @@ function buildProjection(node: SceneNode, ctx: Ctx): Assembly {
 
 function buildOffset(node: SceneNode, ctx: Ctx): Assembly {
   const inner = combine(node, ctx, 'union');
+  if (claimedByRoot(inner)) return inner;
   const amount = node.params.amount as number;
   const round = node.params.round as boolean;
   const chamfer = node.params.chamfer as boolean;
