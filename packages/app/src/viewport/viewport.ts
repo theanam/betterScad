@@ -97,6 +97,8 @@ export class Viewport {
   private needsRender = true;
   /** The viewport's gradient background, disposed when the theme changes. */
   private backdrop?: CanvasTexture;
+  /** True with no document open: helpers and the view cube are not drawn. */
+  private empty = false;
   private disposed = false;
   private resizeObserver?: ResizeObserver;
 
@@ -201,7 +203,7 @@ export class Viewport {
       // CSS pixels: the renderer applies its own pixel ratio.
       this.renderer.setViewport(0, 0, width, height);
       this.renderer.render(this.scene, this.camera);
-      this.gizmo.render(this.renderer, this.controls.orientation, width, height);
+      if (!this.empty) this.gizmo.render(this.renderer, this.controls.orientation, width, height);
     }
     requestAnimationFrame(this.loop);
   };
@@ -390,6 +392,7 @@ export class Viewport {
 
   private rebuildHelpers(): void {
     this.clearGroup(this.helperGroup);
+    if (this.empty) return;
     const size = this.helperSize;
 
     if (this.showGrid) {
@@ -455,6 +458,21 @@ export class Viewport {
     this.rebuildHelpers();
   }
 
+  /**
+   * With no document open, the viewport shows nothing at all.
+   *
+   * Not even the grid and the view cube: a lit, gridded stage with no model on
+   * it looks like a render that failed, where an empty one plainly has nothing
+   * in it. The user's own grid and axes preferences are untouched — this only
+   * suppresses drawing them.
+   */
+  setEmpty(empty: boolean): void {
+    if (this.empty === empty) return;
+    this.empty = empty;
+    this.rebuildHelpers();
+    this.invalidate();
+  }
+
   // -- framing --------------------------------------------------------------
 
   frameAll(): void {
@@ -491,6 +509,7 @@ export class Viewport {
   // -- gizmo input ----------------------------------------------------------
 
   private gizmoPick(event: PointerEvent): StandardView | undefined {
+    if (this.empty) return undefined;
     const rect = this.renderer.domElement.getBoundingClientRect();
     return this.gizmo.pick(
       event.clientX - rect.left,
@@ -512,7 +531,7 @@ export class Viewport {
   private onGizmoPointerDown = (event: PointerEvent): void => {
     // One press at a time: a second finger landing on the cube would replace
     // the first one's state and strand its pointer capture.
-    if (this.gizmoDrag) return;
+    if (this.gizmoDrag || this.empty) return;
     const view = this.gizmoPick(event);
     if (!view) {
       this.gizmoHandledClick = false;

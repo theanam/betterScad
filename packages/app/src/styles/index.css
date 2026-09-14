@@ -428,11 +428,16 @@ textarea {
   flex: none;
 }
 
+/* `padding: 0` is load-bearing. A button carries a UA default of `1px 6px`, and
+   with `box-sizing: border-box` that leaves an 18px button a 6px content box —
+   narrower than the glyph, which then overflows to one side and sits visibly
+   right of centre. */
 .tab__close {
   display: grid;
   place-items: center;
   width: 18px;
   height: 18px;
+  padding: 0;
   border: none;
   border-radius: 3px;
   background: transparent;
@@ -594,6 +599,7 @@ textarea {
   flex: none;
   width: 22px;
   height: 22px;
+  padding: 0;
   margin-left: var(--bs-space-1);
   border: none;
   border-radius: var(--bs-radius-sm);
@@ -707,6 +713,80 @@ textarea {
   font-size: var(--bs-font-size-sm);
   line-height: var(--bs-line-height-code);
   tab-size: 2;
+}
+
+/* --- empty states --------------------------------------------------------- */
+
+/* Both halves of the no-document state. Centred, generously spaced, and quiet:
+   this is a resting state, not an error, so nothing here should read as urgent. */
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: var(--bs-space-5);
+  overflow: auto;
+}
+
+.empty__inner {
+  width: 100%;
+  max-width: 460px;
+  text-align: center;
+}
+
+.empty__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--bs-text);
+}
+
+.empty__body {
+  margin: 6px 0 0;
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.55;
+  color: var(--bs-text-muted);
+  text-wrap: balance;
+}
+
+.empty__choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--bs-space-2);
+  margin-top: var(--bs-space-4);
+}
+
+/* The viewport half sits over the canvas rather than replacing it, so the
+   backdrop's own gradient still shows through behind the art. */
+.empty--viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Every overlay control acts on a model: the HUD reads its camera, the tools
+   frame and measure it. With nothing loaded they are aimed at nothing. */
+.viewport:has(.empty--viewport:not([hidden])) .viewport__overlay {
+  display: none;
+}
+
+.empty__art {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--bs-space-4);
+  color: var(--bs-text-faint);
+  opacity: 0.7;
+}
+
+.empty__caption {
+  margin: 0;
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+  color: var(--bs-text-muted);
 }
 
 /* --- viewport ------------------------------------------------------------- */

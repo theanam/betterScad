@@ -10,7 +10,8 @@
  * what lets the dialog be escapable without stranding anyone on an empty editor.
  */
 
-import { el, icon } from './dom.js';
+import { choiceCards, type StartChoices } from './choices.js';
+import { el } from './dom.js';
 
 /** Where the OpenSCAD language itself is documented. Verified 2026-09-14. */
 const OPENSCAD_DOCS = {
@@ -18,41 +19,7 @@ const OPENSCAD_DOCS = {
   manual: 'https://en.wikibooks.org/wiki/OpenSCAD_User_Manual',
 };
 
-export interface WelcomeChoices {
-  /** Keep the sample already open. */
-  sample(): void;
-  /** Replace it with an empty file. */
-  blank(): void;
-  /**
-   * Open something already on disk. Omitted where the browser cannot open
-   * files at all, in which case the card is not rendered — an inert third
-   * option is worse than two.
-   */
-  openFile?(): void;
-}
-
-interface CardOptions {
-  iconName: string;
-  title: string;
-  body: string;
-  primary?: boolean;
-  onSelect(): void;
-}
-
-function card(options: CardOptions): HTMLButtonElement {
-  const node = el('button', {
-    class: `welcomecard${options.primary ? ' welcomecard--primary' : ''}`,
-    type: 'button',
-    onclick: () => options.onSelect(),
-  }) as HTMLButtonElement;
-
-  node.append(
-    icon(options.iconName, 20),
-    el('span', { class: 'welcomecard__title', text: options.title }),
-    el('span', { class: 'welcomecard__body', text: options.body }),
-  );
-  return node;
-}
+export type WelcomeChoices = StartChoices;
 
 function link(href: string, text: string): HTMLAnchorElement {
   return el('a', {
@@ -72,15 +39,17 @@ export function showWelcome(choices: WelcomeChoices): HTMLDialogElement {
     run();
   };
 
-  const { openFile } = choices;
-
-  const sampleCard = card({
-    iconName: 'cube',
-    title: 'Sample model',
-    body: 'A parametric box with Customizer sliders.',
-    primary: true,
-    onSelect: () => choose(choices.sample),
-  });
+  // Wrapped so every card closes the dialog before acting. The cards are shared
+  // with the empty state, which has no dialog to close — hence the wrapping
+  // here rather than inside them.
+  const cards = choiceCards(
+    {
+      sample: () => choose(choices.sample),
+      blank: () => choose(choices.blank),
+      openFile: choices.openFile && (() => choose(choices.openFile!)),
+    },
+    true,
+  );
 
   dialog.append(
     el('div', { class: 'welcome__head' }, [
@@ -88,26 +57,7 @@ export function showWelcome(choices: WelcomeChoices): HTMLDialogElement {
       el('div', { class: 'welcome__wordmark', text: 'BetterSCAD' }),
       el('div', { class: 'welcome__tagline', text: 'Code it. See it. Print it.' }),
     ]),
-    el('div', { class: 'welcome__choices' }, [
-      sampleCard,
-      card({
-        iconName: 'plus',
-        title: 'Blank file',
-        body: 'Start from nothing.',
-        onSelect: () => choose(choices.blank),
-      }),
-      openFile
-        ? card({
-            iconName: 'open',
-            title: 'Open a file',
-            body: 'A .scad or .bscad from your disk.',
-            // Closing first keeps the picker's user gesture intact — it is
-            // still the same click — and leaves the sample behind if the
-            // picker is cancelled.
-            onSelect: () => choose(openFile),
-          })
-        : null,
-    ]),
+    el('div', { class: 'welcome__choices' }, cards),
     el('p', { class: 'welcome__compat' }, [
       el('strong', { text: 'Fully OpenSCAD-compatible.' }),
       document.createTextNode(' Existing .scad files open and render unmodified — '),
@@ -127,6 +77,6 @@ export function showWelcome(choices: WelcomeChoices): HTMLDialogElement {
   });
 
   dialog.showModal();
-  sampleCard.focus();
+  cards[0]?.focus();
   return dialog;
 }

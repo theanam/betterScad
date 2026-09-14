@@ -127,6 +127,8 @@ export class Toolbar {
 
   /** Drives the Save menu; a `.scad` gets the extra "Save as .bscad" item. */
   private documentFormat: DocumentFormat = 'bscad';
+  /** Buttons that act on the open document, and mean nothing without one. */
+  private readonly documentActions: HTMLButtonElement[] = [];
 
   constructor(private readonly actions: ToolbarActions) {
     this.customizerButton = button({
@@ -161,6 +163,30 @@ export class Toolbar {
       onClick: () => actions.render(),
     });
 
+    const exportButton = button({
+      label: 'Export',
+      iconName: 'download',
+      shortcut: formatShortcut('Mod+E'),
+      onClick: () => actions.export(),
+    });
+    const saveButton = splitButton({
+      label: 'Save',
+      iconName: 'save',
+      shortcut: formatShortcut('Mod+S'),
+      onClick: () => actions.save(),
+      menuLabel: 'More save options',
+      items: () => this.saveMenuItems(),
+    });
+
+    // Everything that acts on the open document. `splitButton` returns the
+    // wrapper, so both halves are collected from inside it.
+    this.documentActions.push(
+      this.previewButton,
+      this.renderButton,
+      exportButton,
+      ...(Array.from(saveButton.querySelectorAll('button')) as HTMLButtonElement[]),
+    );
+
     this.element = el('header', { class: 'toolbar', role: 'toolbar' }, [
       el('div', { class: 'toolbar__brand' }, [
         el('img', { src: './betterscad-mark.svg', width: '22', height: '22', alt: '' }),
@@ -171,20 +197,13 @@ export class Toolbar {
       el('div', { class: 'toolbar__group' }, [
         button({ label: 'New', iconName: 'plus', shortcut: formatShortcut('Mod+N'), onClick: () => actions.newFile() }),
         button({ label: 'Open', iconName: 'open', shortcut: formatShortcut('Mod+O'), onClick: () => actions.open() }),
-        splitButton({
-          label: 'Save',
-          iconName: 'save',
-          shortcut: formatShortcut('Mod+S'),
-          onClick: () => actions.save(),
-          menuLabel: 'More save options',
-          items: () => this.saveMenuItems(),
-        }),
+        saveButton,
       ]),
       el('div', { class: 'toolbar__divider' }),
       el('div', { class: 'toolbar__group' }, [
         this.previewButton,
         this.renderButton,
-        button({ label: 'Export', iconName: 'download', shortcut: formatShortcut('Mod+E'), onClick: () => actions.export() }),
+        exportButton,
       ]),
       el('div', { class: 'toolbar__spacer' }),
       // A search field rather than a button: it names what the palette is for,
@@ -254,8 +273,14 @@ export class Toolbar {
     autoRender: boolean;
     showingFinalRender: boolean;
     documentFormat: DocumentFormat;
+    /** False with no document open, which leaves half the toolbar inert. */
+    hasDocument: boolean;
   }): void {
     this.documentFormat = state.documentFormat;
+
+    // Disabled rather than hidden: a toolbar that changes shape as tabs open
+    // and close is harder to aim at than one whose buttons grey out.
+    for (const node of this.documentActions) node.disabled = !state.hasDocument;
 
     this.customizerButton.classList.toggle('btn--active', state.customizerVisible);
     this.consoleButton.classList.toggle('btn--active', state.consoleVisible);
@@ -342,7 +367,7 @@ export class TabStrip {
           this.onClose(doc.id);
         }) as EventListener,
       });
-      close.appendChild(icon('close', 11));
+      close.appendChild(icon('close', 15));
       tab.appendChild(close);
 
       this.element.appendChild(tab);
@@ -367,8 +392,8 @@ export class TabStrip {
 export interface StatusState {
   /** Active document name, and whether it still matches what is on disk. */
   document?: { name: string; dirty: boolean; onDisk: boolean };
-  /** Whether the file is stock OpenSCAD, or uses extensions. */
-  compatibility: 'full' | 'extended';
+  /** Whether the file is stock OpenSCAD, or uses extensions. Absent with none open. */
+  compatibility?: 'full' | 'extended';
   cursor: { line: number; column: number };
   errors: number;
   warnings: number;
@@ -403,20 +428,26 @@ export class StatusBar {
       this.element.appendChild(el('span', { class: 'statusbar__item statusbar__path', text: name }));
     }
 
-    this.element.appendChild(
-      el('span', { class: 'statusbar__item', text: `Ln ${state.cursor.line}, Col ${state.cursor.column}` }),
-    );
+    // A cursor position and a compatibility verdict are both claims about a
+    // file. With none open they would be claims about nothing.
+    if (state.document) {
+      this.element.appendChild(
+        el('span', { class: 'statusbar__item', text: `Ln ${state.cursor.line}, Col ${state.cursor.column}` }),
+      );
+    }
 
-    this.element.appendChild(
-      el('span', {
-        class: 'statusbar__item',
-        title:
-          state.compatibility === 'full'
-            ? 'Every construct in this file is stock OpenSCAD'
-            : 'This file uses BetterSCAD extensions; saving as .scad rewrites them',
-        text: `OpenSCAD compat: ${state.compatibility}`,
-      }),
-    );
+    if (state.compatibility) {
+      this.element.appendChild(
+        el('span', {
+          class: 'statusbar__item',
+          title:
+            state.compatibility === 'full'
+              ? 'Every construct in this file is stock OpenSCAD'
+              : 'This file uses BetterSCAD extensions; saving as .scad rewrites them',
+          text: `OpenSCAD compat: ${state.compatibility}`,
+        }),
+      );
+    }
 
     if (state.errors > 0) {
       this.element.appendChild(

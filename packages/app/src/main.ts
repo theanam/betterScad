@@ -68,6 +68,8 @@ import {
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
+import type { StartChoices } from './ui/choices.js';
+import { editorEmptyState, viewportEmptyState } from './ui/empty-state.js';
 import { showWelcome } from './ui/welcome.js';
 import { Viewport } from './viewport/viewport.js';
 import type { CameraState } from './viewport/controls.js';
@@ -90,6 +92,10 @@ class App {
   private consolePanel!: ConsolePanel;
   private customizerPanel!: CustomizerPanel;
   private extensionBanner!: ExtensionBanner;
+  private editorHost!: HTMLElement;
+  /** Shown in place of the editor and the viewport with no document open. */
+  private editorEmpty!: HTMLElement;
+  private viewportEmpty!: HTMLElement;
   private animationBar?: AnimationBar;
 
   private mainSplit!: Split;
@@ -189,7 +195,10 @@ class App {
     }
     this.rememberCamera();
 
-    this.editor.focus();
+    // Focus belongs in the editor only when there is something to edit;
+    // otherwise it goes to the first way back in.
+    if (doc) this.editor.focus();
+    else this.editorEmpty.querySelector('button')?.focus();
   }
 
   // -- UI construction ------------------------------------------------------
@@ -223,6 +232,7 @@ class App {
 
     // --- editor column ---
     const editorHost = el('div', { class: 'editor' });
+    this.editorHost = editorHost;
     this.customizerPanel = new CustomizerPanel({
       onChange: (name, value) => this.setParameter(name, value),
       onReset: () => this.resetParameters(),
@@ -242,7 +252,10 @@ class App {
     const hud = el('div', { class: 'viewport__hud' });
     this.animationHost = el('div', {});
 
+    this.viewportEmpty = viewportEmptyState();
+
     viewportHost.append(
+      this.viewportEmpty,
       el('div', { class: 'viewport__overlay' }, [
         this.busyBadge,
         this.measureReadout,
@@ -278,10 +291,13 @@ class App {
     });
     this.extensionBanner = new ExtensionBanner(() => this.previewDowngrade());
 
+    this.editorEmpty = editorEmptyState(this.startChoices());
+
     this.mainSplit.first.classList.add('pane--editor');
     this.mainSplit.first.append(
       this.tabs.element,
       editorHost,
+      this.editorEmpty,
       this.extensionBanner.element,
       this.customizerHost,
     );
@@ -509,6 +525,25 @@ class App {
     this.activate(doc);
   }
 
+  /**
+   * The three ways into a document, shared by the welcome and the empty state.
+   *
+   * They differ in one respect: the welcome's sample is already open, so
+   * choosing it does nothing, while from the empty state it has to be created.
+   */
+  private startChoices(): StartChoices {
+    return {
+      sample: () => this.openSample(),
+      blank: () => this.newDocument(),
+      openFile: supportsFileOpen ? () => void this.openFiles() : undefined,
+    };
+  }
+
+  private openSample(): void {
+    this.stashEditorState();
+    this.activate(this.workspace.createDocument('model.bscad', STARTER_DOCUMENT));
+  }
+
   private openWelcome(): void {
     showWelcome({
       // The sample is already open; choosing it is just getting out of the way.
@@ -584,6 +619,7 @@ class App {
   }
 
   private activate(doc: Document): void {
+    this.viewport.setEmpty(false);
     // Restoring the saved state keeps that tab's undo history and selection.
     this.editor.swapState(doc.editorState ?? this.editor.createState(doc.text));
     this.customizerPanel.update(this.customizerModel, doc.parameters);
@@ -633,11 +669,34 @@ class App {
 
     this.awaitingInitialView.delete(id);
     this.workspace.closeDocument(id);
-    if (this.workspace.documents.length === 0) {
-      this.workspace.createDocument('model.bscad', STARTER_DOCUMENT);
-    }
+
+    // Closing the last tab leaves no document, rather than reopening the
+    // sample. Putting a file back made the last tab the one tab that could not
+    // be closed, and replaced whatever was there with one nobody asked for.
     const next = this.workspace.active;
     if (next) this.activate(next);
+    else this.showEmptyState();
+  }
+
+  /**
+   * Drops to the no-document state.
+   *
+   * The editor and viewport both swap to their empty states; the console and
+   * customizer are emptied so nothing left over from the closed file reads as
+   * belonging to the nothing that replaced it.
+   */
+  private showEmptyState(): void {
+    this.editor.swapState(this.editor.createState(''));
+    this.customizerModel = { parameters: [], groups: [] };
+    this.customizerPanel.update(this.customizerModel, {});
+    this.consolePanel.clear();
+    this.lastStats = undefined;
+    this.lastDimension = 0;
+    this.showingFinalRender = false;
+    this.viewport.setModel([], [], null);
+    this.viewport.setEmpty(true);
+    this.workspace.persist();
+    this.refreshChrome();
   }
 
   private async openFiles(): Promise<void> {
@@ -1179,7 +1238,24 @@ class App {
     this.viewport?.applyTheme();
   }
 
+  /**
+   * Shows or hides the two empty states.
+   *
+   * Driven from the document count rather than from the close handler, so every
+   * route back in — a tab click, the palette, a dropped file — leaves the empty
+   * state without having to remember to.
+   */
+  private syncEmptyState(): void {
+    const empty = this.workspace.documents.length === 0;
+    this.editorEmpty.hidden = !empty;
+    this.viewportEmpty.hidden = !empty;
+    this.editorHost.hidden = empty;
+    if (empty) this.extensionBanner.update([]);
+    this.viewport.setEmpty(empty);
+  }
+
   private refreshChrome(): void {
+    this.syncEmptyState();
     this.tabs.update(this.workspace.documents, this.workspace.activeId, (doc) =>
       this.workspace.isDirty(doc),
     );
@@ -1191,12 +1267,13 @@ class App {
       ...this.workspace.layout,
       showingFinalRender: this.showingFinalRender,
       documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
+      hasDocument: !!active,
     });
     this.statusBar.update({
       document: active
         ? { name: active.name, dirty: this.workspace.isDirty(active), onDisk: !!active.handle }
         : undefined,
-      compatibility: extensions.length > 0 ? 'extended' : 'full',
+      compatibility: active ? (extensions.length > 0 ? 'extended' : 'full') : undefined,
       cursor: this.cursor,
       errors: counts.errors,
       warnings: counts.warnings,

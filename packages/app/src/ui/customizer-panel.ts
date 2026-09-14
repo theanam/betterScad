@@ -305,7 +305,7 @@ function closeButton(onClose: () => void): HTMLButtonElement {
     type: 'button',
     onclick: () => onClose(),
   }) as HTMLButtonElement;
-  node.appendChild(icon('close', 12));
+  node.appendChild(icon('close', 18));
   setHint(node, 'Hide the Customizer');
   return node;
 }

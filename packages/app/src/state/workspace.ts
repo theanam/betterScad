@@ -278,7 +278,10 @@ export class Workspace {
         layout?: Partial<LayoutState>;
         documents?: Omit<Document, 'editorState' | 'handle'>[];
       };
-      if (payload.version !== 1 || !payload.documents?.length) return false;
+      // An empty document list is a real state, not a failed restore: it is
+      // what closing the last tab leaves behind, and reopening the sample on
+      // the next visit would undo that deliberately.
+      if (payload.version !== 1 || !Array.isArray(payload.documents)) return false;
 
       this.layout = { ...DEFAULT_LAYOUT, ...payload.layout };
       this.documents = payload.documents.map((d) => ({
@@ -291,7 +294,7 @@ export class Workspace {
       this.activeId =
         payload.activeId && this.documents.some((d) => d.id === payload.activeId)
           ? payload.activeId
-          : this.documents[0].id;
+          : (this.documents[0]?.id ?? '');
       return true;
     } catch {
       return false;
