@@ -814,14 +814,25 @@ textarea {
   pointer-events: none;
 }
 
-.viewport__hud {
+/* The bottom-left stack: the axis indicator, and the camera readout under it.
+   Two separate things that share a corner, rather than one panel — the arms sit
+   straight on the viewport so they read as part of the scene, not as another
+   value the box is reporting. */
+.viewport__corner {
   position: absolute;
   bottom: var(--bs-space-3);
   left: var(--bs-space-3);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-start;
+  gap: var(--bs-space-2);
+  pointer-events: none;
+}
+
+.viewport__hud {
+  display: flex;
+  gap: var(--bs-space-3);
+  white-space: nowrap;
   padding: 6px 9px;
   border-radius: var(--bs-radius);
   background: color-mix(in srgb, var(--bs-surface) 82%, transparent);
@@ -901,19 +912,21 @@ textarea {
   pointer-events: none;
 }
 
-/* `$vpd` and `$vpr` share a line, so the HUD is as wide as it needs to be and
-   the axis indicator sits over both rather than beside a tall stack. */
-.viewport__hudvalues {
-  display: flex;
-  gap: var(--bs-space-3);
-  white-space: nowrap;
-}
-
+/* No background of its own: it lies directly on the viewport, and the model can
+   pass behind it. The letters therefore carry a halo in the viewport's own
+   backdrop colour, so an `x` over a light face of the model stays readable.
+   `paint-order` puts that halo under the fill rather than over it. */
 .axisindicator {
   display: block;
-  /* Its own arms are the only marks in the box, and they are already the axis
-     colours, so nothing here inherits the HUD's muted text colour. */
-  overflow: visible;
+}
+
+.axisindicator text {
+  paint-order: stroke;
+  stroke: var(--bs-viewport-bg);
+  stroke-width: 0.14;
+  stroke-linejoin: round;
+  font-family: var(--bs-font-ui);
+  font-weight: 600;
 }
 
 .viewport__measure {

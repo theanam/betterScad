@@ -252,12 +252,16 @@ class App {
     const viewportHost = el('div', { class: 'viewport' });
     this.busyBadge = el('div', { class: 'viewport__busy', text: 'Rendering…', style: 'display:none' });
     this.measureReadout = el('div', { class: 'viewport__measure', style: 'display:none' });
-    // The axis indicator is built once and redrawn in place: the readout below
-    // it is two short strings, but this is an SVG, and replacing the whole HUD
-    // on every camera change would rebuild it on every frame of an orbit.
+    // The axis indicator is built once and redrawn in place: the readout under
+    // it is two short strings, but this is an SVG, and replacing it wholesale on
+    // every camera change would rebuild it on every frame of an orbit.
+    //
+    // It sits *beside* the readout rather than inside it — no panel of its own,
+    // straight onto the viewport — so the two share a corner without the arms
+    // looking like a value the box is reporting.
     const axisIndicator = new AxisIndicator();
-    const hudValues = el('div', { class: 'viewport__hudvalues' });
-    const hud = el('div', { class: 'viewport__hud' }, [axisIndicator.element, hudValues]);
+    const hud = el('div', { class: 'viewport__hud' });
+    const corner = el('div', { class: 'viewport__corner' }, [axisIndicator.element, hud]);
     this.animationHost = el('div', {});
 
     this.viewportEmpty = viewportEmptyState();
@@ -267,7 +271,7 @@ class App {
       el('div', { class: 'viewport__overlay' }, [
         this.busyBadge,
         this.measureReadout,
-        hud,
+        corner,
         ...this.buildViewTools(),
       ]),
     );
@@ -350,7 +354,7 @@ class App {
     paintHud = (): void => {
       const vp = this.viewport.controls.viewportVariables;
       axisIndicator.update(this.viewport.controls.screenAxes);
-      hudValues.replaceChildren(
+      hud.replaceChildren(
         el('span', { text: `$vpd ${formatNumber(vp.distance, 1)}` }),
         el('span', {
           text: `$vpr [${vp.rotation.map((n) => formatNumber(n, 0)).join(', ')}]`,

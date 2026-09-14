@@ -21,12 +21,25 @@ export interface ScreenAxis {
   towards: number;
 }
 
-/** Box size in CSS pixels. Deliberately small: it sits above two lines of text. */
-const SIZE = 46;
+/** Box size in CSS pixels. */
+const SIZE = 60;
 
-/** Arm length and label distance, in a viewBox whose half-width is 1. */
-const ARM = 0.60;
-const LABEL = 0.84;
+/**
+ * The viewBox's half-width.
+ *
+ * Bigger than the arms so the letters have somewhere to sit *inside* the box.
+ * Drawing them outside it and relying on `overflow: visible` works until
+ * something clips, and a label that disappears at one camera angle is worse
+ * than a slightly smaller one.
+ */
+const EXTENT = 1.25;
+
+/** Arm length and label distance, in viewBox units. */
+const ARM = 1;
+const LABEL = 1.12;
+
+/** Thin: these are pointers, not geometry. */
+const STROKE = 0.07;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -51,7 +64,7 @@ export class AxisIndicator {
   constructor() {
     this.element = document.createElementNS(SVG_NS, 'svg');
     // Origin in the middle, so an axis direction is its own coordinate.
-    this.element.setAttribute('viewBox', '-1 -1 2 2');
+    this.element.setAttribute('viewBox', `${-EXTENT} ${-EXTENT} ${EXTENT * 2} ${EXTENT * 2}`);
     this.element.setAttribute('width', String(SIZE));
     this.element.setAttribute('height', String(SIZE));
     this.element.setAttribute('class', 'axisindicator');
@@ -73,7 +86,7 @@ export class AxisIndicator {
           x2: round(axis.x * ARM),
           y2: round(axis.y * ARM),
           stroke: color,
-          'stroke-width': 0.12,
+          'stroke-width': STROKE,
           'stroke-linecap': 'round',
         }),
       );
@@ -82,7 +95,7 @@ export class AxisIndicator {
         x: round(axis.x * LABEL),
         y: round(axis.y * LABEL),
         fill: color,
-        'font-size': 0.44,
+        'font-size': 0.38,
         'text-anchor': 'middle',
         // `central` rather than `middle`: `middle` centres on the x-height,
         // which sits a letter noticeably low at this size.
