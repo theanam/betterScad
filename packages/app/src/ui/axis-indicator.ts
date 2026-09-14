@@ -22,7 +22,7 @@ export interface ScreenAxis {
 }
 
 /** Box size in CSS pixels. */
-const SIZE = 60;
+const SIZE = 74;
 
 /**
  * The viewBox's half-width.
@@ -38,8 +38,14 @@ const EXTENT = 1.25;
 const ARM = 1;
 const LABEL = 1.12;
 
-/** Thin: these are pointers, not geometry. */
-const STROKE = 0.07;
+/**
+ * One CSS pixel, the same weight the viewport draws its own axis lines at.
+ *
+ * In pixels rather than viewBox units, via `non-scaling-stroke`: a width in
+ * user units would scale with `SIZE`, so resizing the indicator would quietly
+ * re-weight it and it would stop matching the lines in the scene.
+ */
+const STROKE = 1;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -87,6 +93,7 @@ export class AxisIndicator {
           y2: round(axis.y * ARM),
           stroke: color,
           'stroke-width': STROKE,
+          'vector-effect': 'non-scaling-stroke',
           'stroke-linecap': 'round',
         }),
       );
@@ -95,7 +102,7 @@ export class AxisIndicator {
         x: round(axis.x * LABEL),
         y: round(axis.y * LABEL),
         fill: color,
-        'font-size': 0.38,
+        'font-size': 0.34,
         'text-anchor': 'middle',
         // `central` rather than `middle`: `middle` centres on the x-height,
         // which sits a letter noticeably low at this size.

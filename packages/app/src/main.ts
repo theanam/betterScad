@@ -256,12 +256,11 @@ class App {
     // it is two short strings, but this is an SVG, and replacing it wholesale on
     // every camera change would rebuild it on every frame of an orbit.
     //
-    // It sits *beside* the readout rather than inside it — no panel of its own,
-    // straight onto the viewport — so the two share a corner without the arms
-    // looking like a value the box is reporting.
+    // No panel of its own, straight onto the viewport, in the corner opposite
+    // the camera readout — the two answer different questions and had started to
+    // look like one control.
     const axisIndicator = new AxisIndicator();
     const hud = el('div', { class: 'viewport__hud' });
-    const corner = el('div', { class: 'viewport__corner' }, [axisIndicator.element, hud]);
     this.animationHost = el('div', {});
 
     this.viewportEmpty = viewportEmptyState();
@@ -271,7 +270,8 @@ class App {
       el('div', { class: 'viewport__overlay' }, [
         this.busyBadge,
         this.measureReadout,
-        corner,
+        axisIndicator.element,
+        hud,
         ...this.buildViewTools(),
       ]),
     );

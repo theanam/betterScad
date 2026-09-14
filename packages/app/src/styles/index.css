@@ -814,32 +814,25 @@ textarea {
   pointer-events: none;
 }
 
-/* The bottom-left stack: the axis indicator, and the camera readout under it.
-   Two separate things that share a corner, rather than one panel — the arms sit
-   straight on the viewport so they read as part of the scene, not as another
-   value the box is reporting. */
-.viewport__corner {
-  position: absolute;
-  bottom: var(--bs-space-3);
-  left: var(--bs-space-3);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--bs-space-2);
-  pointer-events: none;
-}
+/* The camera readout. Top-right, away from the axis indicator: the two answer
+   different questions and had started to look like one control.
 
+   Quiet on purpose — no panel and no border, a size below the rest of the UI,
+   and the faint ink. It is a reference you go looking for, not something that
+   should compete with the model for attention. */
 .viewport__hud {
+  position: absolute;
+  top: var(--bs-space-3);
+  right: var(--bs-space-3);
   display: flex;
-  gap: var(--bs-space-3);
+  gap: var(--bs-space-2);
   white-space: nowrap;
-  padding: 6px 9px;
-  border-radius: var(--bs-radius);
-  background: color-mix(in srgb, var(--bs-surface) 82%, transparent);
-  border: 1px solid var(--bs-border);
   font-family: var(--bs-font-mono);
-  font-size: var(--bs-font-size-sm);
-  color: var(--bs-text-muted);
+  font-size: 10.5px;
+  color: var(--bs-text-faint);
+  /* Enough to keep it legible where the model passes behind it, without the
+     box that made it look like a panel. */
+  text-shadow: 0 0 4px var(--bs-viewport-bg), 0 0 4px var(--bs-viewport-bg);
   pointer-events: none;
 }
 
@@ -917,13 +910,17 @@ textarea {
    backdrop colour, so an `x` over a light face of the model stays readable.
    `paint-order` puts that halo under the fill rather than over it. */
 .axisindicator {
+  position: absolute;
+  bottom: var(--bs-space-3);
+  left: var(--bs-space-3);
   display: block;
+  pointer-events: none;
 }
 
 .axisindicator text {
   paint-order: stroke;
   stroke: var(--bs-viewport-bg);
-  stroke-width: 0.14;
+  stroke-width: 0.06;
   stroke-linejoin: round;
   font-family: var(--bs-font-ui);
   font-weight: 600;
