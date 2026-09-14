@@ -1350,6 +1350,22 @@ class Interpreter {
 
 interface BuiltinModule {
   params: string[];
+  /**
+   * What each optional parameter falls back to, written as the source you would
+   * type to get the same result.
+   *
+   * For tooling to show — the editor puts these in the signature it keeps on
+   * screen — so they are display strings rather than values. Declared here, next
+   * to the `build` that implements them, because the shortest leash available is
+   * having the two in the same object literal; `defaults.test.js` then holds
+   * them to it by rendering each call with the parameter left out and again with
+   * it set to the default, and failing if the geometry differs.
+   *
+   * Only list a parameter whose fallback a single literal honestly describes.
+   * `cylinder`'s `r` is "1, unless `d` or `r1`/`r2` say otherwise", which it
+   * does not, so it is absent rather than half-true.
+   */
+  defaults?: Record<string, string>;
   /** Modules like `color()` tolerate arbitrary extra named arguments. */
   acceptsExtra?: boolean;
   build(
@@ -1595,6 +1611,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   // --- 3D primitives ---
   cube: {
     params: ['size', 'center'],
+    defaults: { size: '1', center: 'false' },
     build: (args, _children, _scope, _interp, span) => {
       const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
       return node('cube', { size, center: isTruthy(args.get('center')) }, [], [], span);
@@ -1603,6 +1620,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   sphere: {
     params: ['r', 'd'],
+    defaults: { r: '1' },
     build: (args, _children, scope, _interp, span) => {
       const d = args.get('d');
       const r = d !== undefined ? asNumber(d, 2) / 2 : asNumber(args.get('r'), 1);
@@ -1612,6 +1630,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   cylinder: {
     params: ['h', 'r', 'r1', 'r2', 'center', 'd', 'd1', 'd2'],
+    defaults: { h: '1', center: 'false' },
     build: (args, _children, scope, _interp, span) => {
       const { r1, r2 } = cylinderRadii(args);
       return node(
@@ -1666,6 +1685,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   // --- 2D primitives ---
   square: {
     params: ['size', 'center'],
+    defaults: { size: '1', center: 'false' },
     build: (args, _children, _scope, _interp, span) => {
       const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
       return node('square', { size, center: isTruthy(args.get('center')) }, [], [], span);
@@ -1683,6 +1703,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    */
   rounded_square: {
     params: ['size', 'r', 'center'],
+    defaults: { size: '1', r: '0', center: 'false' },
     build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
       const center = isTruthy(args.get('center'));
@@ -1723,6 +1744,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    */
   rounded_cube: {
     params: ['size', 'r', 'center'],
+    defaults: { size: '1', r: '0', center: 'false' },
     build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
       const center = isTruthy(args.get('center'));
@@ -1790,6 +1812,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       'center',
       'segments',
     ],
+    defaults: { internal: 'false', clearance: '0.2', angle: '60', chamfer: 'true', center: 'false' },
     build: (args, _children, scope, interp, span) => {
       const d = asNumber(args.get('d'), 0);
       const pitch = asNumber(args.get('pitch'), 0);
@@ -1976,6 +1999,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   circle: {
     params: ['r', 'd'],
+    defaults: { r: '1' },
     build: (args, _children, scope, _interp, span) => {
       const d = args.get('d');
       const r = d !== undefined ? asNumber(d, 2) / 2 : asNumber(args.get('r'), 1);
@@ -2016,6 +2040,15 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       'text', 'size', 'font', 'halign', 'valign', 'spacing',
       'direction', 'language', 'script',
     ],
+    defaults: {
+      size: '10',
+      halign: '"left"',
+      valign: '"baseline"',
+      spacing: '1',
+      direction: '"ltr"',
+      language: '"en"',
+      script: '"latin"',
+    },
     build: (args, _children, scope, _interp, span) =>
       node(
         'text',
@@ -2165,6 +2198,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   offset: {
     params: ['r', 'delta', 'chamfer'],
+    defaults: { chamfer: 'false' },
     build: (args, children, scope, _interp, span) => {
       const r = args.get('r');
       const delta = args.get('delta');
@@ -2210,6 +2244,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   // --- 2D <-> 3D ---
   linear_extrude: {
     params: ['height', 'center', 'convexity', 'twist', 'slices', 'scale', 'v'],
+    defaults: { height: '100', center: 'false', twist: '0', scale: '1' },
     build: (args, children, scope, _interp, span) => {
       const scaleArg = args.get('scale');
       const scaleTop = scaleArg === undefined ? [1, 1] : (asVector(scaleArg, 2, 1) ?? [1, 1]);
@@ -2246,6 +2281,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   rotate_extrude: {
     params: ['angle', 'convexity', 'start'],
+    defaults: { angle: '360', start: '0' },
     build: (args, children, scope, _interp, span) =>
       node(
         'rotate_extrude',
@@ -2262,6 +2298,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   projection: {
     params: ['cut'],
+    defaults: { cut: 'false' },
     build: (args, children, _scope, _interp, span) =>
       node('projection', { cut: isTruthy(args.get('cut')) }, children, [], span),
   },
@@ -2269,6 +2306,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   // --- imports ---
   import: {
     params: ['file', 'convexity', 'layer', 'origin', 'scale', 'center', 'id', 'dpi'],
+    defaults: { scale: '1', center: 'false', dpi: '72' },
     build: (args, _children, scope, _interp, span) =>
       node(
         'import',
@@ -2289,6 +2327,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   surface: {
     params: ['file', 'center', 'convexity', 'invert'],
+    defaults: { center: 'false', invert: 'false' },
     build: (args, _children, _scope, _interp, span) =>
       node(
         'surface',

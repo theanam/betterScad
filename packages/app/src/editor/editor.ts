@@ -40,6 +40,7 @@ import type { Diagnostic } from '@betterscad/engine';
 import { openscad } from './scad-language.js';
 import { scadCompletions } from './completions.js';
 import { inchEntry } from './units.js';
+import { parameterCompletions, signatureHelp } from './signature.js';
 
 /**
  * Tab, when there is a suggestion open.
@@ -181,7 +182,16 @@ export class ScadEditor {
       this.indent.of(indentUnit.of(' '.repeat(settings.indentWidth))),
       bracketMatching(),
       closeBrackets(),
-      autocompletion({ override: [scadCompletions], activateOnTyping: true, icons: true }),
+      // Two sources, because they answer different questions: which parameters
+      // this call still takes, and what the language has by that name.
+      autocompletion({
+        override: [parameterCompletions, scadCompletions],
+        activateOnTyping: true,
+        icons: true,
+      }),
+      // Keeps the signature on screen for as long as the cursor is between the
+      // brackets, which is exactly when autocomplete has nothing more to say.
+      signatureHelp(),
       rectangularSelection(),
       highlightActiveLine(),
       highlightSelectionMatches(),
