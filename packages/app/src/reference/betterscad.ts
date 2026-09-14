@@ -11,7 +11,7 @@ import type { ReferenceGroup } from './types.js';
 export const NEW_SHAPES: ReferenceGroup = {
   id: 'new-shapes',
   title: 'Shapes',
-  blurb: 'Three shapes you would otherwise build by hand every time.',
+  blurb: 'Four shapes you would otherwise build by hand every time.',
   entries: [
     {
       id: 'rounded_square',
@@ -129,6 +129,127 @@ export const NEW_SHAPES: ReferenceGroup = {
       ],
       see: ['circle', 'polygon', 'fn'],
       keywords: ['hexagon', 'pentagon', 'octagon', 'equilateral', 'nut', 'side length'],
+    },
+    {
+      id: 'thread',
+      name: 'thread()',
+      signature: 'thread(d, pitch, h, internal, clearance, angle, chamfer, center, segments)',
+      extension: true,
+      plain:
+        'A screw thread. Give it the diameter of the bolt, how far one turn advances, and how ' +
+        'long it should be. Add `internal = true` and you get the hole that same bolt screws ' +
+        'into — the two are made to fit.',
+      details: [
+        '`d` is the outside diameter, measured across the crests, and `pitch` is how far the ' +
+          'thread advances in one turn. A common M8 bolt is `d = 8, pitch = 1.25`. Both are ' +
+          'ordinary numbers; there is no table of standard sizes to look a name up in.',
+        'The thread is right-handed, single start, and sits on a solid core, so `thread()` on ' +
+          'its own is already a threaded rod — there is nothing to add a shaft to.',
+        '`internal = true` is the whole mating story. It builds the **solid to subtract**, not ' +
+          'the nut: put it under `negative()` or in a `difference()` and what is left is a hole ' +
+          'the matching bolt turns into.',
+        '`clearance` (default `0.2`) is the gap between the pair, and only the internal thread ' +
+          'grows by it — a bolt always measures the `d` you asked for. Raise it for a looser ' +
+          'fit or a printer that runs wide; `0` gives a geometrically exact pair, which will ' +
+          'not assemble in any real material.',
+        'The clearance is uniform, not merely radial: the female groove is wider across the ' +
+          'flanks as well as deeper, which is what actually lets the two turn against each other.',
+        'Both are the same construction with one number changed, so a bolt and its hole cannot ' +
+          'drift apart. Anything true of one is true of the other.',
+        '`chamfer` (default `true`) shapes the ends. External threads taper in, so the first ' +
+          'turn runs out instead of ending in a knife edge that will not print. Internal ones ' +
+          'flare out into a countersink, which is what lets a bolt start square rather than ' +
+          'cross-threading. Set it `false` for a thread that continues into adjoining geometry.',
+        '`angle` (default `60`) is the included angle of the tooth. 60 is the ISO metric ' +
+          'profile; 29 is roughly an Acme leadscrew. The crest and root truncations follow ISO ' +
+          'proportions at any angle.',
+        '`center` behaves as it does for `cylinder()`. `segments` is the number of facets per ' +
+          'turn; it follows `$fn`/`$fa`/`$fs` but never drops below 24, because a coarse circle ' +
+          'is merely faceted while a coarse helix stops being a thread at all.',
+        'A thread is a lot of geometry — a turn of facets for every turn of the helix. A long, ' +
+          'fine-pitched, high-`$fn` thread says so in a warning rather than just going slow.',
+        'A pitch too coarse for the diameter, or a clearance so large the groove closes up, are ' +
+          'errors rather than a shape that is quietly not a thread.',
+      ],
+      params: [
+        { name: 'd', description: 'Outside diameter, across the crests.' },
+        { name: 'pitch', description: 'How far one turn advances.' },
+        { name: 'h', description: 'Length of the threaded section.' },
+        {
+          name: 'internal',
+          description:
+            '`true` builds the solid to subtract for a matching hole. Default `false`.',
+        },
+        {
+          name: 'clearance',
+          description: 'Fit between the pair, applied to the internal thread only. Default `0.2`.',
+        },
+        { name: 'angle', description: 'Included angle of the tooth. Default `60`.' },
+        {
+          name: 'chamfer',
+          description: 'Shape the ends — taper outside, countersink inside. Default `true`.',
+        },
+        { name: 'center', description: '`true` centres it on the origin. Default `false`.' },
+        { name: 'segments', description: 'Facets per turn. Defaults from `$fn`, floored at 24.' },
+      ],
+      downgrade:
+        'A generated module sweeping the same profile up the same twisted extrusion, defined ' +
+        'once however many times it is used.',
+      examples: [
+        {
+          code: 'thread(d = 8, pitch = 1.25, h = 10, $fn = 48);',
+          image: 'thread',
+          view: 'plan',
+          zoom: 1.35,
+          caption:
+            'An M8 threaded rod: `d = 8` across the crests, advancing 1.25 per turn. Both ends ' +
+            'taper so the first turn runs out rather than ending in a knife edge.',
+        },
+        {
+          code: `difference() {
+  cylinder(h = 7, r = 7.5, $fn = 6);
+  thread(d = 8, pitch = 1.25, h = 7, internal = true, $fn = 48);
+}`,
+          image: 'thread-nut',
+          view: 'plan',
+          caption:
+            'The same numbers with `internal = true`, subtracted from a hex blank: a nut the rod ' +
+            'above screws into.',
+        },
+        {
+          code: `union() {
+  cylinder(h = 6, r = 9, $fn = 48);
+  negative() thread(d = 8, pitch = 1.25, h = 6, internal = true, $fn = 48);
+}`,
+          image: 'thread-negative',
+          view: 'plan',
+          caption:
+            'Written with `negative()` instead, so the threaded hole sits next to the thing it ' +
+            'goes through.',
+        },
+      ],
+      see: ['negative', 'cylinder', 'difference', 'regular_polygon', 'fn'],
+      keywords: [
+        'screw',
+        'bolt',
+        'nut',
+        'helix',
+        'helical',
+        'metric',
+        'iso',
+        'm3',
+        'm4',
+        'm5',
+        'm6',
+        'm8',
+        'tap',
+        'tapped',
+        'fastener',
+        'pitch',
+        'acme',
+        'leadscrew',
+        'threaded rod',
+      ],
     },
   ],
 };

@@ -1,0 +1,58 @@
+/* BetterSCAD
+{
+  "version": 1,
+  "presets": { "default": { "size": 8, "pitch": 1.25, "fit": 0.2 } },
+  "activePreset": "default"
+}
+*/
+// Demonstrates the `thread()` extension: a bolt and the nut it turns into.
+//
+// Both come from the same three numbers. `internal = true` builds the solid to
+// *subtract* rather than the nut itself, so the hole can be written where the
+// hole is — under a negative() — instead of being hoisted into a difference()
+// at the top of the file.
+//
+// The pair is one construction with one number changed, so they cannot drift
+// apart: whatever is true of the bolt is true of the hole that clears it.
+//
+// Export this as legacy .scad (File -> Export as legacy .scad, or
+// `bscad thread.bscad --legacy-scad`) to see it become a generated module.
+
+/* [Fastener] */
+size = 8;      // [3:0.5:20]
+pitch = 1.25;  // [0.5:0.05:3]
+
+/* [Fit] */
+// Gap between the pair. Raise it for a printer that runs wide.
+fit = 0.2;     // [0:0.05:0.6]
+
+$fn = 56;
+
+length = 22;
+head = size * 1.8;
+nut = size * 1.7;
+
+// --- the bolt ---------------------------------------------------------------
+
+translatex(-size * 1.6) {
+  // A hex head, sized off the thread the way a real fastener is.
+  linear_extrude(height = size * 0.7) regular_polygon(6, head / 2);
+
+  // The shank. `translatez` is BetterSCAD sugar for translate([0, 0, d]).
+  translatez(size * 0.7 - 0.01) thread(d = size, pitch = pitch, h = length);
+}
+
+// --- the nut ----------------------------------------------------------------
+
+translatex(size * 1.6) {
+  linear_extrude(height = size * 0.8) regular_polygon(6, nut / 2);
+
+  // Everything below is negative space, subtracted from the blank above. The
+  // same d and pitch as the bolt, so the two mate; `fit` is the only thing
+  // separating them.
+  negative() {
+    translatez(-1)
+      thread(d = size, pitch = pitch, h = size * 0.8 + 2,
+             internal = true, clearance = fit);
+  }
+}

@@ -184,6 +184,7 @@ numbered suffix rather than shadowing it.
 | [`rounded_square()`](#rounded_square-and-rounded_cube) | module: a hull of four corner circles |
 | [`rounded_cube()`](#rounded_square-and-rounded_cube) | module: a hull of eight corner spheres |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
+| [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
 | [Single-axis transforms](#single-axis-transforms) | the stock call with zeros in the other slots |
 | [C-style statement `for`](#c-style-statement-for) | bounded range `for` with the condition as a guard |
@@ -285,6 +286,55 @@ has no shape to describe; both are errors rather than an empty result.
 
 **Downgrade:** a generated module wrapping `circle($fn = sides)` at the
 circumradius `length / (2 * sin(180 / sides))`.
+
+### `thread()`
+
+`thread(d, pitch, h)` — a helical screw thread, described the way a fastener is:
+the diameter across the crests and how far one turn advances. An M8 bolt is
+`d = 8, pitch = 1.25`. There is no table of standard sizes to look a name up in.
+
+```scad
+thread(d = 8, pitch = 1.25, h = 20);   // an M8 threaded rod
+```
+
+The thread is right-handed, single start, and sits on a solid core, so this is
+already a rod rather than something to wrap around a shaft.
+
+`internal = true` builds **the solid to subtract**, not the nut — so the hole
+goes where the hole is:
+
+```scad
+union() {
+  cylinder(h = 8, r = 7);
+  negative() thread(d = 8, pitch = 1.25, h = 8, internal = true);
+}
+```
+
+The bolt above screws into that. The two are the same construction with one
+number changed — `clearance` (default `0.2`) grows the internal thread and
+nothing else, so a bolt always measures the `d` you asked for. The clearance is
+uniform rather than merely radial: the female groove is wider across the flanks
+as well as deeper, which is what actually lets the pair turn. Setting it to `0`
+gives a geometrically exact pair, which will not assemble in any real material.
+
+`chamfer` (default `true`) shapes the ends, in opposite directions for the two
+kinds. An external thread tapers in, so its first turn runs out instead of
+ending in a knife edge that will not print. An internal one flares into a
+countersink, which is what lets a bolt start square rather than cross-threading.
+Turn it off for a thread that continues into adjoining geometry.
+
+`angle` (default `60`, the ISO metric profile; 29 is roughly an Acme leadscrew)
+is the included angle of the tooth, and `center` behaves as it does for
+`cylinder()`. `segments` is the number of facets per turn: it follows
+`$fn`/`$fa`/`$fs` but never drops below 24, because a coarse circle is merely
+faceted while a coarse helix stops being a thread at all. A thread dense enough
+to be slow says so rather than just being slow.
+
+A pitch too coarse for the diameter, or a clearance large enough to close the
+groove up, are errors rather than a shape that is quietly not a thread.
+
+**Downgrade:** a generated module sweeping the same profile up the same twisted
+extrusion.
 
 ### Loose-number transforms
 

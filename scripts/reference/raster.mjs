@@ -148,6 +148,17 @@ function cameraAt(target, distance, width, height, view) {
 const FRAME_FILL = 0.84;
 
 /**
+ * How much of the frame the model fills, for a given `zoom`.
+ *
+ * Above 1 pushes the camera in and below 1 pulls it back, which is the way the
+ * catalogue documents it and the way the word reads. Capped just short of the
+ * frame so a pushed-in model still cannot run off the edge.
+ */
+function frameFill(zoom) {
+  return Math.min(0.98, FRAME_FILL * (zoom || 1));
+}
+
+/**
  * A camera framed on what the model actually covers on screen, not on its
  * bounding sphere.
  *
@@ -197,7 +208,7 @@ function frameCamera(vertices, width, height, view, zoom) {
       }
     }
 
-    const fill = FRAME_FILL / zoom;
+    const fill = frameFill(zoom);
     distance *= Math.max((maxX - minX) / (width * fill), (maxY - minY) / (height * fill));
 
     // Re-centre by sliding the target across the camera's own screen plane, so
@@ -670,7 +681,7 @@ function drawFlat(target, geometry, zoom) {
     if (y > maxY) maxY = y;
   }
 
-  const fill = FRAME_FILL / zoom;
+  const fill = frameFill(zoom);
   const scale = Math.min(
     (target.width * fill) / Math.max(maxX - minX, 1e-6),
     (target.height * fill) / Math.max(maxY - minY, 1e-6),

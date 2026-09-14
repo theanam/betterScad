@@ -120,6 +120,7 @@ negative never reaches further than the braces it was written in.
 | `rounded_square(size, r)` | A square with rounded corners. `size` like `square()`, plus a radius | A hull of four corner circles |
 | `rounded_cube(size, r)` | A cube with rounded edges. `size` like `cube()`, plus a radius | A hull of eight corner spheres |
 | `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
+| `thread(d, pitch, h)` | A screw thread. Add `internal = true` for the hole the same bolt screws into | A generated module sweeping the profile up a twisted extrusion |
 | `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |
 | `translatex(d)`<br>`translatey(d)`<br>`translatez(d)` | Move along one axis | `translate([d, 0, 0])`, and so on |
 | `rotatex(a)`<br>`rotatey(a)`<br>`rotatez(a)` | Turn about one axis | `rotate([a, 0, 0])`, and so on |

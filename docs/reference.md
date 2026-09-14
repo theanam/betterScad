@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 12 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 13 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -2437,7 +2437,7 @@ What BetterSCAD adds on top, under one rule: every addition has a defined way ba
 
 ## Shapes
 
-Three shapes you would otherwise build by hand every time.
+Four shapes you would otherwise build by hand every time.
 
 <a id="entry-rounded_square"></a>
 
@@ -2569,6 +2569,84 @@ The polygon is centred on the origin, with a vertex on the +X axis.
 **Saved as OpenSCAD `.scad`:** A generated module wrapping `circle($fn = sides)` at the matching circumradius.
 
 See also: [`circle()`](#entry-circle) · [`polygon()`](#entry-polygon) · [`$fn`](#entry-fn)
+
+<a id="entry-thread"></a>
+
+### thread()
+
+```
+thread(d, pitch, h, internal, clearance, angle, chamfer, center, segments)
+```
+
+A screw thread. Give it the diameter of the bolt, how far one turn advances, and how long it should be. Add `internal = true` and you get the hole that same bolt screws into — the two are made to fit.
+
+```scad
+thread(d = 8, pitch = 1.25, h = 10, $fn = 48);
+```
+
+<img src="images/reference/thread.png" alt="An M8 threaded rod: d = 8 across the crests, advancing 1.25 per turn. Both ends taper so the first turn runs out rather than ending in a knife edge." width="420">
+
+*An M8 threaded rod: `d = 8` across the crests, advancing 1.25 per turn. Both ends taper so the first turn runs out rather than ending in a knife edge.*
+
+```scad
+difference() {
+  cylinder(h = 7, r = 7.5, $fn = 6);
+  thread(d = 8, pitch = 1.25, h = 7, internal = true, $fn = 48);
+}
+```
+
+<img src="images/reference/thread-nut.png" alt="The same numbers with internal = true, subtracted from a hex blank: a nut the rod above screws into." width="420">
+
+*The same numbers with `internal = true`, subtracted from a hex blank: a nut the rod above screws into.*
+
+```scad
+union() {
+  cylinder(h = 6, r = 9, $fn = 48);
+  negative() thread(d = 8, pitch = 1.25, h = 6, internal = true, $fn = 48);
+}
+```
+
+<img src="images/reference/thread-negative.png" alt="Written with negative() instead, so the threaded hole sits next to the thing it goes through." width="420">
+
+*Written with `negative()` instead, so the threaded hole sits next to the thing it goes through.*
+
+| Argument | |
+| --- | --- |
+| `d` | Outside diameter, across the crests. |
+| `pitch` | How far one turn advances. |
+| `h` | Length of the threaded section. |
+| `internal` | `true` builds the solid to subtract for a matching hole. Default `false`. |
+| `clearance` | Fit between the pair, applied to the internal thread only. Default `0.2`. |
+| `angle` | Included angle of the tooth. Default `60`. |
+| `chamfer` | Shape the ends — taper outside, countersink inside. Default `true`. |
+| `center` | `true` centres it on the origin. Default `false`. |
+| `segments` | Facets per turn. Defaults from `$fn`, floored at 24. |
+
+`d` is the outside diameter, measured across the crests, and `pitch` is how far the thread advances in one turn. A common M8 bolt is `d = 8, pitch = 1.25`. Both are ordinary numbers; there is no table of standard sizes to look a name up in.
+
+The thread is right-handed, single start, and sits on a solid core, so `thread()` on its own is already a threaded rod — there is nothing to add a shaft to.
+
+`internal = true` is the whole mating story. It builds the **solid to subtract**, not the nut: put it under `negative()` or in a `difference()` and what is left is a hole the matching bolt turns into.
+
+`clearance` (default `0.2`) is the gap between the pair, and only the internal thread grows by it — a bolt always measures the `d` you asked for. Raise it for a looser fit or a printer that runs wide; `0` gives a geometrically exact pair, which will not assemble in any real material.
+
+The clearance is uniform, not merely radial: the female groove is wider across the flanks as well as deeper, which is what actually lets the two turn against each other.
+
+Both are the same construction with one number changed, so a bolt and its hole cannot drift apart. Anything true of one is true of the other.
+
+`chamfer` (default `true`) shapes the ends. External threads taper in, so the first turn runs out instead of ending in a knife edge that will not print. Internal ones flare out into a countersink, which is what lets a bolt start square rather than cross-threading. Set it `false` for a thread that continues into adjoining geometry.
+
+`angle` (default `60`) is the included angle of the tooth. 60 is the ISO metric profile; 29 is roughly an Acme leadscrew. The crest and root truncations follow ISO proportions at any angle.
+
+`center` behaves as it does for `cylinder()`. `segments` is the number of facets per turn; it follows `$fn`/`$fa`/`$fs` but never drops below 24, because a coarse circle is merely faceted while a coarse helix stops being a thread at all.
+
+A thread is a lot of geometry — a turn of facets for every turn of the helix. A long, fine-pitched, high-`$fn` thread says so in a warning rather than just going slow.
+
+A pitch too coarse for the diameter, or a clearance so large the groove closes up, are errors rather than a shape that is quietly not a thread.
+
+**Saved as OpenSCAD `.scad`:** A generated module sweeping the same profile up the same twisted extrusion, defined once however many times it is used.
+
+See also: [`negative()`](#entry-negative) · [`cylinder()`](#entry-cylinder) · [`difference()`](#entry-difference) · [`regular_polygon()`](#entry-regular_polygon) · [`$fn`](#entry-fn)
 
 ## Negative space
 

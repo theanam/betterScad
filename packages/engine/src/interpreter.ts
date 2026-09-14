@@ -31,6 +31,7 @@ import {
   Mat4,
   Resolution,
   SceneNode,
+  fragments,
   group,
   scopeGroup,
   matMultiply,
@@ -1417,6 +1418,138 @@ export function circumradius(sides: number, length: number): number {
 }
 
 /**
+ * Segments per turn never drops below this, whatever `$fn` says.
+ *
+ * A thread is a helix sampled in the same plane a circle is, but a coarse
+ * circle is merely faceted while a coarse helix loses the flanks that make it
+ * a thread at all. The two want different numbers, so this one is its own.
+ */
+const MIN_THREAD_SEGMENTS = 24;
+
+/** Past this many slices a thread is worth a word, not a refusal. */
+const MAX_THREAD_SLICES = 4000;
+
+/**
+ * The 2D profile a `thread()` sweeps.
+ *
+ * `linear_extrude(twist = …)` turns its profile about Z as it rises, so a point
+ * drawn at profile angle `phi` traces a helix. One full turn advances exactly
+ * one pitch, which gives the conversion this is built on: a point that belongs
+ * `w` millimetres from the tooth centre *along the axis* has to be drawn at
+ * profile angle `360 * w / pitch`. The sawtooth everyone pictures in an axial
+ * section is therefore drawn here as a polar wedge — 270 degrees wide at the
+ * root, 45 at the crest — and the extrusion turns it back into the sawtooth.
+ *
+ * The flanks are straight in (radius, axial offset), so in this plane they are
+ * spirals and have to be sampled. The crest is an arc of the major radius and
+ * has to be sampled too — closing it with a single chord would plane the tip of
+ * the tooth flat, and since the female profile is the wider of the two its
+ * chord cuts deeper, which is exactly how a bolt ends up poking through the
+ * hole that is supposed to clear it. Both use the same angular resolution as
+ * the circles elsewhere in the shape.
+ *
+ * The closing edge across the root stays a chord on purpose: it falls *inside*
+ * the minor radius, which is what gives the union with the core real overlap
+ * instead of a coincident surface.
+ */
+function threadProfilePoints(
+  rmin: number,
+  rmaj: number,
+  apex: number,
+  halfTan: number,
+  pitch: number,
+  steps: number,
+  crestSteps: number,
+): [number, number][] {
+  const polar = (r: number, degrees: number): [number, number] => {
+    const a = (degrees * Math.PI) / 180;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  };
+  const angleAt = (r: number): number => (360 * (apex - r) * halfTan) / pitch;
+  const flank = (i: number, sign: number): [number, number] => {
+    const r = rmin + ((rmaj - rmin) * i) / steps;
+    return polar(r, sign * angleAt(r));
+  };
+
+  const crest = angleAt(rmaj);
+  const points: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) points.push(flank(i, 1));
+  // The ends of the arc are the flank endpoints, already placed.
+  for (let i = 1; i < crestSteps; i++) points.push(polar(rmaj, crest - (2 * crest * i) / crestSteps));
+  for (let i = steps; i >= 0; i--) points.push(flank(i, -1));
+  return points;
+}
+
+/**
+ * The solid a thread is trimmed to.
+ *
+ * The helix is generated a turn long at each end and cut back to length here,
+ * so a partial turn never has to be closed off by hand and the ends are always
+ * a clean cut through full material.
+ *
+ * With a `cut`, the ends are shaped too, and the two kinds of thread are shaped
+ * in opposite directions. An external thread tapers *in*, so its first turn
+ * runs out instead of ending in a knife edge that will not print and will not
+ * start a nut. An internal thread flares *out*, because the mouth of a hole has
+ * to be wider than the thread — that flare is the countersink that lets a bolt
+ * find the hole square rather than cross-threading into it.
+ */
+function threadTrimProfile(
+  rmaj: number,
+  h: number,
+  cut: number,
+  internal: boolean,
+): [number, number][] {
+  if (cut <= 0) {
+    return [
+      [0, 0],
+      [rmaj, 0],
+      [rmaj, h],
+      [0, h],
+    ];
+  }
+  const mouth = internal ? rmaj + cut : rmaj - cut;
+  return [
+    [0, 0],
+    [mouth, 0],
+    [rmaj, cut],
+    [rmaj, h - cut],
+    [mouth, h],
+    [0, h],
+  ];
+}
+
+/**
+ * The cone that fills one end of an internal thread out to its countersink.
+ *
+ * Flaring the trim is not enough on its own: an intersection can only take
+ * material away, and there is no thread out at the mouth radius for it to keep.
+ * So the cone is unioned into the thread *before* the trim, where it sits
+ * entirely inside the flare and survives it — which keeps the whole shape a
+ * single boolean rather than a pile of overlapping pieces.
+ */
+function threadMouthProfile(
+  rmaj: number,
+  h: number,
+  cut: number,
+  top: boolean,
+): [number, number][] {
+  return top
+    ? [
+        [0, h - cut],
+        [rmaj, h - cut],
+        [rmaj + cut, h],
+        [0, h],
+      ]
+    : [
+        [0, 0],
+        [rmaj + cut, 0],
+        [rmaj, cut],
+        [0, cut],
+      ];
+}
+
+/**
  * Clamps a corner radius to what the shape can actually hold.
  *
  * A radius past half the shortest side has no geometry to round — the straight
@@ -1621,6 +1754,183 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       const hull = node('hull', {}, corners, [], span);
       if (center) return hull;
       return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
+    },
+  },
+
+
+  /**
+   * `thread(d, pitch, h, …)` — a helical screw thread (BetterSCAD extension).
+   *
+   * Built, like the other added shapes, as the scene subtree its legacy export
+   * prints: a core cylinder, a profile swept up a twisted extrusion, and an
+   * intersection that cuts the result to length and shapes its ends.
+   *
+   * **A bolt and the hole it screws into are the same construction.** One
+   * number, `grow`, separates them — it is zero for an external thread and half
+   * the clearance for an internal one, and it feeds the core radius, the major
+   * radius and the apex of the tooth together. Growing the apex by *twice* the
+   * offset is what makes the clearance uniform rather than merely radial: the
+   * tooth is a wedge of half-angle `angle / 2`, and offsetting a wedge outward
+   * by `x` moves its apex out by `x / sin(half-angle)`, which for the standard
+   * 60 degrees is `2x`. So the female groove ends up wider on the flanks as
+   * well as deeper, and the pair actually turns.
+   *
+   * That is the whole mating story, and it is one code path: there is no second
+   * formula for the female thread that could drift out of step with this one.
+   */
+  thread: {
+    params: [
+      'd',
+      'pitch',
+      'h',
+      'internal',
+      'clearance',
+      'angle',
+      'chamfer',
+      'center',
+      'segments',
+    ],
+    build: (args, _children, scope, interp, span) => {
+      const d = asNumber(args.get('d'), 0);
+      const pitch = asNumber(args.get('pitch'), 0);
+      const h = asNumber(args.get('h'), 0);
+      const angle = args.get('angle') === undefined ? 60 : asNumber(args.get('angle'), 60);
+
+      const reject = (message: string): undefined => {
+        interp.error(`thread(): ${message}`, span, 'eval.bad-thread');
+        return undefined;
+      };
+      if (!(d > 0)) return reject(`d must be greater than 0, got ${d}.`);
+      if (!(pitch > 0)) return reject(`pitch must be greater than 0, got ${pitch}.`);
+      if (!(h > 0)) return reject(`h must be greater than 0, got ${h}.`);
+      if (!(angle > 0 && angle < 180)) {
+        return reject(`angle must be between 0 and 180, got ${angle}.`);
+      }
+
+      const internal = isTruthy(args.get('internal'));
+      const clearance =
+        args.get('clearance') === undefined ? 0.2 : asNumber(args.get('clearance'), 0.2);
+      const chamfer = args.get('chamfer') === undefined ? true : isTruthy(args.get('chamfer'));
+      const center = isTruthy(args.get('center'));
+
+      const halfTan = Math.tan(((angle / 2) * Math.PI) / 180);
+      // Height of the sharp V the profile is truncated from, as ISO defines it,
+      // with ISO's truncations: H/8 off the crest and H/4 off the root.
+      const vHeight = pitch / 2 / halfTan;
+      const grow = internal ? clearance / 2 : 0;
+
+      const rmaj = d / 2 + grow;
+      const rmin = d / 2 - (5 * vHeight) / 8 + grow;
+      const apex = d / 2 + vHeight / 8 + 2 * grow;
+
+      if (rmin <= 0) {
+        return reject(
+          `pitch ${pitch} is too coarse for d = ${d}; the thread would cut past the axis.`,
+        );
+      }
+      // The tooth already spans 270 degrees of the profile at its root. Past a
+      // half turn either side it wraps onto itself and the groove disappears.
+      if ((360 * (apex - rmin) * halfTan) / pitch >= 175) {
+        return reject(`clearance ${clearance} is too large for pitch ${pitch}; the groove closes up.`);
+      }
+
+      const res = resolutionFor(args, scope);
+      const segArg = args.get('segments');
+      const seg = Math.max(
+        MIN_THREAD_SEGMENTS,
+        segArg !== undefined ? Math.floor(asNumber(segArg, 0)) : fragments(rmaj, res),
+      );
+      // Flank and crest are both sampled at the fragment count's angular step,
+      // so the tooth is exactly as smooth as the cylinder it sits on.
+      const steps = Math.max(4, Math.ceil((seg * (rmaj - rmin) * halfTan) / pitch));
+      const crestAngle = (360 * (apex - rmaj) * halfTan) / pitch;
+      const crestSteps = Math.max(1, Math.ceil((2 * crestAngle * seg) / 360));
+      // A turn of margin at each end, so the trim below always cuts through
+      // full material rather than having to close a partial turn.
+      const turns = Math.ceil(h / pitch) + 2;
+      const slices = turns * seg;
+      if (slices > MAX_THREAD_SLICES) {
+        interp.warn(
+          `thread(): this is ${slices} slices of geometry; pass a smaller segments= if it drags.`,
+          span,
+          'eval.thread-dense',
+        );
+      }
+
+      const threadRes: Resolution = { fn: seg, fa: res.fa, fs: res.fs };
+      const core = node(
+        'cylinder',
+        { h, r1: rmin, r2: rmin, center: false, resolution: threadRes },
+        [],
+        [],
+        span,
+      );
+
+      const ridge = transformNode(
+        translation(0, 0, -pitch),
+        [
+          node(
+            'linear_extrude',
+            {
+              height: turns * pitch,
+              center: false,
+              // Negative is the right-hand helix: OpenSCAD's positive twist
+              // turns clockwise looking down +Z, and a right-hand thread rises
+              // the other way.
+              twist: -turns * 360,
+              slices,
+              scaleTop: [1, 1],
+              v: undefined,
+              resolution: threadRes,
+            },
+            [
+              node(
+                'polygon',
+                {
+                  points: threadProfilePoints(rmin, rmaj, apex, halfTan, pitch, steps, crestSteps),
+                  paths: undefined,
+                },
+                [],
+                [],
+                span,
+              ),
+            ],
+            [],
+            span,
+          ),
+        ],
+        span,
+      );
+
+      // Too short to shape both ends and still have thread between them, and
+      // there is nothing to chamfer.
+      const cut = chamfer && 2 * (rmaj - rmin) < h ? rmaj - rmin : 0;
+      const revolve = (points: [number, number][]): SceneNode =>
+        node(
+          'rotate_extrude',
+          { angle: 360, start: 0, resolution: threadRes },
+          [node('polygon', { points, paths: undefined }, [], [], span)],
+          [],
+          span,
+        );
+
+      const parts = [core, ridge];
+      if (internal && cut > 0) {
+        parts.push(revolve(threadMouthProfile(rmaj, h, cut, false)));
+        parts.push(revolve(threadMouthProfile(rmaj, h, cut, true)));
+      }
+
+      // One intersection, so this comes back as a single solid: `intersection`
+      // unions each operand within itself first, where a bare `union` would
+      // hand back overlapping pieces and a volume counted twice.
+      const solid = node(
+        'intersection',
+        {},
+        [node('union', {}, parts, [], span), revolve(threadTrimProfile(rmaj, h, cut, internal))],
+        [],
+        span,
+      );
+      return center ? transformNode(translation(0, 0, -h / 2), [solid], span) : solid;
     },
   },
 
