@@ -16,7 +16,7 @@ no account, and nothing is uploaded.
 
 No install, no sign-up. It loads a starter model you can edit straight away.
 
-[Quick start](#quick-start) · [Why](#why-another-openscad) · [Architecture](#architecture) · [CLI](#command-line) · [Contributing](#contributing)
+[Quick start](#quick-start) · [What's new in the language](#language-extensions) · [CLI](#command-line) · [Contributing](#contributing)
 
 <br>
 
@@ -28,132 +28,103 @@ No install, no sign-up. It loads a starter model you can edit straight away.
 
 ## What it is
 
-BetterSCAD is a from-scratch reimplementation of the OpenSCAD language and geometry
-pipeline, built to run as a static site. Open an existing `.scad` file and it renders
-unmodified — the language surface is implemented in full, including `$fn`/`$fa`/`$fs`,
-the `% # ! *` modifiers, `hull()`, `minkowski()`, extrusions, `projection()`, `text()`,
-list comprehensions, `each`, recursion, function literals, `assert`, and DXF/SVG import.
+A CAD editor for the browser that speaks OpenSCAD. Open an existing `.scad` file
+and it renders unmodified — the whole language is there, not a subset.
 
-It is also a place to make the language *better*, under one hard rule: **every extension
-ships with a defined way back to plain `.scad`**. Nothing gets added without an answer to
-"how does this degrade to vanilla OpenSCAD?"
+It also adds a few things OpenSCAD doesn't have, under one rule: **every addition
+has a defined way back to plain `.scad`**, so nothing you write here can strand
+you.
 
 ## Features
 
 | | |
 | --- | --- |
-| **Local-first** | Fully static. No backend, no database, no account. Your models never leave the machine. Deploys to GitHub Pages. |
-| **Complete OpenSCAD language** | Existing `.scad` files open and render with zero modification. |
-| **Real file access** | Opens and saves files directly on disk via the File System Access API, with a download/upload fallback for Firefox and Safari. |
-| **Live customizer** | Auto-generates sliders, dropdowns and checkboxes from `//` parameter annotations, using OpenSCAD's own conventions. |
-| **Modern editor** | CodeMirror 6 with OpenSCAD syntax highlighting, autocomplete with real signatures, multi-file tabs, and inline error squiggles. |
-| **Fast + precise renders** | `F5` preview and `F6` full render, mirroring OpenSCAD, exposed to scripts as `$preview`. Auto-render keeps the preview live as you type, so the Preview button hides itself while it is on. |
-| **Exports** | STL (binary + ASCII), 3MF, OFF, AMF for 3D; SVG and DXF for 2D. |
-| **Imports** | STL, OBJ, OFF meshes; DXF and SVG outlines; `.dat` and image heightmaps via `surface()`. |
-| **Fonts for `text()`** | A curated set bundled for offline use, plus ~50 Google Fonts families fetched on demand and cached in IndexedDB. |
-| **CAD-style navigation** | Turntable orbit about the model's Z axis, with a corner view cube for orientation: click a face to snap to that view, or drag the cube to orbit freely. |
-| **Measurement** | Click vertices in the viewport to read coordinates, deltas and distances. |
-| **Animation** | `$t` playback in-app, and frame-sequence export from the CLI. |
-| **Offline / PWA** | Installable, and fully functional with no network. |
-| **Headless CLI** | `bscad model.scad -o model.stl` for CI and batch generation. |
-
-First run opens a welcome screen offering the sample model, a blank file, or a file
-from disk; it is reachable afterwards from the command palette
-(`Help ▸ Welcome to BetterSCAD`).
+| **Runs on your machine** | No server, no account. Your models never leave the browser. |
+| **Full OpenSCAD language** | Existing `.scad` files open and render unchanged. |
+| **Real files** | Opens and saves straight to disk, with a download/upload fallback on Firefox and Safari. |
+| **Live customizer** | Sliders and dropdowns generated from your `//` parameter comments. |
+| **Modern editor** | Syntax highlighting, autocomplete with real signatures, tabs, inline errors. |
+| **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
+| **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
+| **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
+| **Fonts for `text()`** | Some bundled for offline use, plus ~50 Google Fonts on demand. |
+| **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
+| **Measurement** | Click points in the viewport for coordinates and distances. |
+| **Animation** | `$t` playback in the app, frame export from the CLI. |
+| **Works offline** | Installable, and fully functional with no network. |
+| **Headless CLI** | `bscad model.scad -o model.stl`, for batch jobs and CI. |
 
 ## Quick start
+
+Nothing to install — [open it in your browser](https://betterscad.org). First run
+offers a sample model, a blank file, or a file from your disk.
+
+To run it locally:
 
 ```sh
 git clone https://github.com/theanam/betterScad.git
 cd betterScad
 npm install
 npm run dev          # http://localhost:5173
+npm run build        # static site in packages/app/dist — serve it anywhere
 ```
 
-Build the static site:
+## Language extensions
 
-```sh
-npm run build        # output in packages/app/dist — serve it anywhere
-```
+Everything OpenSCAD has, plus the following. Save as OpenSCAD `.scad` and these
+are rewritten automatically; the editor shows you which lines will change first.
 
-Run the tests:
+### `negative()` — turn anything into negative space
 
-```sh
-npm test             # 94 engine tests: language semantics, geometry, exports
-```
+Wrap a shape in `negative()` and it stops being material and starts being a hole.
+It gets carved out of everything else in the same scope, so holes can sit next to
+the thing they go through instead of being hoisted into a `difference()` at the
+top of the file.
 
-## Why another OpenSCAD?
-
-OpenSCAD is excellent and this is not a criticism of it. BetterSCAD exists because a
-few things are only possible with a clean-room implementation:
-
-- **It runs anywhere a browser does**, including machines where you cannot install
-  software, with the same files and the same language.
-- **The engine is a library.** Parsing and geometry are decoupled from the UI and
-  compiled to WebAssembly, so other tools can embed them.
-- **The licensing is unencumbered.** No code is reused from the OpenSCAD project, and
-  the CSG kernel is [Manifold](https://github.com/elalish/manifold) (Apache-2.0) rather
-  than CGAL (GPL). That is what makes the MIT licence here possible, and what leaves room
-  to extend the language.
-
-## Architecture
-
-```
-packages/
-├── engine/   The language and geometry engine. UI-agnostic, embeddable.
-│             Hand-written lexer → parser → evaluator → scene graph → Manifold.
-├── app/      The web app. CodeMirror 6 editor, Three.js viewport, panels.
-│             The engine runs in a Web Worker, so geometry never blocks typing.
-├── cli/      `bscad`, the headless renderer.
-└── desktop/  Tauri shell around the same bundle. Scaffolded, not yet built.
-```
-
-Two design decisions are worth calling out.
-
-**The parser is entirely hand-written.** Recursive descent for statements, precedence
-climbing for expressions, with error recovery so the editor can show every problem in a
-file at once instead of stopping at the first. No grammar, tables or code are derived
-from upstream OpenSCAD.
-
-**Modifiers are roles, not special cases.** OpenSCAD hardcodes `%`, `#`, `!` and `*`
-throughout its CSG evaluator. BetterSCAD gives every scene node a list of *role* names,
-and the evaluator dispatches on what a role declares:
-
-```ts
-defineRole({
-  name: 'negative',
-  contribution: 'subtractive',   // subtracted from every sibling in scope
-  display: 'transparent',
-  legacy: { transpile: 'Rewrite the enclosing scope as difference() { … }' },
-});
-```
-
-Registering a role *requires* a legacy downgrade path — it is enforced at registration,
-not documented and hoped for. The `negative()` extension below was added as a registry
-entry and a transpiler rule; the CSG evaluator itself was not touched.
-
-See [`docs/architecture.md`](docs/architecture.md) for the full pipeline.
-
-## The `negative()` extension
-
-A `negative()` subtree becomes negative space, subtracted from everything else in its
-scope. It lets cutting features live next to the things they cut, instead of being
-hoisted into a `difference()` at the top of the file:
+![The same plate and cylinders, first as solids and then wrapped in negative(), where they become holes](docs/images/negative-extension.png)
 
 ```scad
 union() {
   plate();
   boss();
 
-  negative() {              // subtracted from BOTH plate() and boss()
-    translate([0, 0, -1]) cylinder(h = 20, r = 5);
-    for (i = [0:4]) rotate([0, 0, i * 72]) translate([18, 0, -1]) cylinder(h = 20, r = 2.5);
+  negative() {              // carved out of BOTH plate() and boss()
+    translatez(-1) cylinder(h = 20, r = 5);
+    for (i = [0:4]) rotatez(i * 72) translate(18, 0, -1) cylinder(h = 20, r = 2.5);
   }
 }
 ```
 
-Saving as OpenSCAD `.scad` rewrites it as a `difference()` that produces **byte-identical
-geometry** — the round trip is covered by a test.
+"The same scope" means the enclosing `{ … }`, module body, or top level — a
+negative never reaches further than the braces it was written in.
+
+### Everything else
+
+| Syntax | What it does | Becomes, in plain `.scad` |
+| --- | --- | --- |
+| `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
+| `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |
+| `translatex(d)`<br>`translatey(d)`<br>`translatez(d)` | Move along one axis | `translate([d, 0, 0])`, and so on |
+| `rotatex(a)`<br>`rotatey(a)`<br>`rotatez(a)` | Turn about one axis | `rotate([a, 0, 0])`, and so on |
+| `mirrorx()`<br>`mirrory()`<br>`mirrorz()` | Flip across one plane | `mirror([1, 0, 0])`, and so on |
+| `for (i = 0; i < n; i = i + 1)` | A C-style loop as a statement | A range `for` with the condition as a guard |
+| `is_range(x)` | Tests for a range, like the other `is_*` functions | ⚠️ Nothing — it becomes `undef` in stock OpenSCAD |
+
+Stock syntax is untouched: `rotate(a, v)` is still the axis rotation it always
+was. Full details in [`docs/language.md`](docs/language.md).
+
+## File formats
+
+`.bscad` is the native format, and it *is* a `.scad` file — the extras (panel
+layout, customizer presets, camera) live in a leading comment, so OpenSCAD opens
+it unchanged.
+
+Saving follows the extension: a `.bscad` keeps its extras, a `.scad` is saved as
+plain source. **Save ▸ Save as OpenSCAD `.scad`** is the guaranteed-portable
+version; it tells you what it will change, and a file that needs no changes is
+saved byte for byte.
+
+Opening a `.scad` that uses the extensions above warns you, naming the lines.
 
 ## Command line
 
@@ -162,35 +133,9 @@ bscad model.scad -o model.stl               # render to STL
 bscad model.scad -D size=30 -D label='"v2"' # override parameters
 bscad *.scad -f 3mf -o build/               # batch render
 bscad anim.scad --frames 60 -o frames/      # animation frames
-bscad model.bscad --legacy-scad -o out.scad # transpile to plain OpenSCAD
+bscad model.bscad --legacy-scad -o out.scad # convert to plain OpenSCAD
 bscad model.scad --strict                   # treat warnings as errors, for CI
 ```
-
-## File formats
-
-`.bscad` is the native format and a **strict superset of `.scad`**: it is an OpenSCAD file
-with a metadata header in a leading block comment, holding panel layout, customizer presets
-and camera state. Stock OpenSCAD reads it unchanged, because a comment is just a comment.
-`.scad` remains fully supported for both import and export.
-
-**Saving follows the extension.** A `.bscad` is written with its metadata header; a `.scad`
-is written as bare source, so opening someone else's file and saving it does not stamp a
-BetterSCAD header into it. The Save button's dropdown offers *Save as*, plus *Save as
-.bscad* when the current file is a `.scad` — that is the conversion, and it is the only way
-the header appears. Nothing is lost in the meantime: presets and camera stay on the open
-document either way.
-
-**Opening a `.scad` that is not stock OpenSCAD warns you**, naming each extension it uses,
-what the downgrade rewrites it to, and the lines it appears on. The file renders here
-regardless — the warning is about what will happen elsewhere.
-
-**Save ▸ Save as OpenSCAD `.scad`** is the guaranteed-portable output, and it asks first,
-saying what it will do to this particular file. **A file that uses no extensions is written
-byte for byte** — the transpiler doubles as a pretty-printer, so running it over already
-stock code would reflow the layout, drop the comments and parenthesise every expression for
-no gain. Only a file that actually needs rewriting gets rewritten; when it does, the saved
-`.scad` is a derivative and the tab keeps your original. `bscad --legacy-scad` follows the
-same rule.
 
 ## Browser support
 
@@ -200,86 +145,55 @@ same rule.
 | Firefox | ✅ | Download / upload | Load font files |
 | Safari | ✅ | Download / upload | Load font files |
 
-Requires WebAssembly and WebGL2 — that is, anything from roughly 2021 onwards.
+Needs WebAssembly and WebGL2 — anything from roughly 2021 onwards.
 
 ## Status
 
-Early but real: the language is implemented in full, the app is usable, and the engine is
-covered by tests. Not yet done:
+Early but real: the language is complete, the app is usable, and the engine is
+covered by tests. Not there yet:
 
-- **Third-party libraries** (BOSL2, MCAD) are deferred past v1 — untested, not supported.
-- **Desktop packaging** is scaffolded in `packages/desktop` (Tauri, hosting the same
-  bundle) but has not been built or run — there is no Rust toolchain in the environment it
-  was written in. See [`docs/desktop.md`](docs/desktop.md).
-- **Project/library management** (feature 16) is partial: multi-file tabs, cross-tab
-  `include`/`use` resolution and drag-and-drop assets work; a persistent user library with
-  versioning and snippet sharing does not exist yet.
-- **`surface()` with image heightmaps** works in the browser, which has an image decoder;
-  the CLI reports a clear error rather than bundling an image codec.
-- **Brand assets are provisional** — see [Brand](#brand) below.
+- **Third-party libraries** (BOSL2, MCAD) are untested and unsupported.
+- **Desktop builds** are scaffolded but not yet built — see [`docs/desktop.md`](docs/desktop.md).
+- **A persistent library** of your own parts and snippets. Multi-file tabs and
+  `include`/`use` across them already work.
+- **`surface()` with image heightmaps** works in the browser but not in the CLI.
 
 ## Analytics
 
-The hosted site at [betterscad.org](https://betterscad.org) loads Google
-Analytics for page-view counts. **Nothing else is sent** — no model source, no
-geometry, no file names, no file contents; the app has no code that reads your
-work and transmits it, and the service worker ignores cross-origin requests
-entirely.
-
-The tag is injected at build time, and only when `BETTERSCAD_GA_ID` is set —
-which happens in exactly one place, the `npm run build` step of
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). It is
-deliberately **not** keyed off a production build, because a local
-`npm run build` produces the same `dist/` the deploy publishes. So a fork, a
-self-hosted copy, a desktop build and the dev server all carry no analytics at
-all, without anyone having to know to switch it off.
+[betterscad.org](https://betterscad.org) counts page views with Google Analytics.
+Nothing about your models is sent — no source, no geometry, no file names. Builds
+you make yourself carry no analytics at all; the tag is added only by the deploy
+workflow.
 
 ## Deploying
 
-The site is fully static, so it can be served from anywhere. `npm run build`
-writes `packages/app/dist`; copy that wherever you like.
-
-For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
-builds and publishes to a `gh-pages` branch on every push to `main`. **No repo
-settings need changing** — pushing that branch enables Pages on its own.
-
-It deliberately does not use `actions/deploy-pages`, which requires someone to
-set *Settings → Pages → Source* to "GitHub Actions" first: the default
-`GITHUB_TOKEN` has no admin rights, so `configure-pages` cannot create the site
-and the first run fails. Publishing to a branch needs only `contents: write`.
+The site is fully static: `npm run build`, then serve `packages/app/dist`
+anywhere. For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+publishes on every push to `main` with no repo settings to change.
 
 ## Contributing
 
-Issues and pull requests are welcome. The one non-negotiable rule: **any new language
-syntax must ship with its legacy `.scad` downgrade path**, implemented in
-[`packages/engine/src/transpile.ts`](packages/engine/src/transpile.ts) and covered by a
-test that proves the rewrite is equivalent.
+Issues and pull requests welcome. One non-negotiable rule: **any new language
+syntax ships with its plain-`.scad` downgrade**, implemented in
+[`transpile.ts`](packages/engine/src/transpile.ts) and covered by a test proving
+the rewrite is equivalent.
 
 ```sh
-npm run typecheck    # type-check every package
-npm test             # engine test suite
-npm run build        # engine + static site
+npm run typecheck
+npm test
+npm run build
 ```
+
+How it all fits together: [`docs/architecture.md`](docs/architecture.md).
 
 ## Licence
 
 [MIT](LICENSE).
 
 The engine is written from scratch; no code is derived from the OpenSCAD project.
-Third-party components: [Manifold](https://github.com/elalish/manifold) (Apache-2.0),
-[Three.js](https://threejs.org) (MIT), [CodeMirror](https://codemirror.net) (MIT),
-[opentype.js](https://opentype.js.org) (MIT). Bundled fonts are OFL-1.1.
+That is what makes the MIT licence possible — the CSG kernel is
+[Manifold](https://github.com/elalish/manifold) (Apache-2.0) rather than CGAL.
+Also uses [Three.js](https://threejs.org), [CodeMirror](https://codemirror.net)
+and [opentype.js](https://opentype.js.org) (all MIT); bundled fonts are OFL-1.1.
 
-Brand assets live in [`brand/`](brand/) — see [`brand/README.md`](brand/README.md).
-
-## Brand
-
-The mark is the canonical CSG operation drawn literally: an isometric cube with a hole
-bored through its top face. The palette is warm-neutral — amber, terracotta, warm
-off-white and greys mixed from the same warmth — so nothing in the chrome fights the
-model in the middle of it. **Amber is reserved for state and action**: the primary
-button, focus, the active tab, a dirty dot, the `EXT` badge.
-
-Everything downstream reads from [`brand/tokens.css`](brand/tokens.css), so a revision
-is a one-file change. See [`brand/README.md`](brand/README.md) for the full system and
-usage rules.
+Brand assets and tokens live in [`brand/`](brand/).
