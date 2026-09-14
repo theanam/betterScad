@@ -67,6 +67,7 @@ import {
   type NonStandardFile,
 } from './ui/dialogs.js';
 import { showReferenceDialog } from './ui/reference-view.js';
+import { AxisIndicator } from './ui/axis-indicator.js';
 import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
 import { Split } from './ui/layout.js';
@@ -251,7 +252,12 @@ class App {
     const viewportHost = el('div', { class: 'viewport' });
     this.busyBadge = el('div', { class: 'viewport__busy', text: 'Rendering…', style: 'display:none' });
     this.measureReadout = el('div', { class: 'viewport__measure', style: 'display:none' });
-    const hud = el('div', { class: 'viewport__hud' });
+    // The axis indicator is built once and redrawn in place: the readout below
+    // it is two short strings, but this is an SVG, and replacing the whole HUD
+    // on every camera change would rebuild it on every frame of an orbit.
+    const axisIndicator = new AxisIndicator();
+    const hudValues = el('div', { class: 'viewport__hudvalues' });
+    const hud = el('div', { class: 'viewport__hud' }, [axisIndicator.element, hudValues]);
     this.animationHost = el('div', {});
 
     this.viewportEmpty = viewportEmptyState();
@@ -343,7 +349,8 @@ class App {
     // else on screen, so it updates directly rather than through refreshChrome.
     paintHud = (): void => {
       const vp = this.viewport.controls.viewportVariables;
-      hud.replaceChildren(
+      axisIndicator.update(this.viewport.controls.screenAxes);
+      hudValues.replaceChildren(
         el('span', { text: `$vpd ${formatNumber(vp.distance, 1)}` }),
         el('span', {
           text: `$vpr [${vp.rotation.map((n) => formatNumber(n, 0)).join(', ')}]`,

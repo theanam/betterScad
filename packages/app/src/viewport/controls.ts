@@ -116,6 +116,39 @@ export class OrbitCamera {
     return this.offsetFor(this.azimuth, this.polar).normalize();
   }
 
+/**
+   * The three world axes as they lie on screen, for the HUD's orientation
+   * indicator.
+   *
+   * Orthographic on purpose — each unit axis projected onto the camera's own
+   * right and up vectors, with nothing else. A perspective projection would
+   * make an axis near the centre of the frame longer than one at the edge, and
+   * an indicator whose arms change length as you pan is reporting something
+   * other than direction.
+   *
+   * `y` already points down, which is the direction screens and SVG count in.
+   * `towards` is how far the axis leans out of the screen, and is only used to
+   * decide which arm draws over which.
+   */
+  get screenAxes(): { label: 'X' | 'Y' | 'Z'; x: number; y: number; towards: number }[] {
+    const right = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    // Column 2 of a three camera's world matrix points *out* of the screen.
+    const towards = new Vector3().setFromMatrixColumn(this.camera.matrixWorld, 2);
+
+    const axes: { label: 'X' | 'Y' | 'Z'; v: Vector3 }[] = [
+      { label: 'X', v: new Vector3(1, 0, 0) },
+      { label: 'Y', v: new Vector3(0, 1, 0) },
+      { label: 'Z', v: new Vector3(0, 0, 1) },
+    ];
+    return axes.map(({ label, v }) => ({
+      label,
+      x: v.dot(right),
+      y: -v.dot(up),
+      towards: v.dot(towards),
+    }));
+  }
+
   /**
    * Camera state in OpenSCAD's `$vp*` convention.
    *

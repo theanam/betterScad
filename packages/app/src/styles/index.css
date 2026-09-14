@@ -820,6 +820,7 @@ textarea {
   left: var(--bs-space-3);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   padding: 6px 9px;
   border-radius: var(--bs-radius);
@@ -898,6 +899,21 @@ textarea {
   font-size: var(--bs-font-size-sm);
   font-weight: 600;
   pointer-events: none;
+}
+
+/* `$vpd` and `$vpr` share a line, so the HUD is as wide as it needs to be and
+   the axis indicator sits over both rather than beside a tall stack. */
+.viewport__hudvalues {
+  display: flex;
+  gap: var(--bs-space-3);
+  white-space: nowrap;
+}
+
+.axisindicator {
+  display: block;
+  /* Its own arms are the only marks in the box, and they are already the axis
+     colours, so nothing here inherits the HUD's muted text colour. */
+  overflow: visible;
 }
 
 .viewport__measure {
