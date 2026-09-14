@@ -34,6 +34,15 @@ import {
 import type { Diagnostic } from '@betterscad/engine';
 import { openscad } from './scad-language.js';
 import { scadCompletions } from './completions.js';
+import { inchEntry } from './units.js';
+
+/** The settings the editor itself acts on. */
+export interface EditorSettings {
+  /** Rewrite `5in` to millimetres as it is typed. */
+  inchEntry: boolean;
+  /** Spaces per indent. */
+  indentWidth: number;
+}
 
 export interface EditorCallbacks {
   onChange(source: string): void;
@@ -82,6 +91,17 @@ const theme = EditorView.theme({
     backgroundColor: 'var(--bs-solid-500)',
     color: '#fff',
   },
+  // Several call forms share a name — `cylinder` appears once per way of
+  // writing it — so the argument list beside it is what the reader picks from.
+  // Italic at body weight is not enough to scan a column of them by; this makes
+  // it read as the code it is.
+  '.cm-completionDetail': {
+    fontStyle: 'normal',
+    fontFamily: 'var(--bs-font-mono)',
+    fontSize: '0.92em',
+    opacity: '0.75',
+  },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail': { opacity: '0.85' },
   '.cm-completionInfo': {
     maxWidth: '340px',
     padding: '8px 10px',
@@ -99,11 +119,20 @@ const theme = EditorView.theme({
 export class ScadEditor {
   readonly view: EditorView;
   private readonly readOnly = new Compartment();
+  // Two settings the user can change while the editor is open. Compartments
+  // rather than a rebuilt state, so changing one keeps the undo history.
+  private readonly inchEntry = new Compartment();
+  private readonly indent = new Compartment();
   private readonly extensions: Extension[];
   /** Set while `setSource` is replacing the document, to suppress onChange. */
   private applyingExternalEdit = false;
 
-  constructor(parent: HTMLElement, initialSource: string, private readonly callbacks: EditorCallbacks) {
+  constructor(
+    parent: HTMLElement,
+    initialSource: string,
+    private readonly callbacks: EditorCallbacks,
+    settings: EditorSettings = { inchEntry: true, indentWidth: 2 },
+  ) {
     const shortcutKeymap = [
       { key: 'F5', run: () => this.shortcut('preview'), preventDefault: true },
       { key: 'F6', run: () => this.shortcut('render'), preventDefault: true },
@@ -128,7 +157,7 @@ export class ScadEditor {
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      indentUnit.of('  '),
+      this.indent.of(indentUnit.of(' '.repeat(settings.indentWidth))),
       bracketMatching(),
       closeBrackets(),
       autocompletion({ override: [scadCompletions], activateOnTyping: true, icons: true }),
@@ -150,6 +179,7 @@ export class ScadEditor {
       theme,
       EditorView.lineWrapping,
       this.readOnly.of(EditorState.readOnly.of(false)),
+      this.inchEntry.of(settings.inchEntry ? inchEntry() : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !this.applyingExternalEdit) {
           this.callbacks.onChange(update.state.doc.toString());
@@ -166,6 +196,19 @@ export class ScadEditor {
     this.view = new EditorView({
       parent,
       state: EditorState.create({ doc: initialSource, extensions }),
+    });
+  }
+
+  /** Turns inch entry on or off without disturbing the document. */
+  setInchEntry(on: boolean): void {
+    this.view.dispatch({
+      effects: this.inchEntry.reconfigure(on ? inchEntry() : []),
+    });
+  }
+
+  setIndentWidth(width: number): void {
+    this.view.dispatch({
+      effects: this.indent.reconfigure(indentUnit.of(' '.repeat(width))),
     });
   }
 

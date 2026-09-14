@@ -98,7 +98,14 @@ const ICONS: Record<string, string> = {
   // A question mark in a ring. The dot is a zero-length segment, which the
   // round line cap turns into a circle.
   help: 'M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.1 6.2a1.95 1.95 0 0 1 3.8.6c0 1.3-1.9 1.5-1.9 2.9M8 11.9v.01',
-  gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  // A six-tooth cog: the outline, then the bore. Generated from tip radius 6.6,
+  // root radius 4.6 and a 2.2 bore — six teeth rather than the usual eight
+  // because eight turn to mush at 15px.
+  gear:
+    'M6.0 3.9L6.3 1.6L9.7 1.6L10.0 3.9L10.6 4.2L12.7 3.3L14.4 6.3L12.6 7.7L12.6 8.3L14.4 9.7' +
+    'L12.7 12.7L10.6 11.8L10.0 12.1L9.7 14.4L6.3 14.4L6.0 12.1L5.4 11.8L3.3 12.7L1.6 9.7' +
+    'L3.4 8.3L3.4 7.7L1.6 6.3L3.3 3.3L5.4 4.2Z' +
+    'M10.2 8a2.2 2.2 0 1 0 -4.4 0 2.2 2.2 0 1 0 4.4 0Z',
   caret: 'M4.5 6.5 8 10l3.5-3.5',
   // GitHub's own mark (Octicons `mark-github-16`), filled rather than stroked.
   github:
@@ -190,13 +197,42 @@ export function button(options: ButtonOptions): HTMLButtonElement {
   return node;
 }
 
-export interface MenuItem {
+/** A plain menu entry: choose it and something happens, and the menu closes. */
+export interface MenuAction {
+  kind?: 'action';
   label: string;
   /** A second line explaining what the item does, for the less obvious ones. */
   description?: string;
   shortcut?: string;
   onSelect(): void;
 }
+
+/**
+ * A setting with two or more named values, shown as a segmented control.
+ *
+ * Choosing does *not* close the menu. A settings menu is somewhere people
+ * change two things at once, and a menu that shuts on the first one makes the
+ * second a whole new journey.
+ */
+export interface MenuChoice {
+  kind: 'choice';
+  label: string;
+  description?: string;
+  value: string;
+  options: { value: string; label: string; hint?: string }[];
+  onChange(value: string): void;
+}
+
+/** A setting that is simply on or off. */
+export interface MenuToggle {
+  kind: 'toggle';
+  label: string;
+  description?: string;
+  value: boolean;
+  onChange(value: boolean): void;
+}
+
+export type MenuItem = MenuAction | MenuChoice | MenuToggle;
 
 /**
  * Opens a popup menu anchored under an element.
@@ -207,7 +243,12 @@ export interface MenuItem {
  * below keeps the last item reachable at short window heights.
  */
 export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
-  const node = el('div', { class: 'menu', role: 'menu' });
+  // A settings menu needs room for a control beside each label, so it is wider.
+  const hasSettings = items.some((item) => item.kind === 'choice' || item.kind === 'toggle');
+  const node = el('div', {
+    class: hasSettings ? 'menu menu--settings' : 'menu',
+    role: 'menu',
+  });
   const buttons: HTMLButtonElement[] = [];
 
   const close = (): void => {
@@ -238,7 +279,58 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
     buttons[next]?.focus();
   };
 
+  /** The label-and-explanation block every kind of row shares. */
+  const rowText = (item: MenuItem, shortcut?: string): HTMLElement[] => [
+    el('span', { class: 'menu__label' }, [
+      el('span', { text: item.label }),
+      shortcut ? el('span', { class: 'btn__key', text: shortcut }) : null,
+    ]),
+    ...(item.description ? [el('span', { class: 'menu__hint', text: item.description })] : []),
+  ];
+
   for (const item of items) {
+    if (item.kind === 'choice' || item.kind === 'toggle') {
+      const row = el('div', { class: 'menu__setting', role: 'group', 'aria-label': item.label });
+      row.append(el('span', { class: 'menu__settingtext' }, rowText(item)));
+
+      // A toggle is a choice between two things that happen to be named On and
+      // Off, so it is built as one rather than as a second kind of control.
+      const options =
+        item.kind === 'toggle'
+          ? [
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]
+          : item.options;
+      const current = item.kind === 'toggle' ? (item.value ? 'on' : 'off') : item.value;
+
+      const group = el('span', { class: 'segmented' });
+      const segments: HTMLButtonElement[] = [];
+      for (const option of options) {
+        const segment = el('button', {
+          class: 'segmented__option',
+          type: 'button',
+          role: 'radio',
+          'aria-checked': String(option.value === current),
+          title: option.hint ?? '',
+          text: option.label,
+          onclick: () => {
+            for (const other of segments) other.setAttribute('aria-checked', 'false');
+            segment.setAttribute('aria-checked', 'true');
+            if (item.kind === 'toggle') item.onChange(option.value === 'on');
+            else item.onChange(option.value);
+          },
+        }) as HTMLButtonElement;
+        segments.push(segment);
+        group.appendChild(segment);
+      }
+      group.setAttribute('role', 'radiogroup');
+      row.append(group);
+      buttons.push(...segments);
+      node.appendChild(row);
+      continue;
+    }
+
     const entry = el('button', {
       class: 'menu__item',
       type: 'button',
@@ -248,13 +340,7 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
         item.onSelect();
       },
     }) as HTMLButtonElement;
-    entry.append(
-      el('span', { class: 'menu__label' }, [
-        el('span', { text: item.label }),
-        item.shortcut ? el('span', { class: 'btn__key', text: item.shortcut }) : null,
-      ]),
-    );
-    if (item.description) entry.append(el('span', { class: 'menu__hint', text: item.description }));
+    entry.append(...rowText(item, item.shortcut));
     buttons.push(entry);
     node.appendChild(entry);
   }

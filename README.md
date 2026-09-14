@@ -43,7 +43,8 @@ you.
 | **Full OpenSCAD language** | Existing `.scad` files open and render unchanged. |
 | **Real files** | Opens and saves straight to disk, with a download/upload fallback on Firefox and Safari. |
 | **Live customizer** | Sliders and dropdowns generated from your `//` parameter comments. |
-| **Modern editor** | Syntax highlighting, autocomplete with real signatures, tabs, inline errors. |
+| **Modern editor** | Syntax highlighting, autocomplete with every call form, tabs, inline errors. |
+| **Type in inches** | `5in` becomes `127` as you type. The file stays in millimetres — see below. |
 | **Built-in reference** | Every element of the language explained plainly, with a rendered example of each. `F1`, or the Help button. |
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
 | **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
@@ -136,6 +137,50 @@ Every one of these, and every element of OpenSCAD itself, is written up with a
 rendered example in [`docs/reference.md`](docs/reference.md) — the same content
 the app shows under **Help** (`F1`). The implementation details are in
 [`docs/language.md`](docs/language.md).
+
+## Type in inches, keep a millimetre file
+
+OpenSCAD has no units. Every number is a millimetre by convention, and the whole
+ecosystem — printers, slicers, hardware tables — agrees. That leaves anyone
+working from an imperial drawing doing arithmetic in their head, or scattering
+`* 25.4` through the file, which is a thing to get wrong once and then never
+notice again.
+
+So the editor does the arithmetic. Type a measurement with a unit on it and it
+converts the moment you finish the number:
+
+```scad
+plate = 6in;          ->  plate = 152.4;
+bore  = 0.25inch;     ->  bore  = 6.35;
+rod   = 1.5 inches;   ->  rod   = 38.1;
+```
+
+`in`, `inch` and `inches` all work, with or without a space. Nothing converts
+until the measurement is finished — `5in` is also the first three characters of
+`5inch` — so it waits for whatever you type next to end it: a comma, a bracket,
+a semicolon, a newline.
+
+**What lands in the file is a plain number.** This is an editor convenience and
+nothing more: no unit is stored, nothing in the saved model depends on it, and a
+file written this way opens in OpenSCAD with no idea it was ever typed in
+inches. The converted number flashes briefly so you can see it happen, and a
+single undo puts your `5in` back if you wanted the letters.
+
+Off by default for nobody — it is on, and there is a switch in **Settings** if
+you would rather it were not.
+
+## Settings
+
+The gear in the toolbar holds the handful of things the app asks rather than
+assumes. None of them changes what a saved file means.
+
+| | |
+| --- | --- |
+| **Theme** | Light or dark. |
+| **Round dimensions** | Whether autocomplete offers `cylinder(h, d)` or `cylinder(h, r)` first. Both are right; people are firmly one or the other. |
+| **Inch entry** | The conversion above. |
+| **Auto-render** | Re-render as you type, or only on `F5`. |
+| **Indent** | Two spaces or four. |
 
 ## File formats
 

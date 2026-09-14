@@ -60,6 +60,20 @@ export interface LayoutState {
   autoRender: boolean;
   showGrid: boolean;
   showAxes: boolean;
+  /**
+   * Which measurement of a circle the editor offers first.
+   *
+   * Radius and diameter are both right, and people are firmly one or the
+   * other: a caliper reads diameter and a hardware table quotes it, while
+   * OpenSCAD's own signatures lead with radius. So it is asked rather than
+   * assumed. It changes what autocomplete suggests and nothing else — no file
+   * written here depends on it.
+   */
+  roundMeasure: 'radius' | 'diameter';
+  /** Convert `5in` to millimetres as it is typed. */
+  inchEntry: boolean;
+  /** Spaces per indent in the editor. */
+  indentWidth: 2 | 4;
 }
 
 export const DEFAULT_LAYOUT: LayoutState = {
@@ -71,6 +85,9 @@ export const DEFAULT_LAYOUT: LayoutState = {
   autoRender: true,
   showGrid: true,
   showAxes: true,
+  roundMeasure: 'diameter',
+  inchEntry: true,
+  indentWidth: 2,
 };
 
 const STORAGE_KEY = 'betterscad.workspace.v1';

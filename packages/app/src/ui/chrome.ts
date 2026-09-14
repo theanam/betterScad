@@ -6,91 +6,119 @@
  * for a handful of elements is both simpler and fast enough.
  */
 
-import { button, clear, el, formatDuration, icon, splitButton, type MenuItem } from './dom.js';
+import {
+  button,
+  clear,
+  el,
+  formatDuration,
+  icon,
+  openMenu,
+  splitButton,
+  type MenuItem,
+} from './dom.js';
 import { setHint } from './tooltip.js';
 import { formatShortcut } from './command-palette.js';
-import type { Document, DocumentFormat } from '../state/workspace.js';
+import type { Document, DocumentFormat, LayoutState } from '../state/workspace.js';
 import type { RenderStats } from '../render/protocol.js';
 
 /** The project's source. */
 export const REPO_URL = 'https://github.com/theanam/betterScad';
 
 // ---------------------------------------------------------------------------
-// Theme toggle
+// Settings
 // ---------------------------------------------------------------------------
 
 /**
- * A two-state switch: both icons visible, a thumb resting over the active one.
+ * The handful of things this app asks rather than assumes.
  *
- * Shared by the theme control and the grid toggle. A switch says "this has two
- * settings and one of them is current" in a way a highlighted button does not,
- * and it does so without needing a text label.
+ * Deliberately a handful. Every one of these was a default somebody would
+ * eventually disagree with, and none of them changes what a saved file means —
+ * a model written with either `roundMeasure` opens the same everywhere.
  */
-export interface IconSwitchOptions {
-  /** Icon for the "off" state, shown on the left. */
-  offIcon: string;
-  /** Icon for the "on" state, shown on the right. */
-  onIcon: string;
-  /** Stable accessible name, e.g. "Ground grid". */
-  label: string;
-  /** Hint text per state. */
-  hint(on: boolean): string;
-  onToggle(): void;
-}
+export type AppSettings = Pick<
+  LayoutState,
+  'theme' | 'roundMeasure' | 'inchEntry' | 'autoRender' | 'indentWidth'
+>;
 
-export class IconSwitch {
+/**
+ * The gear: one button, one menu, all of it.
+ *
+ * The theme used to be a sun/moon switch sitting in the toolbar on its own.
+ * That worked while it was the only preference; it does not generalise, and a
+ * row of little switches is worse than a menu the moment there are three of
+ * them. The menu is built on open so it always shows what is actually set.
+ */
+export class SettingsButton {
   readonly element: HTMLButtonElement;
+  private settings: AppSettings | undefined;
 
-  constructor(private readonly options: IconSwitchOptions) {
-    const track = el('span', { class: 'iconswitch__track' });
-
-    const off = icon(options.offIcon, 13);
-    off.classList.add('iconswitch__icon', 'iconswitch__icon--off');
-    const on = icon(options.onIcon, 13);
-    on.classList.add('iconswitch__icon', 'iconswitch__icon--on');
-
-    track.append(el('span', { class: 'iconswitch__thumb' }), off, on);
-
-    // `role="switch"` gives assistive tech the right affordance; the label
-    // names what is being switched, so "on" is not left to interpretation.
-    this.element = el('button', {
-      class: 'iconswitch',
-      type: 'button',
-      role: 'switch',
-      'aria-checked': 'true',
-      'aria-label': options.label,
-      onclick: () => options.onToggle(),
-    }) as HTMLButtonElement;
-    this.element.appendChild(track);
-    this.setState(true);
-  }
-
-  setState(on: boolean): void {
-    this.element.setAttribute('aria-checked', String(on));
-    setHint(this.element, this.options.hint(on));
-    // `setHint` fills in a missing aria-label; keep the stable one instead.
-    this.element.setAttribute('aria-label', this.options.label);
-  }
-}
-
-/** The theme control: sun on the left, moon on the right. */
-export class ThemeToggle {
-  private readonly control: IconSwitch;
-  readonly element: HTMLButtonElement;
-
-  constructor(onToggle: () => void) {
-    this.control = new IconSwitch({
-      offIcon: 'sun',
-      onIcon: 'moon',
-      label: 'Dark theme',
-      hint: (dark) => `Switch to ${dark ? 'light' : 'dark'} theme`,
-      onToggle,
+  constructor(
+    private readonly onChange: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void,
+  ) {
+    this.element = button({
+      label: 'Settings',
+      iconName: 'gear',
+      title: 'Theme, units and editor settings',
+      onClick: () => this.open(),
     });
-    this.element = this.control.element;
+    this.element.setAttribute('aria-haspopup', 'menu');
+    this.element.setAttribute('aria-expanded', 'false');
   }
 
-  setTheme(theme: 'light' | 'dark'): void {
-    this.control.setState(theme === 'dark');
+  setSettings(settings: AppSettings): void {
+    this.settings = settings;
+  }
+
+  private open(): void {
+    const settings = this.settings;
+    if (!settings) return;
+    openMenu(this.element, [
+      {
+        kind: 'choice',
+        label: 'Theme',
+        value: settings.theme,
+        options: [
+          { value: 'light', label: 'Light' },
+          { value: 'dark', label: 'Dark' },
+        ],
+        onChange: (value) => this.onChange('theme', value as AppSettings['theme']),
+      },
+      {
+        kind: 'choice',
+        label: 'Round dimensions',
+        description: 'Which one autocomplete offers first for cylinder, sphere and circle',
+        value: settings.roundMeasure,
+        options: [
+          { value: 'radius', label: 'Radius', hint: 'cylinder(h, r)' },
+          { value: 'diameter', label: 'Diameter', hint: 'cylinder(h, d)' },
+        ],
+        onChange: (value) => this.onChange('roundMeasure', value as AppSettings['roundMeasure']),
+      },
+      {
+        kind: 'toggle',
+        label: 'Inch entry',
+        description: 'Type 5in and get 127 — models stay in millimetres',
+        value: settings.inchEntry,
+        onChange: (value) => this.onChange('inchEntry', value),
+      },
+      {
+        kind: 'toggle',
+        label: 'Auto-render',
+        description: 'Re-render as you type, instead of on F5',
+        value: settings.autoRender,
+        onChange: (value) => this.onChange('autoRender', value),
+      },
+      {
+        kind: 'choice',
+        label: 'Indent',
+        value: String(settings.indentWidth),
+        options: [
+          { value: '2', label: '2 spaces' },
+          { value: '4', label: '4 spaces' },
+        ],
+        onChange: (value) => this.onChange('indentWidth', Number(value) as AppSettings['indentWidth']),
+      },
+    ]);
   }
 }
 
@@ -111,7 +139,8 @@ export interface ToolbarActions {
   export(): void;
   toggleCustomizer(): void;
   toggleConsole(): void;
-  toggleTheme(): void;
+  /** One setting changed in the gear menu. */
+  changeSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void;
   openPalette(): void;
   openFonts(): void;
   openHelp(): void;
@@ -123,7 +152,7 @@ export class Toolbar {
   private readonly consoleButton: HTMLButtonElement;
   private readonly previewButton: HTMLButtonElement;
   private readonly renderButton: HTMLButtonElement;
-  private readonly themeToggle: ThemeToggle;
+  private readonly settingsButton: SettingsButton;
 
   /** Drives the Save menu; a `.scad` gets the extra "Save as .bscad" item. */
   private documentFormat: DocumentFormat = 'bscad';
@@ -141,7 +170,7 @@ export class Toolbar {
       iconName: 'console',
       onClick: () => this.actions.toggleConsole(),
     });
-    this.themeToggle = new ThemeToggle(() => actions.toggleTheme());
+    this.settingsButton = new SettingsButton((key, value) => actions.changeSetting(key, value));
     this.previewButton = button({
       label: 'Preview',
       iconName: 'play',
@@ -234,7 +263,7 @@ export class Toolbar {
           onClick: () => actions.openHelp(),
         }),
         el('div', { class: 'toolbar__divider' }),
-        this.themeToggle.element,
+        this.settingsButton.element,
         githubLink(),
       ]),
     ]);
@@ -279,8 +308,7 @@ export class Toolbar {
   update(state: {
     customizerVisible: boolean;
     consoleVisible: boolean;
-    theme: 'light' | 'dark';
-    autoRender: boolean;
+    settings: AppSettings;
     showingFinalRender: boolean;
     documentFormat: DocumentFormat;
     /** False with no document open, which leaves half the toolbar inert. */
@@ -298,7 +326,7 @@ export class Toolbar {
     // Auto-render already re-renders in preview mode on every edit, so the
     // Preview button would do exactly nothing. F5 still works — hiding a
     // button should not remove its shortcut.
-    this.previewButton.hidden = state.autoRender;
+    this.previewButton.hidden = state.settings.autoRender;
 
     // Render is not redundant: it is the only way to see $preview = false,
     // which is what Export produces. Marking it active when that is what is on
@@ -308,11 +336,7 @@ export class Toolbar {
       ? 'Showing the final render ($preview = false)'
       : 'Re-render with $preview = false — the geometry Export produces';
 
-    this.setTheme(state.theme);
-  }
-
-  private setTheme(theme: 'light' | 'dark'): void {
-    this.themeToggle.setTheme(theme);
+    this.settingsButton.setSettings(state.settings);
   }
 }
 

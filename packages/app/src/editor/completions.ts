@@ -8,41 +8,272 @@
  */
 
 import {
-  Completion,
-  CompletionContext,
-  CompletionResult,
   snippetCompletion,
+  // Marked `type` so the module loads outside a bundler — Node's type stripping
+  // erases annotations but leaves an unmarked import of a type-only export
+  // behind, and it then fails to resolve at run time.
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
 } from '@codemirror/autocomplete';
 
-interface BuiltinDoc {
-  label: string;
+/**
+ * One way of writing a call.
+ *
+ * Most of this language's builtins have several: `cylinder` takes a radius or a
+ * diameter, one of each for a cone, and a `center`. Offering only one of them
+ * means everybody who wanted a different one deletes the suggestion before
+ * typing what they meant, which is worse than no suggestion at all.
+ */
+interface CallForm {
   /** Snippet template; `${name}` marks a tab stop. */
   template: string;
+  /** This form's own argument list. It is what tells the forms apart in the
+   * list, since they all share a name. */
   detail: string;
+  /**
+   * Set on the forms that differ only in how they measure a round thing.
+   *
+   * Radius and diameter are both right and people are firmly one or the other,
+   * so which comes first is a setting rather than a guess — see
+   * `setRoundMeasure`. Forms without this keep their written order whichever
+   * way the setting goes.
+   */
+  measure?: RoundMeasure;
+}
+
+/** Which of the two ways of measuring a circle a person works in. */
+export type RoundMeasure = 'radius' | 'diameter';
+
+interface BuiltinDoc extends CallForm {
+  label: string;
   info: string;
   type: 'function' | 'keyword' | 'class';
+  /**
+   * Other ways to write the same call, offered under the one above in the
+   * order they are written here. Commonest first: the top one is what pressing
+   * Enter straight away gives you.
+   */
+  forms?: CallForm[];
 }
 
 /** Built-in modules, with the parameters that matter most placed first. */
 const MODULES: BuiltinDoc[] = [
-  { label: 'cube', template: 'cube(${size})', detail: 'cube(size, center)', info: 'Axis-aligned box. `size` is a number or [x, y, z].', type: 'class' },
-  { label: 'sphere', template: 'sphere(r = ${1})', detail: 'sphere(r | d)', info: 'Sphere at the origin. Resolution follows $fn / $fa / $fs.', type: 'class' },
-  { label: 'cylinder', template: 'cylinder(h = ${10}, r = ${5})', detail: 'cylinder(h, r | r1, r2 | d, d1, d2, center)', info: 'Cylinder or cone. A zero radius at one end gives a cone.', type: 'class' },
+  {
+    label: 'cube',
+    template: 'cube(${10})',
+    detail: 'cube(size)',
+    info: 'Axis-aligned box. `size` is a number or [x, y, z].',
+    type: 'class',
+    forms: [
+      { template: 'cube([${10}, ${10}, ${10}])', detail: 'cube([x, y, z])' },
+      { template: 'cube(${10}, center = true)', detail: 'cube(size, center)' },
+      { template: 'cube([${10}, ${10}, ${10}], center = true)', detail: 'cube([x, y, z], center)' },
+    ],
+  },
+  {
+    label: 'sphere',
+    template: 'sphere(d = ${10})',
+    detail: 'sphere(d)',
+    measure: 'diameter',
+    info: 'Sphere at the origin. Resolution follows $fn / $fa / $fs.',
+    type: 'class',
+    forms: [
+      { template: 'sphere(r = ${5})', detail: 'sphere(r)', measure: 'radius' },
+      { template: 'sphere(d = ${10}, $fn = ${64})', detail: 'sphere(d, $fn)', measure: 'diameter' },
+    ],
+  },
+  {
+    label: 'cylinder',
+    template: 'cylinder(h = ${10}, d = ${5})',
+    detail: 'cylinder(h, d)',
+    measure: 'diameter',
+    info:
+      'Cylinder or cone. A zero radius at one end gives a cone.\n\n' +
+      'Diameter and radius are interchangeable: d = 2r, d1/d2 = 2r1/2r2.',
+    type: 'class',
+    forms: [
+      { template: 'cylinder(h = ${10}, r = ${5})', detail: 'cylinder(h, r)', measure: 'radius' },
+      {
+        template: 'cylinder(h = ${10}, d = ${5}, center = true)',
+        detail: 'cylinder(h, d, center)',
+        measure: 'diameter',
+      },
+      {
+        template: 'cylinder(h = ${10}, d1 = ${10}, d2 = ${5})',
+        detail: 'cylinder(h, d1, d2)  — a cone',
+        measure: 'diameter',
+      },
+      {
+        template: 'cylinder(h = ${10}, r1 = ${5}, r2 = ${0})',
+        detail: 'cylinder(h, r1, r2)  — a cone',
+        measure: 'radius',
+      },
+      {
+        template: 'cylinder(h = ${10}, d = ${5}, $fn = ${64})',
+        detail: 'cylinder(h, d, $fn)',
+        measure: 'diameter',
+      },
+    ],
+  },
   { label: 'polyhedron', template: 'polyhedron(points = [${}], faces = [[${}]])', detail: 'polyhedron(points, faces, convexity)', info: 'Arbitrary solid. Faces are wound clockwise seen from outside.', type: 'class' },
-  { label: 'square', template: 'square(${size})', detail: 'square(size, center)', info: '2D rectangle.', type: 'class' },
-  { label: 'circle', template: 'circle(r = ${1})', detail: 'circle(r | d)', info: '2D circle, tessellated per $fn / $fa / $fs.', type: 'class' },
-  { label: 'polygon', template: 'polygon(points = [${}])', detail: 'polygon(points, paths, convexity)', info: '2D polygon. With `paths`, extra contours become holes.', type: 'class' },
-  { label: 'text', template: 'text("${text}", size = ${10})', detail: 'text(text, size, font, halign, valign, spacing, direction)', info: '2D text outlines. Fonts are managed in the Fonts dialog.', type: 'class' },
-  { label: 'translate', template: 'translate([${0}, ${0}, ${0}])', detail: 'translate(v)', info: 'Moves children by a vector.\n\nBetterSCAD also accepts loose numbers: `translate(x, y, z)`.', type: 'class' },
-  { label: 'rotate', template: 'rotate([${0}, ${0}, ${0}])', detail: 'rotate(a, v)', info: 'Rotates children. `rotate(a)` rotates about Z; `rotate(a, v)` about an axis.\n\nBetterSCAD also accepts loose numbers: `rotate(x, y, z)`.', type: 'class' },
-  { label: 'scale', template: 'scale([${1}, ${1}, ${1}])', detail: 'scale(v)', info: 'Scales children per axis.', type: 'class' },
-  { label: 'resize', template: 'resize([${x}, ${y}, ${z}])', detail: 'resize(newsize, auto)', info: 'Scales children to an absolute bounding-box size.', type: 'class' },
-  { label: 'mirror', template: 'mirror([${1}, ${0}, ${0}])', detail: 'mirror(v)', info: 'Mirrors children across the plane with normal `v`.\n\nBetterSCAD also accepts loose numbers: `mirror(x, y, z)`.', type: 'class' },
+  {
+    label: 'square',
+    template: 'square(${10})',
+    detail: 'square(size)',
+    info: '2D rectangle.',
+    type: 'class',
+    forms: [
+      { template: 'square([${10}, ${10}])', detail: 'square([x, y])' },
+      { template: 'square([${10}, ${10}], center = true)', detail: 'square([x, y], center)' },
+    ],
+  },
+  {
+    label: 'circle',
+    template: 'circle(d = ${10})',
+    detail: 'circle(d)',
+    measure: 'diameter',
+    info: '2D circle, tessellated per $fn / $fa / $fs.',
+    type: 'class',
+    forms: [
+      { template: 'circle(r = ${5})', detail: 'circle(r)', measure: 'radius' },
+      { template: 'circle(d = ${10}, $fn = ${64})', detail: 'circle(d, $fn)', measure: 'diameter' },
+    ],
+  },
+  {
+    label: 'polygon',
+    template: 'polygon(points = [${}])',
+    detail: 'polygon(points)',
+    info: '2D polygon. With `paths`, extra contours become holes.',
+    type: 'class',
+    forms: [
+      { template: 'polygon(points = [${}], paths = [[${}]])', detail: 'polygon(points, paths)' },
+    ],
+  },
+  {
+    label: 'text',
+    template: 'text("${text}", size = ${10})',
+    detail: 'text(t, size)',
+    info: '2D text outlines. Fonts are managed in the Fonts dialog.',
+    type: 'class',
+    forms: [
+      {
+        template: 'text("${text}", size = ${10}, halign = "center", valign = "center")',
+        detail: 'text(t, size, halign, valign)',
+      },
+      { template: 'text("${text}", size = ${10}, font = "${Inter}")', detail: 'text(t, size, font)' },
+      { template: 'text("${text}", size = ${10}, spacing = ${1})', detail: 'text(t, size, spacing)' },
+    ],
+  },
+  {
+    label: 'translate',
+    template: 'translate([${0}, ${0}, ${0}])',
+    detail: 'translate([x, y, z])',
+    info: 'Moves children by a vector.\n\nBetterSCAD also accepts loose numbers: `translate(x, y, z)`.',
+    type: 'class',
+    forms: [
+      { template: 'translate(${0}, ${0}, ${0})', detail: 'translate(x, y, z)  — BetterSCAD' },
+      { template: 'translate([${0}, ${0}])', detail: 'translate([x, y])  — 2D' },
+    ],
+  },
+  {
+    label: 'rotate',
+    template: 'rotate([${0}, ${0}, ${0}])',
+    detail: 'rotate([x, y, z])',
+    info:
+      'Rotates children. `rotate(a)` rotates about Z; `rotate(a, v)` about an axis.\n\n' +
+      'BetterSCAD also accepts loose numbers: `rotate(x, y, z)`.',
+    type: 'class',
+    forms: [
+      { template: 'rotate(${0}, ${0}, ${0})', detail: 'rotate(x, y, z)  — BetterSCAD' },
+      { template: 'rotate(${90})', detail: 'rotate(a)  — about Z' },
+      { template: 'rotate(${90}, [${0}, ${0}, ${1}])', detail: 'rotate(a, v)  — about an axis' },
+    ],
+  },
+  {
+    label: 'scale',
+    template: 'scale([${1}, ${1}, ${1}])',
+    detail: 'scale([x, y, z])',
+    info: 'Scales children per axis.',
+    type: 'class',
+    forms: [{ template: 'scale(${2})', detail: 'scale(factor)  — every axis alike' }],
+  },
+  {
+    label: 'resize',
+    template: 'resize([${x}, ${y}, ${z}])',
+    detail: 'resize([x, y, z])',
+    info: 'Scales children to an absolute bounding-box size.',
+    type: 'class',
+    forms: [
+      {
+        template: 'resize([${x}, ${y}, ${0}], auto = true)',
+        detail: 'resize([x, y, z], auto)  — 0 means scale with the rest',
+      },
+    ],
+  },
+  {
+    label: 'mirror',
+    template: 'mirror([${1}, ${0}, ${0}])',
+    detail: 'mirror([x, y, z])',
+    info: 'Mirrors children across the plane with normal `v`.\n\nBetterSCAD also accepts loose numbers: `mirror(x, y, z)`.',
+    type: 'class',
+    forms: [{ template: 'mirror(${1}, ${0}, ${0})', detail: 'mirror(x, y, z)  — BetterSCAD' }],
+  },
 
   // Shapes OpenSCAD does not have (BetterSCAD extension).
-  { label: 'rounded_square', template: 'rounded_square([${0}, ${0}], r = ${1})', detail: 'rounded_square(size, r, center)  — BetterSCAD', info: 'A square with rounded corners. `size` is a number or [x, y]; `r` is the corner radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner circles.', type: 'class' },
-  { label: 'rounded_cube', template: 'rounded_cube([${0}, ${0}, ${0}], r = ${1})', detail: 'rounded_cube(size, r, center)  — BetterSCAD', info: 'A cube with rounded edges and corners. `size` is a number or [x, y, z]; `r` is the radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner spheres.', type: 'class' },
-  { label: 'thread', template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10})', detail: 'thread(d, pitch, h, internal, clearance, angle, chamfer, center, segments)  — BetterSCAD', info: 'A helical screw thread. `d` is the outside diameter and `pitch` the rise per turn (M8 is d = 8, pitch = 1.25).\n\n`internal = true` makes the mating hole: put it under negative(), and the bolt from the same d and pitch screws into it. `clearance` (default 0.2) is the fit.\n\nExports to `.scad` as a generated module building the same swept helix.', type: 'class' },
+  {
+    label: 'rounded_square',
+    template: 'rounded_square([${0}, ${0}], r = ${1})',
+    detail: 'rounded_square([x, y], r)  — BetterSCAD',
+    info: 'A square with rounded corners. `size` is a number or [x, y]; `r` is the corner radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner circles.',
+    type: 'class',
+    forms: [
+      { template: 'rounded_square(${10}, r = ${1})', detail: 'rounded_square(size, r)  — BetterSCAD' },
+      {
+        template: 'rounded_square([${0}, ${0}], r = ${1}, center = true)',
+        detail: 'rounded_square([x, y], r, center)  — BetterSCAD',
+      },
+    ],
+  },
+  {
+    label: 'rounded_cube',
+    template: 'rounded_cube([${0}, ${0}, ${0}], r = ${1})',
+    detail: 'rounded_cube([x, y, z], r)  — BetterSCAD',
+    info: 'A cube with rounded edges and corners. `size` is a number or [x, y, z]; `r` is the radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner spheres.',
+    type: 'class',
+    forms: [
+      { template: 'rounded_cube(${10}, r = ${1})', detail: 'rounded_cube(size, r)  — BetterSCAD' },
+      {
+        template: 'rounded_cube([${0}, ${0}, ${0}], r = ${1}, center = true)',
+        detail: 'rounded_cube([x, y, z], r, center)  — BetterSCAD',
+      },
+    ],
+  },
+  {
+    label: 'thread',
+    template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10})',
+    detail: 'thread(d, pitch, h)  — BetterSCAD',
+    info: 'A helical screw thread. `d` is the outside diameter and `pitch` the rise per turn (M8 is d = 8, pitch = 1.25).\n\n`internal = true` makes the mating hole: put it under negative(), and the bolt from the same d and pitch screws into it. `clearance` (default 0.2) is the fit.\n\nExports to `.scad` as a generated module building the same swept helix.',
+    type: 'class',
+    forms: [
+      {
+        template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10}, internal = true)',
+        detail: 'thread(d, pitch, h, internal)  — the mating hole',
+      },
+      {
+        template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10}, internal = true, clearance = ${0.3})',
+        detail: 'thread(d, pitch, h, internal, clearance)',
+      },
+      {
+        template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10}, center = true)',
+        detail: 'thread(d, pitch, h, center)',
+      },
+      {
+        template: 'thread(d = ${8}, pitch = ${1.25}, h = ${10}, chamfer = false)',
+        detail: 'thread(d, pitch, h, chamfer)  — square ends',
+      },
+    ],
+  },
   { label: 'regular_polygon', template: 'regular_polygon(${6}, ${10})', detail: 'regular_polygon(sides, length)  — BetterSCAD', info: 'An equilateral polygon with `sides` sides, each `length` long. Fewer than 3 sides cannot close, and is an error.\n\nExports to `.scad` as a generated module wrapping circle($fn = sides).', type: 'class' },
 
   // Single-axis transforms (BetterSCAD extension). Grouped so the axis reads as
@@ -57,20 +288,106 @@ const MODULES: BuiltinDoc[] = [
   { label: 'mirrory', template: 'mirrory()', detail: 'mirrory()  — BetterSCAD', info: 'Mirrors children across the XZ plane.\n\nExports to `.scad` as `mirror([0, 1, 0])`.', type: 'class' },
   { label: 'mirrorz', template: 'mirrorz()', detail: 'mirrorz()  — BetterSCAD', info: 'Mirrors children across the XY plane.\n\nExports to `.scad` as `mirror([0, 0, 1])`.', type: 'class' },
   { label: 'multmatrix', template: 'multmatrix(${m})', detail: 'multmatrix(m)', info: 'Applies a 4x4 (or 3x4) affine matrix.', type: 'class' },
-  { label: 'color', template: 'color("${red}")', detail: 'color(c, alpha)', info: 'Sets preview colour. Accepts a CSS name, #hex, or [r, g, b, a] in 0..1.', type: 'class' },
-  { label: 'offset', template: 'offset(r = ${1})', detail: 'offset(r | delta, chamfer)', info: '2D offset. `r` rounds corners; `delta` keeps them sharp.', type: 'class' },
+  {
+    label: 'color',
+    template: 'color("${red}")',
+    detail: 'color(name)',
+    info: 'Sets preview colour. Accepts a CSS name, #hex, or [r, g, b, a] in 0..1.',
+    type: 'class',
+    forms: [
+      { template: 'color("${red}", ${0.5})', detail: 'color(name, alpha)' },
+      { template: 'color("#${ff8800}")', detail: 'color("#rrggbb")' },
+      { template: 'color([${1}, ${0.5}, ${0}])', detail: 'color([r, g, b])  — 0..1' },
+      { template: 'color([${1}, ${0.5}, ${0}, ${0.5}])', detail: 'color([r, g, b, a])' },
+    ],
+  },
+  {
+    label: 'offset',
+    template: 'offset(r = ${1})',
+    detail: 'offset(r)  — rounded corners',
+    info: '2D offset. `r` rounds corners; `delta` keeps them sharp.',
+    type: 'class',
+    forms: [
+      { template: 'offset(delta = ${1})', detail: 'offset(delta)  — sharp corners' },
+      { template: 'offset(delta = ${1}, chamfer = true)', detail: 'offset(delta, chamfer)' },
+    ],
+  },
   { label: 'union', template: 'union() {\n\t${}\n}', detail: 'union()', info: 'Combines children. Implicit for any group of siblings.', type: 'class' },
   { label: 'difference', template: 'difference() {\n\t${}\n}', detail: 'difference()', info: 'Subtracts every child after the first from the first.', type: 'class' },
   { label: 'intersection', template: 'intersection() {\n\t${}\n}', detail: 'intersection()', info: 'Keeps only the volume common to every child.', type: 'class' },
   { label: 'hull', template: 'hull() {\n\t${}\n}', detail: 'hull()', info: 'Convex hull of all children.', type: 'class' },
   { label: 'minkowski', template: 'minkowski() {\n\t${}\n}', detail: 'minkowski()', info: 'Minkowski sum of the children. Expensive; keep the second shape small.', type: 'class' },
-  { label: 'linear_extrude', template: 'linear_extrude(height = ${10}) ${}', detail: 'linear_extrude(height, center, twist, slices, scale)', info: 'Extrudes 2D geometry along Z.', type: 'class' },
-  { label: 'rotate_extrude', template: 'rotate_extrude(angle = ${360}) ${}', detail: 'rotate_extrude(angle, start)', info: 'Revolves 2D geometry about Z. The profile must sit at x >= 0.', type: 'class' },
-  { label: 'projection', template: 'projection(cut = ${false}) ${}', detail: 'projection(cut)', info: 'Flattens 3D to 2D. `cut = true` slices at z = 0.', type: 'class' },
+  {
+    label: 'linear_extrude',
+    template: 'linear_extrude(height = ${10}) ${}',
+    detail: 'linear_extrude(height)',
+    info: 'Extrudes 2D geometry along Z.',
+    type: 'class',
+    forms: [
+      { template: 'linear_extrude(height = ${10}, center = true) ${}', detail: 'linear_extrude(height, center)' },
+      {
+        template: 'linear_extrude(height = ${10}, twist = ${90}, slices = ${40}) ${}',
+        detail: 'linear_extrude(height, twist, slices)',
+      },
+      { template: 'linear_extrude(height = ${10}, scale = ${0.5}) ${}', detail: 'linear_extrude(height, scale)' },
+    ],
+  },
+  {
+    label: 'rotate_extrude',
+    template: 'rotate_extrude() ${}',
+    detail: 'rotate_extrude()  — a full turn',
+    info: 'Revolves 2D geometry about Z. The profile must sit at x >= 0.',
+    type: 'class',
+    forms: [
+      { template: 'rotate_extrude(angle = ${180}) ${}', detail: 'rotate_extrude(angle)' },
+      { template: 'rotate_extrude(angle = ${180}, start = ${0}) ${}', detail: 'rotate_extrude(angle, start)' },
+    ],
+  },
+  {
+    label: 'projection',
+    template: 'projection() ${}',
+    detail: 'projection()  — the whole outline',
+    info: 'Flattens 3D to 2D. `cut = true` slices at z = 0.',
+    type: 'class',
+    forms: [{ template: 'projection(cut = true) ${}', detail: 'projection(cut)  — a slice at z = 0' }],
+  },
   { label: 'render', template: 'render() ${}', detail: 'render(convexity)', info: 'Forces full evaluation of a subtree.', type: 'class' },
-  { label: 'import', template: 'import("${file.stl}")', detail: 'import(file, convexity, layer, origin, scale)', info: 'Imports STL, OBJ, OFF, DXF or SVG.', type: 'class' },
-  { label: 'surface', template: 'surface("${heightmap.dat}")', detail: 'surface(file, center, invert)', info: 'Builds a solid from a heightmap (.dat grid or an image).', type: 'class' },
-  { label: 'children', template: 'children(${})', detail: 'children(index)', info: 'Instantiates the children passed to this module.', type: 'class' },
+  {
+    label: 'import',
+    template: 'import("${file.stl}")',
+    detail: 'import(file)',
+    info: 'Imports STL, OBJ, OFF, DXF or SVG.',
+    type: 'class',
+    forms: [
+      { template: 'import("${drawing.dxf}", layer = "${0}")', detail: 'import(file, layer)  — DXF' },
+      { template: 'import("${drawing.svg}", dpi = ${96})', detail: 'import(file, dpi)  — SVG' },
+      { template: 'import("${file.stl}", convexity = ${2})', detail: 'import(file, convexity)' },
+    ],
+  },
+  {
+    label: 'surface',
+    template: 'surface("${heightmap.dat}")',
+    detail: 'surface(file)',
+    info: 'Builds a solid from a heightmap (.dat grid or an image).',
+    type: 'class',
+    forms: [
+      {
+        template: 'surface("${heightmap.png}", center = true, invert = true)',
+        detail: 'surface(file, center, invert)',
+      },
+    ],
+  },
+  {
+    label: 'children',
+    template: 'children()',
+    detail: 'children()  — all of them',
+    info: 'Instantiates the children passed to this module.',
+    type: 'class',
+    forms: [
+      { template: 'children(${0})', detail: 'children(index)  — one of them' },
+      { template: 'children([${0} : $children - 1])', detail: 'children(range)  — a run of them' },
+    ],
+  },
   { label: 'negative', template: 'negative() {\n\t${}\n}', detail: 'negative()  — BetterSCAD extension', info: 'Turns a subtree into negative space, subtracted from every sibling in scope.\n\nExports to legacy .scad as a difference().', type: 'class' },
 ];
 
@@ -92,18 +409,64 @@ const FUNCTIONS: BuiltinDoc[] = [
   { label: 'exp', template: 'exp(${x})', detail: 'exp(x)', info: 'e to the power x.', type: 'function' },
   { label: 'ln', template: 'ln(${x})', detail: 'ln(x)', info: 'Natural logarithm.', type: 'function' },
   { label: 'log', template: 'log(${x})', detail: 'log(x)', info: 'Base-10 logarithm.', type: 'function' },
-  { label: 'min', template: 'min(${a}, ${b})', detail: 'min(a, b, …) | min(vector)', info: 'Smallest value.', type: 'function' },
-  { label: 'max', template: 'max(${a}, ${b})', detail: 'max(a, b, …) | max(vector)', info: 'Largest value.', type: 'function' },
+  {
+    label: 'min',
+    template: 'min(${a}, ${b})',
+    detail: 'min(a, b, …)',
+    info: 'Smallest value.',
+    type: 'function',
+    forms: [{ template: 'min(${v})', detail: 'min(vector)' }],
+  },
+  {
+    label: 'max',
+    template: 'max(${a}, ${b})',
+    detail: 'max(a, b, …)',
+    info: 'Largest value.',
+    type: 'function',
+    forms: [{ template: 'max(${v})', detail: 'max(vector)' }],
+  },
   { label: 'norm', template: 'norm(${v})', detail: 'norm(v)', info: 'Euclidean length of a vector.', type: 'function' },
   { label: 'cross', template: 'cross(${a}, ${b})', detail: 'cross(a, b)', info: 'Cross product (3D), or the scalar z-component (2D).', type: 'function' },
   { label: 'len', template: 'len(${v})', detail: 'len(list | string)', info: 'Element or character count.', type: 'function' },
   { label: 'concat', template: 'concat(${a}, ${b})', detail: 'concat(…)', info: 'Concatenates lists, flattening exactly one level.', type: 'function' },
   { label: 'str', template: 'str(${})', detail: 'str(…)', info: 'Converts and joins values into a string.', type: 'function' },
-  { label: 'chr', template: 'chr(${code})', detail: 'chr(code | list)', info: 'Unicode code points to a string.', type: 'function' },
+  {
+    label: 'chr',
+    template: 'chr(${code})',
+    detail: 'chr(code)',
+    info: 'Unicode code points to a string.',
+    type: 'function',
+    forms: [{ template: 'chr([${code}, ${code}])', detail: 'chr(list)' }],
+  },
   { label: 'ord', template: 'ord(${s})', detail: 'ord(string)', info: 'Code point of the first character.', type: 'function' },
   { label: 'lookup', template: 'lookup(${key}, ${table})', detail: 'lookup(key, table)', info: 'Linear interpolation over a table of [key, value] pairs.', type: 'function' },
-  { label: 'search', template: 'search(${needle}, ${haystack})', detail: 'search(match_value, string_or_vector, num_returns_per_match, index_col_num)', info: 'Finds indices of matching entries.', type: 'function' },
-  { label: 'rands', template: 'rands(${min}, ${max}, ${count})', detail: 'rands(min_value, max_value, value_count, seed)', info: 'Random numbers. Pass `seed` for a reproducible sequence.', type: 'function' },
+  {
+    label: 'search',
+    template: 'search(${needle}, ${haystack})',
+    detail: 'search(match_value, string_or_vector)',
+    info: 'Finds indices of matching entries.',
+    type: 'function',
+    forms: [
+      { template: 'search(${needle}, ${haystack}, 0)', detail: 'search(value, haystack, 0)  — every match' },
+      {
+        template: 'search(${needle}, ${table}, ${1}, ${0})',
+        detail: 'search(value, table, num_returns, index_col)',
+      },
+    ],
+  },
+  {
+    label: 'rands',
+    template: 'rands(${min}, ${max}, ${count})',
+    detail: 'rands(min_value, max_value, value_count)',
+    info: 'Random numbers. Pass `seed` for a reproducible sequence.',
+    type: 'function',
+    forms: [
+      {
+        template: 'rands(${min}, ${max}, ${count}, ${seed})',
+        detail: 'rands(min_value, max_value, value_count, seed)',
+      },
+    ],
+  },
   { label: 'is_undef', template: 'is_undef(${x})', detail: 'is_undef(x)', info: 'True when the value is undef.', type: 'function' },
   { label: 'is_bool', template: 'is_bool(${x})', detail: 'is_bool(x)', info: 'Type predicate.', type: 'function' },
   { label: 'is_num', template: 'is_num(${x})', detail: 'is_num(x)', info: 'Type predicate.', type: 'function' },
@@ -112,15 +475,52 @@ const FUNCTIONS: BuiltinDoc[] = [
   { label: 'is_function', template: 'is_function(${x})', detail: 'is_function(x)', info: 'Type predicate.', type: 'function' },
   { label: 'version', template: 'version()', detail: 'version()', info: 'Language version as [year, month, day].', type: 'function' },
   { label: 'echo', template: 'echo(${})', detail: 'echo(…)', info: 'Prints to the console panel.', type: 'function' },
-  { label: 'assert', template: 'assert(${condition}, "${message}")', detail: 'assert(condition, message)', info: 'Stops evaluation with an error when the condition is false.', type: 'function' },
+  {
+    label: 'assert',
+    template: 'assert(${condition}, "${message}")',
+    detail: 'assert(condition, message)',
+    info: 'Stops evaluation with an error when the condition is false.',
+    type: 'function',
+    forms: [{ template: 'assert(${condition})', detail: 'assert(condition)' }],
+  },
 ];
 
 const KEYWORD_SNIPPETS: BuiltinDoc[] = [
   { label: 'module', template: 'module ${name}(${params}) {\n\t${}\n}', detail: 'module name(params) { … }', info: 'Defines a module: a reusable piece of geometry.', type: 'keyword' },
   { label: 'function', template: 'function ${name}(${params}) = ${expr};', detail: 'function name(params) = expr;', info: 'Defines a function. The body is a single expression.', type: 'keyword' },
-  { label: 'for', template: 'for (${i} = [${0}:${9}]) {\n\t${}\n}', detail: 'for (var = range | list)', info: 'Repeats its children once per value.', type: 'keyword' },
+  {
+    label: 'for',
+    template: 'for (${i} = [${0}:${9}]) {\n\t${}\n}',
+    detail: 'for (var = [from : to])',
+    info: 'Repeats its children once per value.',
+    type: 'keyword',
+    forms: [
+      { template: 'for (${i} = [${0}:${2}:${10}]) {\n\t${}\n}', detail: 'for (var = [from : step : to])' },
+      { template: 'for (${v} = ${list}) {\n\t${}\n}', detail: 'for (var = list)' },
+      {
+        template: 'for (${i} = [${0}:${9}], ${j} = [${0}:${9}]) {\n\t${}\n}',
+        detail: 'for (a = …, b = …)  — nested',
+      },
+      {
+        template: 'for (${i} = ${0}; ${i} < ${10}; ${i} = ${i} + 1) {\n\t${}\n}',
+        detail: 'for (init; condition; step)  — BetterSCAD',
+      },
+    ],
+  },
   { label: 'intersection_for', template: 'intersection_for (${i} = [${0}:${9}]) {\n\t${}\n}', detail: 'intersection_for (var = range)', info: 'Intersects the results of every iteration.', type: 'keyword' },
-  { label: 'if', template: 'if (${condition}) {\n\t${}\n}', detail: 'if (condition) … else …', info: 'Conditional instantiation.', type: 'keyword' },
+  {
+    label: 'if',
+    template: 'if (${condition}) {\n\t${}\n}',
+    detail: 'if (condition) { … }',
+    info: 'Conditional instantiation.',
+    type: 'keyword',
+    forms: [
+      {
+        template: 'if (${condition}) {\n\t${}\n} else {\n\t\n}',
+        detail: 'if (condition) { … } else { … }',
+      },
+    ],
+  },
   { label: 'let', template: 'let (${name} = ${value}) ${}', detail: 'let (assignments) expr-or-statement', info: 'Binds values for a single expression or statement.', type: 'keyword' },
   { label: 'each', template: 'each ${list}', detail: 'each list', info: 'Splices a list into the surrounding list comprehension.', type: 'keyword' },
   { label: 'include', template: 'include <${file.scad}>', detail: 'include <path>', info: 'Splices another file in, variables and geometry included.', type: 'keyword' },
@@ -149,14 +549,37 @@ const SPECIAL_VARIABLES: { label: string; info: string }[] = [
   { label: '$vpf', info: 'Viewport field of view.' },
 ];
 
-function toCompletion(doc: BuiltinDoc, boost: number): Completion {
-  return snippetCompletion(doc.template, {
-    label: doc.label,
-    detail: doc.detail,
-    info: doc.info,
-    type: doc.type,
-    boost,
-  });
+/**
+ * One completion per call form, in the order the entry lists them.
+ *
+ * Every form carries the same label, so one piece of typing matches them all
+ * and they arrive together; `detail` is what distinguishes them on screen. The
+ * boost steps down a tenth per form, which settles the order within a group
+ * while staying well inside the gap of one that separates the categories.
+ *
+ * `prefer` lifts the forms that measure circles the way this person does above
+ * the ones that do not, and changes nothing else: a stable partition, so within
+ * each half the written order survives.
+ */
+function toCompletions(doc: BuiltinDoc, boost: number, prefer: RoundMeasure): Completion[] {
+  const written: CallForm[] = [
+    { template: doc.template, detail: doc.detail, measure: doc.measure },
+    ...(doc.forms ?? []),
+  ];
+  const wanted = written.filter((f) => f.measure !== undefined && f.measure !== prefer);
+  const forms = wanted.length
+    ? [...written.filter((f) => !wanted.includes(f)), ...wanted]
+    : written;
+
+  return forms.map((form, index) =>
+    snippetCompletion(form.template, {
+      label: doc.label,
+      detail: form.detail,
+      info: doc.info,
+      type: doc.type,
+      boost: boost - index / 10,
+    }),
+  );
 }
 
 const CONSTANT_COMPLETIONS: Completion[] = CONSTANTS.map((c) => ({
@@ -168,12 +591,46 @@ const CONSTANT_COMPLETIONS: Completion[] = CONSTANTS.map((c) => ({
 }));
 
 // Modules are what people type most, so they outrank functions on ties.
-const BUILTIN_COMPLETIONS: Completion[] = [
-  ...MODULES.map((d) => toCompletion(d, 3)),
-  ...CONSTANT_COMPLETIONS,
-  ...KEYWORD_SNIPPETS.map((d) => toCompletion(d, 2)),
-  ...FUNCTIONS.map((d) => toCompletion(d, 1)),
-];
+/**
+ * The whole built-in list, for one way of measuring circles.
+ *
+ * Built once per setting and kept, because the list is a few hundred entries
+ * and the alternative is rebuilding it on every keystroke to answer a question
+ * whose answer changes about twice a year.
+ */
+const builtinsByMeasure = new Map<RoundMeasure, Completion[]>();
+
+function builtinCompletions(prefer: RoundMeasure): Completion[] {
+  const existing = builtinsByMeasure.get(prefer);
+  if (existing) return existing;
+
+  const built = [
+    ...MODULES.flatMap((d) => toCompletions(d, 3, prefer)),
+    ...CONSTANT_COMPLETIONS,
+    ...KEYWORD_SNIPPETS.flatMap((d) => toCompletions(d, 2, prefer)),
+    ...FUNCTIONS.flatMap((d) => toCompletions(d, 1, prefer)),
+  ];
+  builtinsByMeasure.set(prefer, built);
+  return built;
+}
+
+/**
+ * Which measurement the completion list leads with.
+ *
+ * Module state rather than a facet: there is one editor, the setting changes
+ * from one place, and threading a facet through `override` to reach it would
+ * be machinery in place of an assignment.
+ */
+let roundMeasure: RoundMeasure = 'diameter';
+
+export function setRoundMeasure(measure: RoundMeasure): void {
+  roundMeasure = measure;
+}
+
+/** The completions as currently ordered. Exported for tests. */
+export function currentBuiltins(): Completion[] {
+  return builtinCompletions(roundMeasure);
+}
 
 const SPECIAL_COMPLETIONS: Completion[] = SPECIAL_VARIABLES.map((v) => ({
   label: v.label,
@@ -240,7 +697,7 @@ export function scadCompletions(context: CompletionContext): CompletionResult | 
 
   return {
     from,
-    options: [...BUILTIN_COMPLETIONS, ...documentSymbols(source, context.pos)],
+    options: [...builtinCompletions(roundMeasure), ...documentSymbols(source, context.pos)],
     validFor: /^[\w$]*$/,
   };
 }

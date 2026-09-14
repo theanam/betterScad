@@ -20,6 +20,7 @@ import {
 } from '@betterscad/engine';
 
 import { ScadEditor } from './editor/editor.js';
+import { setRoundMeasure } from './editor/completions.js';
 import {
   BUNDLED_FONTS,
   DEFAULT_FAMILY,
@@ -52,7 +53,14 @@ import {
   type Document,
   type DocumentFormat,
 } from './state/workspace.js';
-import { AnimationBar, StatusBar, TabStrip, Toasts, Toolbar } from './ui/chrome.js';
+import {
+  AnimationBar,
+  StatusBar,
+  TabStrip,
+  Toasts,
+  Toolbar,
+  type AppSettings,
+} from './ui/chrome.js';
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
@@ -149,7 +157,7 @@ class App {
     if (firstRun) {
       this.workspace.createDocument('model.bscad', STARTER_DOCUMENT);
     }
-    this.applyTheme(this.workspace.layout.theme);
+    this.applySettings();
 
     installTooltips();
     this.buildUi();
@@ -221,7 +229,7 @@ class App {
       export: () => void this.exportModel(),
       toggleCustomizer: () => this.toggleCustomizer(),
       toggleConsole: () => this.toggleConsole(),
-      toggleTheme: () => this.toggleTheme(),
+      changeSetting: (key, value) => this.changeSetting(key, value),
       openPalette: () => this.palette.open(),
       openFonts: () => void this.openFontManager(),
       openHelp: () => this.openReference(),
@@ -327,6 +335,9 @@ class App {
         this.refreshChrome();
       },
       onShortcut: (name) => this.runShortcut(name),
+    }, {
+      inchEntry: this.workspace.layout.inchEntry,
+      indentWidth: this.workspace.layout.indentWidth,
     });
 
     this.viewport = new Viewport(viewportHost, {
@@ -1293,12 +1304,36 @@ class App {
   }
 
   private toggleTheme(): void {
-    const next = this.workspace.layout.theme === 'dark' ? 'light' : 'dark';
-    this.workspace.layout.theme = next;
-    this.applyTheme(next);
+    this.changeSetting('theme', this.workspace.layout.theme === 'dark' ? 'light' : 'dark');
+  }
+
+  /**
+   * One setting changed, from the gear menu or the command palette.
+   *
+   * Everything a setting touches is re-applied from the stored value rather
+   * than patched per-key, so the menu, the palette and a restored session all
+   * arrive at the same place by the same route.
+   */
+  private changeSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+    const layout = this.workspace.layout as AppSettings;
+    if (layout[key] === value) return;
+    layout[key] = value;
+    this.applySettings();
     this.workspace.persist();
-    // Repaints the toolbar toggle so its icon and label track the new theme.
     this.refreshChrome();
+    if (key === 'autoRender' && value) this.scheduleRender();
+  }
+
+  /** Pushes the settings into the things that act on them. */
+  private applySettings(): void {
+    const { theme, roundMeasure, inchEntry, indentWidth } = this.workspace.layout;
+    this.applyTheme(theme);
+    setRoundMeasure(roundMeasure);
+    // Undefined on the boot call, which runs before the UI is built so the
+    // theme lands on the document before anything paints. The editor takes
+    // these from its own constructor arguments in that case.
+    this.editor?.setInchEntry(inchEntry);
+    this.editor?.setIndentWidth(indentWidth);
   }
 
   private applyTheme(theme: 'light' | 'dark'): void {
@@ -1336,6 +1371,7 @@ class App {
     this.consolePanel.setExtensions(extensions, !!active);
     this.toolbar.update({
       ...this.workspace.layout,
+      settings: this.workspace.layout,
       showingFinalRender: this.showingFinalRender,
       documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
       hasDocument: !!active,
@@ -1431,9 +1467,7 @@ class App {
         category: 'Render',
         title: 'Toggle auto-render on typing',
         run: () => {
-          this.workspace.layout.autoRender = !this.workspace.layout.autoRender;
-          this.workspace.persist();
-          this.refreshChrome();
+          this.changeSetting('autoRender', !this.workspace.layout.autoRender);
           this.toasts.show(`Auto-render ${this.workspace.layout.autoRender ? 'on' : 'off'}.`, 'info');
         },
       },
@@ -1476,6 +1510,26 @@ class App {
       { id: 'panel.customizer', category: 'Panels', title: 'Toggle Customizer', run: () => this.toggleCustomizer() },
       { id: 'panel.console', category: 'Panels', title: 'Toggle Console', run: () => this.toggleConsole() },
       { id: 'panel.theme', category: 'Panels', title: 'Toggle light / dark theme', run: () => this.toggleTheme() },
+      {
+        id: 'settings.roundMeasure',
+        category: 'Settings',
+        title: 'Switch round dimensions between radius and diameter',
+        run: () => {
+          const next = this.workspace.layout.roundMeasure === 'radius' ? 'diameter' : 'radius';
+          this.changeSetting('roundMeasure', next);
+          this.toasts.show(`Autocomplete now offers ${next} first.`, 'info');
+        },
+      },
+      {
+        id: 'settings.inchEntry',
+        category: 'Settings',
+        title: 'Toggle inch entry (5in becomes 127)',
+        run: () => {
+          const next = !this.workspace.layout.inchEntry;
+          this.changeSetting('inchEntry', next);
+          this.toasts.show(`Inch entry ${next ? 'on' : 'off'}.`, 'info');
+        },
+      },
       { id: 'panel.animation', category: 'Panels', title: 'Toggle animation bar ($t)', run: () => this.toggleAnimation() },
       { id: 'panel.fonts', category: 'Panels', title: 'Manage fonts…', run: () => void this.openFontManager() },
 
