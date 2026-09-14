@@ -179,6 +179,7 @@ assumes. None of them changes what a saved file means.
 | **Theme** | Light or dark. |
 | **Round dimensions** | Whether autocomplete offers `cylinder(h, d)` or `cylinder(h, r)` first. Both are right; people are firmly one or the other. |
 | **Inch entry** | The conversion above. |
+| **Tab completion** | Tab takes the open suggestion. With none open it indents, as it always did. |
 | **Auto-render** | Re-render as you type, or only on `F5`. |
 | **Indent** | Two spaces or four. |
 

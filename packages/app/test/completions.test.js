@@ -16,6 +16,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { EditorState } from '@codemirror/state';
+
 import { currentBuiltins, setRoundMeasure } from '../src/editor/completions.ts';
 
 /** Every completion offered under one name, in the order they are ranked. */
@@ -141,5 +143,57 @@ test('switching the setting keeps every form, and keeps them ordered', () => {
     }
   } finally {
     setRoundMeasure('diameter');
+  }
+});
+
+/**
+ * Applies a completion's snippet to an empty document and returns the text.
+ *
+ * Worth the ceremony: a snippet's *template* and the text it actually inserts
+ * are different things, and the gap between them is invisible until someone
+ * presses Tab.
+ */
+function insertedBy(completion) {
+  let text = '';
+  const view = {
+    state: EditorState.create({ doc: '' }),
+    dispatch: (tr) => {
+      text = EditorState.create({ doc: '' }).update(tr).state.doc.toString();
+    },
+  };
+  completion.apply(view, completion, 0, 0);
+  return text;
+}
+
+test('a completion inserts the call it advertises', () => {
+  // `${10}` is field *number* ten with no text, and `${0}` is the "finish here"
+  // marker — neither puts a number on the page. Only `${1:10}` does. Every one
+  // of these was written the first way once, and inserted `cylinder(h = , d = )`.
+  const expected = {
+    'cylinder(h, d)': 'cylinder(h = 10, d = 5)',
+    'cylinder(h, r)': 'cylinder(h = 10, r = 5)',
+    'translate([x, y, z])': 'translate([0, 0, 0])',
+    'mirror([x, y, z])': 'mirror([1, 0, 0])',
+    'sphere(d)': 'sphere(d = 10)',
+    'thread(d, pitch, h)  — BetterSCAD': 'thread(d = 8, pitch = 1.25, h = 10)',
+  };
+  for (const [detail, text] of Object.entries(expected)) {
+    const completion = currentBuiltins().find((c) => c.detail === detail);
+    assert.ok(completion, `no completion with detail ${detail}`);
+    assert.equal(insertedBy(completion), text);
+  }
+});
+
+test('no completion inserts a placeholder that lost its text', () => {
+  // The failure this guards is silent: the snippet applies, the parentheses are
+  // all there, and the numbers are simply missing.
+  for (const completion of currentBuiltins()) {
+    if (typeof completion.apply !== 'function') continue;
+    const text = insertedBy(completion);
+    assert.ok(!text.includes('${'), `${completion.label}: template leaked into the text — ${text}`);
+    assert.ok(
+      !/=\s*[,)]/.test(text),
+      `${completion.label} (${completion.detail}) inserts an empty argument: ${text}`,
+    );
   }
 });

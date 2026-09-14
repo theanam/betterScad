@@ -338,6 +338,7 @@ class App {
     }, {
       inchEntry: this.workspace.layout.inchEntry,
       indentWidth: this.workspace.layout.indentWidth,
+      tabCompletion: this.workspace.layout.tabCompletion,
     });
 
     this.viewport = new Viewport(viewportHost, {
@@ -1326,7 +1327,7 @@ class App {
 
   /** Pushes the settings into the things that act on them. */
   private applySettings(): void {
-    const { theme, roundMeasure, inchEntry, indentWidth } = this.workspace.layout;
+    const { theme, roundMeasure, inchEntry, indentWidth, tabCompletion } = this.workspace.layout;
     this.applyTheme(theme);
     setRoundMeasure(roundMeasure);
     // Undefined on the boot call, which runs before the UI is built so the
@@ -1334,6 +1335,7 @@ class App {
     // these from its own constructor arguments in that case.
     this.editor?.setInchEntry(inchEntry);
     this.editor?.setIndentWidth(indentWidth);
+    this.editor?.setTabCompletion(tabCompletion);
   }
 
   private applyTheme(theme: 'light' | 'dark'): void {
@@ -1518,6 +1520,16 @@ class App {
           const next = this.workspace.layout.roundMeasure === 'radius' ? 'diameter' : 'radius';
           this.changeSetting('roundMeasure', next);
           this.toasts.show(`Autocomplete now offers ${next} first.`, 'info');
+        },
+      },
+      {
+        id: 'settings.tabCompletion',
+        category: 'Settings',
+        title: 'Toggle Tab completion',
+        run: () => {
+          const next = !this.workspace.layout.tabCompletion;
+          this.changeSetting('tabCompletion', next);
+          this.toasts.show(`Tab ${next ? 'takes the open suggestion' : 'always indents'}.`, 'info');
         },
       },
       {

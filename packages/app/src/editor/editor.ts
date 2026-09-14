@@ -6,7 +6,12 @@
  * inside the editor.
  */
 
-import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import {
+  acceptCompletion,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+} from '@codemirror/autocomplete';
 import {
   defaultKeymap,
   history,
@@ -18,7 +23,7 @@ import {
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit } from '@codemirror/language';
 import { Diagnostic as CmDiagnostic, lintGutter, setDiagnostics } from '@codemirror/lint';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorState, Extension } from '@codemirror/state';
+import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
 import {
   EditorView,
   drawSelection,
@@ -36,12 +41,27 @@ import { openscad } from './scad-language.js';
 import { scadCompletions } from './completions.js';
 import { inchEntry } from './units.js';
 
+/**
+ * Tab, when there is a suggestion open.
+ *
+ * `Prec.high` rather than a position in the extension list: `indentWithTab`
+ * sits in the main keymap at ordinary precedence, and this has to be offered
+ * the key first. It is not a replacement for it — `acceptCompletion` declines
+ * when no completion is open, and the key falls through to indenting, which is
+ * what makes one binding serve both habits.
+ */
+function tabCompletionKeymap(on: boolean): Extension {
+  return on ? Prec.high(keymap.of([{ key: 'Tab', run: acceptCompletion }])) : [];
+}
+
 /** The settings the editor itself acts on. */
 export interface EditorSettings {
   /** Rewrite `5in` to millimetres as it is typed. */
   inchEntry: boolean;
   /** Spaces per indent. */
   indentWidth: number;
+  /** Tab takes the open suggestion, rather than always indenting. */
+  tabCompletion: boolean;
 }
 
 export interface EditorCallbacks {
@@ -123,6 +143,7 @@ export class ScadEditor {
   // rather than a rebuilt state, so changing one keeps the undo history.
   private readonly inchEntry = new Compartment();
   private readonly indent = new Compartment();
+  private readonly tabCompletion = new Compartment();
   private readonly extensions: Extension[];
   /** Set while `setSource` is replacing the document, to suppress onChange. */
   private applyingExternalEdit = false;
@@ -131,7 +152,7 @@ export class ScadEditor {
     parent: HTMLElement,
     initialSource: string,
     private readonly callbacks: EditorCallbacks,
-    settings: EditorSettings = { inchEntry: true, indentWidth: 2 },
+    settings: EditorSettings = { inchEntry: true, indentWidth: 2, tabCompletion: true },
   ) {
     const shortcutKeymap = [
       { key: 'F5', run: () => this.shortcut('preview'), preventDefault: true },
@@ -180,6 +201,7 @@ export class ScadEditor {
       EditorView.lineWrapping,
       this.readOnly.of(EditorState.readOnly.of(false)),
       this.inchEntry.of(settings.inchEntry ? inchEntry() : []),
+      this.tabCompletion.of(tabCompletionKeymap(settings.tabCompletion)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !this.applyingExternalEdit) {
           this.callbacks.onChange(update.state.doc.toString());
@@ -197,6 +219,11 @@ export class ScadEditor {
       parent,
       state: EditorState.create({ doc: initialSource, extensions }),
     });
+  }
+
+  /** Whether Tab takes the open suggestion before it falls back to indenting. */
+  setTabCompletion(on: boolean): void {
+    this.view.dispatch({ effects: this.tabCompletion.reconfigure(tabCompletionKeymap(on)) });
   }
 
   /** Turns inch entry on or off without disturbing the document. */

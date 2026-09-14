@@ -74,6 +74,8 @@ export interface LayoutState {
   inchEntry: boolean;
   /** Spaces per indent in the editor. */
   indentWidth: 2 | 4;
+  /** Tab takes the open suggestion, rather than always indenting. */
+  tabCompletion: boolean;
 }
 
 export const DEFAULT_LAYOUT: LayoutState = {
@@ -88,6 +90,7 @@ export const DEFAULT_LAYOUT: LayoutState = {
   roundMeasure: 'diameter',
   inchEntry: true,
   indentWidth: 2,
+  tabCompletion: true,
 };
 
 const STORAGE_KEY = 'betterscad.workspace.v1';

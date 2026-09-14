@@ -37,7 +37,7 @@ export const REPO_URL = 'https://github.com/theanam/betterScad';
  */
 export type AppSettings = Pick<
   LayoutState,
-  'theme' | 'roundMeasure' | 'inchEntry' | 'autoRender' | 'indentWidth'
+  'theme' | 'roundMeasure' | 'inchEntry' | 'tabCompletion' | 'autoRender' | 'indentWidth'
 >;
 
 /**
@@ -100,6 +100,13 @@ export class SettingsButton {
         description: 'Type 5in and get 127 — models stay in millimetres',
         value: settings.inchEntry,
         onChange: (value) => this.onChange('inchEntry', value),
+      },
+      {
+        kind: 'toggle',
+        label: 'Tab completion',
+        description: 'Tab takes the open suggestion; with none open it indents as usual',
+        value: settings.tabCompletion,
+        onChange: (value) => this.onChange('tabCompletion', value),
       },
       {
         kind: 'toggle',
