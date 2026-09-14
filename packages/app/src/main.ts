@@ -533,7 +533,15 @@ class App {
     );
   }
 
-  private setBusy(busy: boolean): void {
+  /**
+   * The badge over the viewport, and what it says it is doing.
+   *
+   * Exporting is its own wait now rather than a rendering one: a final render
+   * really unions the model, which a preview skips, so an export of something
+   * large takes visibly longer than the preview it was watching a moment ago.
+   */
+  private setBusy(busy: boolean, label = 'Rendering…'): void {
+    this.busyBadge.textContent = label;
     this.busyBadge.style.display = busy ? '' : 'none';
   }
 
@@ -895,7 +903,7 @@ class App {
     const choice = await showExportDialog(doc.name.replace(/\.[^.]+$/, ''), this.lastDimension);
     if (!choice) return;
 
-    this.setBusy(true);
+    this.setBusy(true, 'Exporting…');
     try {
       const result = await this.client.exportModel(choice.format, {
         source: doc.text,

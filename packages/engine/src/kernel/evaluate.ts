@@ -52,6 +52,16 @@ export interface BuildOptions {
   diagnostics: DiagnosticBag;
   fonts?: FontRegistry;
   assets?: AssetProvider;
+  /**
+   * Really union the result before handing it back.
+   *
+   * Off while previewing, where overlapping solids cost nothing: the viewport
+   * draws them happily and skipping the boolean is most of what makes a preview
+   * quick. On for a final render and for export, where they are not free at all
+   * — overlapping shells in a mesh file are interior walls, and a slicer reads
+   * those as cavities.
+   */
+  merge?: boolean;
 }
 
 export interface BuildResult {
@@ -94,7 +104,7 @@ export async function buildGeometry(root: SceneNode, options: BuildOptions): Pro
 
   try {
     const result = evaluateNode(root, ctx);
-    return extract(result, ctx);
+    return extract(result, ctx, options.merge === true);
   } finally {
     // Everything the caller needs has been copied into plain typed arrays by
     // `extract`, so the whole WASM-side working set can go at once.
@@ -903,7 +913,20 @@ function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {
         );
       }
       const segments = fragments(Math.max(Math.abs(rect.max[0]), Math.abs(rect.min[0])), res);
-      let solid = ctx.arena.track(ctx.api.Manifold.revolve(section, segments, angle));
+
+      // Swept by the magnitude and then turned back, rather than handing the
+      // negative angle straight to `revolve`.
+      //
+      // Given a negative angle Manifold sweeps the other way round and reverses
+      // the winding with it, so the result is inside-out: `rotate_extrude(angle
+      // = -90)` came out with the volume of the +90 sweep and the sign flipped.
+      // Nothing local catches that — the mesh is closed, it is edge-manifold,
+      // and the viewport shades both faces, so it looks right. It only surfaces
+      // later, as a boolean that produces nonsense or an STL whose normals all
+      // point inward, which a slicer reads as a hole where the solid should be.
+      const sweep = Math.abs(angle);
+      let solid = ctx.arena.track(ctx.api.Manifold.revolve(section, segments, sweep));
+      if (angle < 0) solid = ctx.arena.track(solid.rotate([0, 0, angle] as Vec3));
       if (start !== 0) solid = ctx.arena.track(solid.rotate([0, 0, start] as Vec3));
       return solid;
     });
@@ -1100,7 +1123,59 @@ function buildSurface(node: SceneNode, ctx: Ctx): Assembly {
 // Result extraction
 // ---------------------------------------------------------------------------
 
-function extract(result: Assembly, ctx: Ctx): BuildResult {
+/**
+ * Unions the 3D pieces that share a colour and a display treatment.
+ *
+ * `union` is lazy everywhere else, and deliberately so — pieces stay separate
+ * so each keeps its own colour, and not running the boolean is most of what
+ * makes a preview quick. A mesh file cannot afford the same laziness: two
+ * overlapping shells written to an STL are an interior wall, and a slicer reads
+ * a wall it cannot get outside of as a cavity.
+ *
+ * Grouped by colour rather than merged wholesale, because a multi-colour export
+ * carries one object per colour and unioning across them would throw that away.
+ * Pieces of the same colour cannot be told apart in the file anyway.
+ *
+ * A boolean that fails leaves its group alone rather than dropping it: an
+ * export that is merely unmerged beats one that is missing a part.
+ */
+function mergePieces(pieces: readonly Piece[], ctx: Ctx): Piece[] {
+  const out: Piece[] = [];
+  const groups: Piece[][] = [];
+  const index = new Map<string, number>();
+
+  for (const piece of pieces) {
+    if (piece.dim !== 3) {
+      out.push(piece);
+      continue;
+    }
+    const key = `${piece.display}|${piece.color ? piece.color.join(',') : ''}`;
+    let at = index.get(key);
+    if (at === undefined) {
+      at = groups.length;
+      index.set(key, at);
+      groups.push([]);
+    }
+    groups[at].push(piece);
+  }
+
+  for (const group of groups) {
+    if (group.length === 1) {
+      out.push(group[0]);
+      continue;
+    }
+    const merged = guardGeom(ctx, undefined, 'union', () =>
+      ctx.arena.track(ctx.api.Manifold.union(group.map((p) => p.solid as Manifold))),
+    );
+    if (merged) out.push({ dim: 3, solid: merged, color: group[0].color, display: group[0].display });
+    else out.push(...group);
+  }
+
+  return out;
+}
+
+function extract(result: Assembly, ctx: Ctx, merge: boolean): BuildResult {
+  const pieces = merge ? mergePieces(result.pieces, ctx) : result.pieces;
   const parts: BuildResult['parts'] = [];
   const contours2d: BuildResult['contours2d'] = [];
   const annotations: BuildResult['annotations'] = [];
@@ -1111,7 +1186,7 @@ function extract(result: Assembly, ctx: Ctx): BuildResult {
   let has2 = false;
   let has3 = false;
 
-  for (const piece of result.pieces) {
+  for (const piece of pieces) {
     if (piece.dim === 3) {
       has3 = true;
       const solid = piece.solid as Manifold;

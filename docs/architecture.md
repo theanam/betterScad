@@ -136,8 +136,20 @@ Three decisions shape this layer:
 
 **Assemblies, not single solids.** A scene evaluates to a flat list of *pieces*,
 each with its own colour. OpenSCAD's colours are a display property, not part of
-the solid, so eagerly unioning everything would lose them. Pieces are unioned
-once, at export.
+the solid, so eagerly unioning everything would lose them. `union` therefore
+does not run a boolean at all: it concatenates the operands' pieces and moves
+on, which is also most of what makes a preview quick.
+
+The boolean is run on the way out instead, grouped by colour so a multi-colour
+export still carries one object per colour. `merge` controls it, and defaults to
+the opposite of `preview` — which is what the F5/F6 split already means. A
+preview may draw overlapping solids because nothing downstream cares; a final
+render is the geometry Export writes, and there it matters a great deal.
+Overlapping shells in a mesh file are interior walls, and a slicer reads a wall
+it cannot get outside of as a cavity. This was wishful thinking in an earlier
+version of this document — the pieces reached `mergeMeshes`, which concatenates
+triangle lists and runs no CSG whatsoever, so exported models really did arrive
+at the slicer as a pile of interpenetrating shells.
 
 **Primitives use OpenSCAD's own tessellation.** `sphere($fn=6)` and
 `cylinder($fn=3)` are used deliberately to get a specific low-poly solid, so

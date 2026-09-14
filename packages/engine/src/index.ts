@@ -56,6 +56,16 @@ export interface RenderOptions extends CompileOptions {
   assets?: AssetProvider;
   /** Skip geometry when the source failed to compile. Defaults to true. */
   skipGeometryOnError?: boolean;
+  /**
+   * Really union the result rather than leaving overlapping pieces separate.
+   *
+   * Defaults to the opposite of `preview`, which is what the F5/F6 split
+   * already means: a preview may draw overlapping solids because nothing
+   * downstream cares, while a final render is the geometry Export writes and
+   * has to be one solid per colour. Overlapping shells in a mesh file are
+   * interior walls, and a slicer reads those as cavities.
+   */
+  merge?: boolean;
 }
 
 export interface RenderResult extends CompileResult {
@@ -216,6 +226,7 @@ export class Engine {
       diagnostics: bag,
       fonts: this.fonts,
       assets: options.assets,
+      merge: options.merge ?? options.preview !== true,
     });
     const geometryMs = now() - geometryStart;
 

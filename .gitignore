@@ -5,4 +5,5 @@ dist/
 .vite/
 packages/app/dev-dist/
 coverage/
+inspection/
 blog.md
