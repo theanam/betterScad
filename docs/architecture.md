@@ -199,3 +199,20 @@ every node is exercised by every file it touches.
 Binary expressions are parenthesised unconditionally. The output must re-parse
 identically, and precedence-aware printing is not worth the risk of getting
 subtly wrong.
+
+**The export has to read like the file that produced it.** Generated code is
+code someone will open, so the transpiler keeps the original's shape: a loop
+stays a loop, a call stays a call. That splits rewrites in two.
+
+*One-liners are inlined.* `translatex(d)` becomes `translate([d, 0, 0])` at the
+call site; wrapping that in a module would be more machinery than the thing it
+replaces.
+
+*Anything larger becomes a generated module*, listed in `SHAPE_MODULES` and
+emitted by `Printer.helperFor()`. It is defined once however many times the
+shape is used, named `__<shape>`, and prepended to the output — printing is what
+discovers which helpers are needed, so the body is printed first and the
+definitions are added in front of it. `declaredModuleNames()` collects every
+name the source declares so a helper can never shadow one; a collision takes a
+numbered suffix instead, because redefining a user's module would change their
+geometry rather than their formatting.

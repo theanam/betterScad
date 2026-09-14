@@ -1337,6 +1337,10 @@ class Interpreter {
   warn(message: string, span?: SourceSpan, code?: string): void {
     this.diagnostics.warn(message, span, code);
   }
+
+  error(message: string, span?: SourceSpan, code?: string): void {
+    this.diagnostics.error(message, span, code);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1405,6 +1409,38 @@ function axisTransform(matrix: (amount: number) => Mat4, takesAmount = true): Bu
     build: (args, children, _scope, _interp, span) =>
       transformNode(matrix(takesAmount ? asNumber(args.get('d'), 0) : 0), children, span),
   };
+}
+
+/** The circumradius of a regular polygon with `sides` sides of length `length`. */
+export function circumradius(sides: number, length: number): number {
+  return length / (2 * Math.sin(Math.PI / sides));
+}
+
+/**
+ * Clamps a corner radius to what the shape can actually hold.
+ *
+ * A radius past half the shortest side has no geometry to round — the straight
+ * section it is cut from would be negative — so it is clamped and reported
+ * rather than producing a shape that silently is not the size asked for.
+ */
+function cornerRadius(
+  r: number,
+  size: number[],
+  what: string,
+  interp: Interpreter,
+  span: SourceSpan,
+): number {
+  const limit = Math.min(...size) / 2;
+  if (!Number.isFinite(r) || r <= 0) return 0;
+  if (r > limit + 1e-9) {
+    interp.warn(
+      `${what}(): r = ${r} is larger than half the shortest side; using ${limit}.`,
+      span,
+      'eval.radius-clamped',
+    );
+    return Math.max(0, limit);
+  }
+  return r;
 }
 
 /** OpenSCAD's cylinder parameter juggling: r/d, r1/r2, d1/d2. */
@@ -1500,6 +1536,131 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
     build: (args, _children, _scope, _interp, span) => {
       const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
       return node('square', { size, center: isTruthy(args.get('center')) }, [], [], span);
+    },
+  },
+
+  /**
+   * `rounded_square(size, r, center)` — a square with rounded corners
+   * (BetterSCAD extension).
+   *
+   * Built as the scene subtree its legacy export prints, rather than as a new
+   * kernel primitive: `offset(r) square(size - 2r)`, shifted so the result
+   * occupies the size asked for. The downgrade is then equivalent by
+   * construction instead of by two implementations happening to agree.
+   */
+  rounded_square: {
+    params: ['size', 'r', 'center'],
+    build: (args, _children, scope, interp, span) => {
+      const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
+      const center = isTruthy(args.get('center'));
+      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'rounded_square', interp, span);
+
+      if (r <= 0) return node('square', { size, center }, [], [], span);
+
+      // A hull of four corner circles, which *is* the Minkowski sum of the
+      // rectangle and a disc. `offset(r)` of an inset square says the same
+      // thing until the radius reaches half the shortest side, at which point
+      // the square it is grown from collapses to a zero-height line and the
+      // offset has nothing to work with. The hull still has four circles.
+      const corners: SceneNode[] = [];
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          corners.push(
+            transformNode(
+              translation(sx * (size[0] / 2 - r), sy * (size[1] / 2 - r), 0),
+              [node('circle', { r, resolution: resolutionFor(args, scope) }, [], [], span)],
+              span,
+            ),
+          );
+        }
+      }
+
+      const hull = node('hull', {}, corners, [], span);
+      if (center) return hull;
+      return transformNode(translation(size[0] / 2, size[1] / 2, 0), [hull], span);
+    },
+  },
+
+  /**
+   * `rounded_cube(size, r, center)` — a cube with rounded edges and corners
+   * (BetterSCAD extension).
+   *
+   * A hull of eight corner spheres, which is exactly `minkowski()` of the box
+   * and a sphere but without the cost of actually running a Minkowski sum.
+   */
+  rounded_cube: {
+    params: ['size', 'r', 'center'],
+    build: (args, _children, scope, interp, span) => {
+      const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
+      const center = isTruthy(args.get('center'));
+      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'rounded_cube', interp, span);
+
+      if (r <= 0) {
+        return node('cube', { size, center }, [], [], span);
+      }
+
+      const corners: SceneNode[] = [];
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            corners.push(
+              transformNode(
+                translation(
+                  sx * (size[0] / 2 - r),
+                  sy * (size[1] / 2 - r),
+                  sz * (size[2] / 2 - r),
+                ),
+                [node('sphere', { r, resolution: resolutionFor(args, scope) }, [], [], span)],
+                span,
+              ),
+            );
+          }
+        }
+      }
+
+      const hull = node('hull', {}, corners, [], span);
+      if (center) return hull;
+      return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
+    },
+  },
+
+  /**
+   * `regular_polygon(sides, length)` — an equilateral polygon given one side
+   * (BetterSCAD extension).
+   *
+   * A circle forced to `$fn = sides` is already a regular polygon; the only
+   * work here is turning a side length into the circumradius that produces it.
+   */
+  regular_polygon: {
+    params: ['sides', 'length'],
+    build: (args, _children, _scope, interp, span) => {
+      const sides = Math.round(asNumber(args.get('sides'), 0));
+      const length = asNumber(args.get('length'), 0);
+
+      if (!Number.isFinite(sides) || sides < 3) {
+        interp.error(
+          `regular_polygon(): needs at least 3 sides to close a shape, got ${sides}.`,
+          span,
+          'eval.bad-polygon',
+        );
+        return undefined;
+      }
+      if (!Number.isFinite(length) || length <= 0) {
+        interp.error(
+          `regular_polygon(): side length must be greater than 0, got ${length}.`,
+          span,
+          'eval.bad-polygon',
+        );
+        return undefined;
+      }
+
+      return node(
+        'circle',
+        { r: circumradius(sides, length), resolution: { fn: sides, fa: 12, fs: 2 } },
+        [],
+        [],
+        span,
+      );
     },
   },
 

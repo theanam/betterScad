@@ -167,9 +167,18 @@ Every extension has a defined downgrade path to plain `.scad`, enforced at role
 registration and implemented in `transpile.ts`. `is_range()` is the one
 exception, and is called out as such below.
 
+Two rules govern what the export looks like. A one-liner is rewritten in place.
+Anything larger becomes a **generated module**, named `__<shape>` and defined
+once however many times it is used, so the exported file keeps the shape of the
+file that produced it. A generated name that the source already declares gets a
+numbered suffix rather than shadowing it.
+
 | Extension | Downgrade |
 | --- | --- |
 | [`negative()`](#negative) | `difference()` around the scope |
+| [`rounded_square()`](#rounded_square-and-rounded_cube) | module: a hull of four corner circles |
+| [`rounded_cube()`](#rounded_square-and-rounded_cube) | module: a hull of eight corner spheres |
+| [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
 | [Single-axis transforms](#single-axis-transforms) | the stock call with zeros in the other slots |
 | [C-style statement `for`](#c-style-statement-for) | bounded range `for` with the condition as a guard |
@@ -234,6 +243,43 @@ comprehensions. BetterSCAD also accepts it as a statement.
 **Downgrade:** rewritten as a bounded range `for` with the condition as a guard,
 and the original is preserved in a comment. This is exact only for the common
 `i = start; i < limit; i = i + step` shape, so the export reports it.
+
+### `rounded_square()` and `rounded_cube()`
+
+`rounded_square(size, r, center)` and `rounded_cube(size, r, center)` take the
+same `size` and `center` as `square()` and `cube()`, plus a corner radius:
+
+```scad
+rounded_square([30, 20], 5);            // 30 x 20, corners of radius 5
+rounded_square(20, 4, center = true);   // a 20 x 20 square about the origin
+rounded_cube([40, 30, 12], 3);
+```
+
+`r` is clamped to half the shortest side, with a warning — beyond that there is
+no straight section left to round. At exactly half, the corners meet and the
+shape is a stadium (2D) or a capsule (3D); `r = 0` gives the plain square or
+cube.
+
+Both are built as the hull of their corner primitives, which *is* the Minkowski
+sum of the box and a disc or sphere, without the cost of computing one. The
+resolution of the rounding follows `$fn`/`$fa`/`$fs` as usual.
+
+**Downgrade:** a generated module using the same hull.
+
+### `regular_polygon()`
+
+`regular_polygon(sides, length)` — an equilateral polygon described the way you
+would measure one, by the length of a side rather than by a radius:
+
+```scad
+regular_polygon(6, 10);   // a hexagon whose every side is 10
+```
+
+Fewer than three sides cannot close a shape, and a side length of zero or less
+has no shape to describe; both are errors rather than an empty result.
+
+**Downgrade:** a generated module wrapping `circle($fn = sides)` at the
+circumradius `length / (2 * sin(180 / sides))`.
 
 ### Loose-number transforms
 

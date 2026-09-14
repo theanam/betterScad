@@ -103,6 +103,9 @@ negative never reaches further than the braces it was written in.
 | Syntax | What it does | Becomes, in plain `.scad` |
 | --- | --- | --- |
 | `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
+| `rounded_square(size, r)` | A square with rounded corners. `size` like `square()`, plus a radius | A hull of four corner circles |
+| `rounded_cube(size, r)` | A cube with rounded edges. `size` like `cube()`, plus a radius | A hull of eight corner spheres |
+| `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
 | `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |
 | `translatex(d)`<br>`translatey(d)`<br>`translatez(d)` | Move along one axis | `translate([d, 0, 0])`, and so on |
 | `rotatex(a)`<br>`rotatey(a)`<br>`rotatez(a)` | Turn about one axis | `rotate([a, 0, 0])`, and so on |
@@ -111,7 +114,9 @@ negative never reaches further than the braces it was written in.
 | `is_range(x)` | Tests for a range, like the other `is_*` functions | ⚠️ Nothing — it becomes `undef` in stock OpenSCAD |
 
 Stock syntax is untouched: `rotate(a, v)` is still the axis rotation it always
-was. Full details in [`docs/language.md`](docs/language.md).
+was. The shapes get a generated module in the exported file — defined once and
+called, so the export reads like what you wrote. Full details in
+[`docs/language.md`](docs/language.md).
 
 ## File formats
 
@@ -173,10 +178,15 @@ publishes on every push to `main` with no repo settings to change.
 
 ## Contributing
 
-Issues and pull requests welcome. One non-negotiable rule: **any new language
-syntax ships with its plain-`.scad` downgrade**, implemented in
-[`transpile.ts`](packages/engine/src/transpile.ts) and covered by a test proving
-the rewrite is equivalent.
+Issues and pull requests welcome. Two non-negotiable rules:
+
+1. **Any new language syntax ships with its plain-`.scad` downgrade**,
+   implemented in [`transpile.ts`](packages/engine/src/transpile.ts) and covered
+   by a test proving the rewrite is equivalent.
+2. **The export has to read like the file that produced it.** A one-liner is
+   rewritten in place; anything bigger becomes a generated module, defined once
+   and called wherever the shape was used. Generated code is code someone will
+   open.
 
 ```sh
 npm run typecheck

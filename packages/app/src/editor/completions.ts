@@ -39,6 +39,11 @@ const MODULES: BuiltinDoc[] = [
   { label: 'resize', template: 'resize([${x}, ${y}, ${z}])', detail: 'resize(newsize, auto)', info: 'Scales children to an absolute bounding-box size.', type: 'class' },
   { label: 'mirror', template: 'mirror([${1}, ${0}, ${0}])', detail: 'mirror(v)', info: 'Mirrors children across the plane with normal `v`.\n\nBetterSCAD also accepts loose numbers: `mirror(x, y, z)`.', type: 'class' },
 
+  // Shapes OpenSCAD does not have (BetterSCAD extension).
+  { label: 'rounded_square', template: 'rounded_square([${0}, ${0}], r = ${1})', detail: 'rounded_square(size, r, center)  — BetterSCAD', info: 'A square with rounded corners. `size` is a number or [x, y]; `r` is the corner radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner circles.', type: 'class' },
+  { label: 'rounded_cube', template: 'rounded_cube([${0}, ${0}, ${0}], r = ${1})', detail: 'rounded_cube(size, r, center)  — BetterSCAD', info: 'A cube with rounded edges and corners. `size` is a number or [x, y, z]; `r` is the radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner spheres.', type: 'class' },
+  { label: 'regular_polygon', template: 'regular_polygon(${6}, ${10})', detail: 'regular_polygon(sides, length)  — BetterSCAD', info: 'An equilateral polygon with `sides` sides, each `length` long. Fewer than 3 sides cannot close, and is an error.\n\nExports to `.scad` as a generated module wrapping circle($fn = sides).', type: 'class' },
+
   // Single-axis transforms (BetterSCAD extension). Grouped so the axis reads as
   // the point of the call rather than as a position in a vector.
   { label: 'translatex', template: 'translatex(${0})', detail: 'translatex(d)  — BetterSCAD', info: 'Moves children `d` along X.\n\nExports to `.scad` as `translate([d, 0, 0])`.', type: 'class' },

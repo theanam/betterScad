@@ -57,6 +57,65 @@ const AXIS_SUGAR: Record<string, { stock: string; slot: number; fill: number; co
   mirrorz: { stock: 'mirror', slot: 2, fill: 0, constant: 1 },
 };
 
+/**
+ * Shapes that expand into a helper module rather than being inlined.
+ *
+ * The expansion is a paragraph of geometry, not a one-liner, so inlining it at
+ * every call site would bury the shape of the original file in boilerplate and
+ * repeat the same block N times. A module keeps each call a call — the exported
+ * file reads like the file that produced it — and the body is written once.
+ *
+ * `params` is the OpenSCAD signature; `body` is the module body, indented two
+ * spaces. Both are plain text: these are fixed definitions, not something built
+ * from the call site.
+ */
+const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
+  rounded_square: {
+    params: 'size, r, center = false',
+    body: [
+      's = is_list(size) ? size : [size, size];',
+      'rr = min(r, min(s[0], s[1]) / 2);',
+      '// A hull of four corner circles is the Minkowski sum of the rectangle',
+      '// and a disc. offset(r) of an inset square says the same thing until rr',
+      '// reaches half the shortest side, where that square collapses to a line.',
+      'translate(center ? [0, 0] : [s[0] / 2, s[1] / 2])',
+      '  if (rr > 0)',
+      '    hull()',
+      '      for (x = [-1, 1], y = [-1, 1])',
+      '        translate([x * (s[0] / 2 - rr), y * (s[1] / 2 - rr)])',
+      '          circle(r = rr);',
+      '  else',
+      '    square(s, center = true);',
+    ],
+  },
+  rounded_cube: {
+    params: 'size, r, center = false',
+    body: [
+      's = is_list(size) ? size : [size, size, size];',
+      'rr = min(r, min(s[0], min(s[1], s[2])) / 2);',
+      '// A hull of eight corner spheres is minkowski() of the box and a sphere,',
+      '// without the cost of running one. At r = 0 the spheres would be empty,',
+      '// so the box is emitted directly.',
+      'translate(center ? [0, 0, 0] : [s[0] / 2, s[1] / 2, s[2] / 2])',
+      '  if (rr > 0)',
+      '    hull()',
+      '      for (x = [-1, 1], y = [-1, 1], z = [-1, 1])',
+      '        translate([x * (s[0] / 2 - rr), y * (s[1] / 2 - rr), z * (s[2] / 2 - rr)])',
+      '          sphere(r = rr);',
+      '  else',
+      '    cube(s, center = true);',
+    ],
+  },
+  regular_polygon: {
+    params: 'sides, length',
+    body: [
+      '// A circle forced to $fn = sides is already a regular polygon; the only',
+      '// work is turning one side length into the circumradius that gives it.',
+      'circle(r = length / (2 * sin(180 / sides)), $fn = sides);',
+    ],
+  },
+};
+
 /** Transforms that also accept loose numbers in place of a vector. */
 const LOOSE_VECTOR_CALLS = new Set(['translate', 'mirror', 'rotate']);
 
@@ -83,8 +142,44 @@ const ROLE_TO_MODIFIER = new Map<string, string>(
 class Printer {
   private readonly out: string[] = [];
   readonly rewrites = new Set<string>();
+  /** Helper modules this file needed, in first-use order. */
+  private readonly helpers = new Map<string, string>();
 
-  constructor(private readonly indentWidth: number) {}
+  constructor(
+    private readonly indentWidth: number,
+    /** Module names already taken by the file, so a helper cannot shadow one. */
+    private readonly taken: Set<string>,
+  ) {}
+
+  /**
+   * The name of the helper module for a shape, defining it on first use.
+   *
+   * The `__` prefix marks it as generated. A file that already has that name
+   * gets a numbered one instead, because silently redefining a user's module
+   * would change their geometry rather than their formatting.
+   */
+  private helperFor(shape: string): string {
+    const existing = this.helpers.get(shape);
+    if (existing) return existing;
+
+    let name = `__${shape}`;
+    for (let n = 2; this.taken.has(name); n++) name = `__${shape}_${n}`;
+    this.taken.add(name);
+    this.helpers.set(shape, name);
+    return name;
+  }
+
+  /** The helper definitions, in the order they were first needed. */
+  helperDefinitions(): string {
+    if (this.helpers.size === 0) return '';
+    const blocks: string[] = [];
+    for (const [shape, name] of this.helpers) {
+      const { params, body } = SHAPE_MODULES[shape];
+      const indent = ' '.repeat(this.indentWidth);
+      blocks.push(`module ${name}(${params}) {\n${body.map((l) => indent + l).join('\n')}\n}`);
+    }
+    return blocks.join('\n\n') + '\n\n';
+  }
 
   toString(): string {
     return this.out.join('');
@@ -278,6 +373,11 @@ class Printer {
    * changes geometry, but both are reported so the export says what it touched.
    */
   private moduleCall(name: string, args: Argument[]): string {
+    if (SHAPE_MODULES[name]) {
+      this.rewrites.add(`${name}() rewritten as a module`);
+      return `${this.helperFor(name)}(${this.args(args)})`;
+    }
+
     const axis = AXIS_SUGAR[name];
     if (axis) {
       this.rewrites.add(`${name}() rewritten as ${axis.stock}([…])`);
@@ -504,9 +604,10 @@ function formatNumberLiteral(n: number): string {
  * what changed.
  */
 export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions = {}): TranspileResult {
-  const printer = new Printer(options.indent ?? 2);
+  const printer = new Printer(options.indent ?? 2, declaredModuleNames(file));
   printer.printBody(file.body, 0);
-  const body = printer.toString();
+  // Printed first, because printing is what discovers which helpers are needed.
+  const body = printer.helperDefinitions() + printer.toString();
   const rewrites = [...printer.rewrites];
 
   if (options.header === false) return { source: body, rewrites };
@@ -521,6 +622,34 @@ export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions 
   ].join('\n');
 
   return { source: header + body, rewrites };
+}
+
+/**
+ * Every module name the file declares, at any depth.
+ *
+ * Collected so a generated helper can be given a name the file does not already
+ * use; redefining a user's module would change their geometry, not their
+ * formatting.
+ */
+function declaredModuleNames(file: ScadFile): Set<string> {
+  const names = new Set<string>();
+  const visit = (stmt: Statement): void => {
+    if (stmt.kind === 'module-decl') {
+      names.add(stmt.name);
+      visit(stmt.body);
+    }
+    if ('children' in stmt) for (const child of stmt.children) visit(child);
+    if (stmt.kind === 'block') for (const child of stmt.body) visit(child);
+    if (stmt.kind === 'if') {
+      visit(stmt.then);
+      if (stmt.else) visit(stmt.else);
+    }
+    if (stmt.kind === 'for' || stmt.kind === 'intersection-for' || stmt.kind === 'for-c') visit(stmt.body);
+    if (stmt.kind === 'let-stmt') visit(stmt.body);
+    if ((stmt.kind === 'assert-stmt' || stmt.kind === 'echo-stmt') && stmt.body) visit(stmt.body);
+  };
+  for (const stmt of file.body) visit(stmt);
+  return names;
 }
 
 /** One BetterSCAD extension found in a file, and how it downgrades. */
@@ -565,6 +694,14 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
         'for-c',
         'C-style for(...)',
         'Rewritten as a bounded range for with the condition as a guard.',
+        stmt.span.start.line,
+      );
+    }
+    if (stmt.kind === 'module-call' && SHAPE_MODULES[stmt.name]) {
+      record(
+        stmt.name,
+        `${stmt.name}()`,
+        'Rewritten as a generated module, defined once and reused.',
         stmt.span.start.line,
       );
     }
