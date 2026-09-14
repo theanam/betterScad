@@ -339,7 +339,7 @@ class App {
       inchEntry: this.workspace.layout.inchEntry,
       indentWidth: this.workspace.layout.indentWidth,
       tabCompletion: this.workspace.layout.tabCompletion,
-    });
+    }, this.workspace.layout.theme === 'dark');
 
     this.viewport = new Viewport(viewportHost, {
       onMeasure: (measurement) => this.showMeasurement(measurement),
@@ -1345,6 +1345,9 @@ class App {
       ?.setAttribute('content', theme === 'dark' ? '#0e0c0b' : '#f4efe9');
     // The viewport samples CSS variables, so it must be told to re-read them.
     this.viewport?.applyTheme();
+    // CodeMirror picks between its own light and dark base rules from a facet,
+    // not from the document's `data-theme`.
+    this.editor?.setDark(theme === 'dark');
   }
 
   /**

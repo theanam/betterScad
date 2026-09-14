@@ -86,7 +86,22 @@ const theme = EditorView.theme({
   },
   '.cm-content': { caretColor: 'var(--bs-solid-500)' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--bs-solid-500)', borderLeftWidth: '2px' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+  /*
+   * Spelled out to the full depth the base theme uses, because the base theme
+   * wins otherwise. CodeMirror styles the focused selection at
+   * `&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`
+   * — five classes — and the usual short form here is four, so an opaque
+   * `#d7d4f0` was painting over the code and taking the syntax colours with it.
+   * Matching the path outranks it, and does so in either mode rather than
+   * relying on which of `cm-light` / `cm-dark` the editor is carrying.
+   */
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: 'color-mix(in srgb, var(--bs-solid-500) 28%, transparent)',
+  },
+  '& > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: 'color-mix(in srgb, var(--bs-solid-500) 18%, transparent)',
+  },
+  '& .cm-content ::selection': {
     backgroundColor: 'color-mix(in srgb, var(--bs-solid-500) 28%, transparent)',
   },
   '.cm-gutters': {
@@ -145,6 +160,16 @@ export class ScadEditor {
   private readonly inchEntry = new Compartment();
   private readonly indent = new Compartment();
   private readonly tabCompletion = new Compartment();
+  /**
+   * Which of `cm-light` / `cm-dark` the editor carries.
+   *
+   * The app's own colours are CSS variables and follow `data-theme` on their
+   * own, but CodeMirror's base theme has hardcoded light and dark variants and
+   * picks between them with this facet. Left at its default the editor claimed
+   * to be light whatever the app was, and every base rule that differs between
+   * the two — the selection being the one that showed — came out wrong.
+   */
+  private readonly darkMode = new Compartment();
   private readonly extensions: Extension[];
   /** Set while `setSource` is replacing the document, to suppress onChange. */
   private applyingExternalEdit = false;
@@ -154,6 +179,7 @@ export class ScadEditor {
     initialSource: string,
     private readonly callbacks: EditorCallbacks,
     settings: EditorSettings = { inchEntry: true, indentWidth: 2, tabCompletion: true },
+    dark = true,
   ) {
     const shortcutKeymap = [
       { key: 'F5', run: () => this.shortcut('preview'), preventDefault: true },
@@ -170,6 +196,7 @@ export class ScadEditor {
     ];
 
     const extensions: Extension[] = [
+      this.darkMode.of(EditorView.darkTheme.of(dark)),
       lineNumbers(),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
@@ -234,6 +261,11 @@ export class ScadEditor {
   /** Whether Tab takes the open suggestion before it falls back to indenting. */
   setTabCompletion(on: boolean): void {
     this.view.dispatch({ effects: this.tabCompletion.reconfigure(tabCompletionKeymap(on)) });
+  }
+
+  /** Follows the app's light/dark toggle; see `darkMode`. */
+  setDark(dark: boolean): void {
+    this.view.dispatch({ effects: this.darkMode.reconfigure(EditorView.darkTheme.of(dark)) });
   }
 
   /** Turns inch entry on or off without disturbing the document. */
