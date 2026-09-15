@@ -137,10 +137,15 @@ const SUGARED_SHAPES: Record<string, SugaredShape> = {
     describe: 'text(radius = …)',
   },
   cylinder: {
-    helper: 'filleted_cylinder',
+    helper: 'chamfered_cylinder',
     // Never positional: they sit past `d2` in a signature nobody counts out.
-    triggers: ['fillet', 'fillet1', 'fillet2', 'fillet_style'],
-    describe: 'cylinder(fillet = …)',
+    // The `fillet*` spellings are the old names, still accepted and still
+    // needing the same rewrite.
+    triggers: [
+      'chamfer', 'chamfer1', 'chamfer2', 'edge_style',
+      'fillet', 'fillet1', 'fillet2', 'fillet_style',
+    ],
+    describe: 'cylinder(chamfer = …)',
   },
 };
 
@@ -219,21 +224,23 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '               spacing = spacing);',
     ],
   },
-  filleted_cylinder: {
+  chamfered_cylinder: {
     params:
-      'h, r1, r2, center = false, fillet1 = 0, fillet2 = 0, chamfer = true',
+      // `flat` rather than `chamfer` for the style, now that `chamfer1` and
+      // `chamfer2` are the sizes: one name could not be both.
+      'h, r1, r2, center = false, chamfer1 = 0, chamfer2 = 0, flat = true',
     body: [
       '// The cylinder\'s own cross-section, revolved, with each outer corner',
       '// replaced by the arc that meets both of its edges tangentially — or by',
-      '// the chord across that arc, which is the chamfer. Exact on a taper as',
+      '// the chord across that arc, which is the flat cut. Exact on a taper as',
       '// well as a straight wall, where the corner is not a right angle and the',
-      '// fillet is therefore not a quarter circle.',
+      '// arc is therefore not a quarter circle.',
       'corners = [[0, 0], [r1, 0], [r2, h], [0, h]];',
       '',
       'function unit(a, b) = let (d = b - a, l = norm(d)) l > 1e-12 ? d / l : [0, 0];',
       '',
       '// Tangent reach along each edge, clamped to the shorter of the two so a',
-      '// fillet bigger than the end it eases cannot fold the profile inside out.',
+      '// chamfer bigger than the end it eases cannot fold the profile inside out.',
       'function eased(i, f) =',
       '  let (p = corners[i - 1], c = corners[i], n = corners[i + 1],',
       '       a = unit(c, p), b = unit(c, n),',
@@ -244,7 +251,7 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '       t = min(reach, lim),',
       '       rr = reach > 0 ? f * t / reach : 0)',
       '  t <= 0 ? [c]',
-      '  : chamfer ? [c + a * t, c + b * t]',
+      '  : flat ? [c + a * t, c + b * t]',
       '  : let (bis = unit([0, 0], a + b),',
       '         ctr = c + bis * (rr / sin(ang / 2)),',
       '         s = c + a * t - ctr, e = c + b * t - ctr,',
@@ -257,13 +264,13 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '    [for (k = [0 : steps]) ctr + rr * [cos(a0 + sweep * k / steps),',
       '                                       sin(a0 + sweep * k / steps)]];',
       '',
-      'profile = concat([corners[0]], eased(1, fillet1), eased(2, fillet2), [corners[3]]);',
+      'profile = concat([corners[0]], eased(1, chamfer1), eased(2, chamfer2), [corners[3]]);',
       '',
       '// With nothing to ease this is the stock primitive, not a revolve of the',
       '// same outline. The two enclose the same volume but do not tessellate',
-      '// alike, and the engine takes this branch too — so `fillet = 0` gives one',
+      '// alike, and the engine takes this branch too — so `chamfer = 0` gives one',
       '// shape rather than two that merely measure the same.',
-      'if (fillet1 <= 0 && fillet2 <= 0)',
+      'if (chamfer1 <= 0 && chamfer2 <= 0)',
       '  cylinder(h = h, r1 = r1, r2 = r2, center = center);',
       'else',
       '  translate([0, 0, center ? -h / 2 : 0])',
@@ -693,8 +700,8 @@ class Printer {
    *
    * `cube` and `square` hand theirs straight over: the helper takes
    * `size, center, r` in that order precisely so it can. `cylinder` cannot —
-   * its helper wants two radii and two fillets, where the call may have written
-   * any of `r`, `d`, `r1`, `d1`, `r2`, `d2` and `fillet`, so those are resolved
+   * its helper wants two radii and two chamfers, where the call may have written
+   * any of `r`, `d`, `r1`, `d1`, `r2`, `d2` and `chamfer`, so those are resolved
    * into the helper's own names here.
    */
   private sugarArgs(name: string, args: Argument[]): string {
@@ -724,8 +731,11 @@ class Printer {
     const bottom = pick('d1') ? half(pick('d1')!) : (pick('r1') ?? (diameter ? half(diameter) : radius));
     const top = pick('d2') ? half(pick('d2')!) : (pick('r2') ?? (diameter ? half(diameter) : radius));
 
-    const both = pick('fillet');
-    const style = pick('fillet_style');
+    // Either spelling reaches here; the current one wins where both are given,
+    // exactly as it does in the interpreter.
+    const either = (name: string): string | undefined => pick(name) ?? pick(`fillet${name.slice(7)}`);
+    const both = pick('chamfer') ?? pick('fillet');
+    const style = pick('edge_style') ?? pick('fillet_style');
 
     const out = [
       `h = ${pick('h', 0) ?? '1'}`,
@@ -734,9 +744,9 @@ class Printer {
     ];
     const center = pick('center');
     if (center) out.push(`center = ${center}`);
-    out.push(`fillet1 = ${pick('fillet1') ?? both ?? '0'}`);
-    out.push(`fillet2 = ${pick('fillet2') ?? both ?? '0'}`);
-    if (style) out.push(`chamfer = (${style}) == "chamfer"`);
+    out.push(`chamfer1 = ${either('chamfer1') ?? both ?? '0'}`);
+    out.push(`chamfer2 = ${either('chamfer2') ?? both ?? '0'}`);
+    if (style) out.push(`flat = (${style}) == "chamfer"`);
     return [...out, ...specials].join(', ');
   }
 

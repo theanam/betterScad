@@ -39,8 +39,8 @@ before(async () => {
 const CALLS = {
   cube: 'cube(%);',
   sphere: 'sphere($fn = 16%);',
-  // Carries a fillet so `fillet_style`'s default is a shape, not a no-op.
-  cylinder: 'cylinder(r = 4, fillet1 = 0.2, $fn = 16%);',
+  // Carries a chamfer so `edge_style`'s default is a shape, not a no-op.
+  cylinder: 'cylinder(r = 4, chamfer1 = 0.2, $fn = 16%);',
   square: 'linear_extrude(2) square(%);',
   circle: 'linear_extrude(2) circle($fn = 16%);',
   thread: 'thread(d = 8, pitch = 1.25, h = 5, $fn = 28%);',

@@ -105,7 +105,7 @@ export const SOLIDS: ReferenceGroup = {
           'rod, which is a genuinely useful thing to want — nut pockets and hex shafts are ' +
           'usually drawn this way.',
         '`h` defaults to `1`, and a height of zero or less produces nothing.',
-        'BetterSCAD adds `fillet`, which takes the sharp rim off either end. See its own entry ' +
+        'BetterSCAD adds `chamfer`, which takes the sharp rim off either end. See its own entry ' +
           'for the detail.',
       ],
       params: [
@@ -115,10 +115,10 @@ export const SOLIDS: ReferenceGroup = {
         { name: 'd / d1 / d2', description: 'Diameter forms. These win over the radius forms.' },
         { name: 'center', description: '`true` centres the height on the origin. Default `false`.' },
         {
-          name: 'fillet',
+          name: 'chamfer',
           description:
-            'BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and ' +
-            '`fillet_style` is `"chamfer"` (default) or `"round"`.',
+            'BetterSCAD: eases both ends. `chamfer1` / `chamfer2` take the bottom and top, and ' +
+            '`edge_style` is `"chamfer"` (default) or `"round"`.',
         },
       ],
       examples: [
@@ -134,7 +134,7 @@ export const SOLIDS: ReferenceGroup = {
           caption: '`$fn = 6` turns the same call into a hexagon — a nut pocket.',
         },
       ],
-      see: ['cylinder-fillet', 'sphere', 'fn', 'rotate_extrude'],
+      see: ['cylinder-chamfer', 'sphere', 'fn', 'rotate_extrude'],
       keywords: ['tube', 'rod', 'cone', 'pipe', 'hexagon', 'circle'],
     },
     {

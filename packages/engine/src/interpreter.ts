@@ -590,7 +590,9 @@ class Interpreter {
       // here — it is what bounds a negative() written inside those braces.
       const braced = this.hasBracedChildren(stmt.children);
       this.executeChildren(stmt.children, scope, kids, file);
-      const args = this.bindArguments(builtin.params, stmt.args, scope, name, stmt.nameSpan, builtin.acceptsExtra);
+      const args = this.bindArguments(
+        builtin.params, stmt.args, scope, name, stmt.nameSpan, builtin.acceptsExtra, builtin.aliases,
+      );
       const built = builtin.build(args, kids, scope, this, stmt.span);
       if (built) {
         this.emit(out, {
@@ -833,14 +835,23 @@ class Interpreter {
     what: string,
     span: SourceSpan,
     acceptsExtra = false,
+    aliases: Record<string, string> = {},
   ): Map<string, Value> {
     const bound = new Map<string, Value>();
+    // Held back until every current name has been read, so that writing both
+    // spellings means the same thing whichever order they appear in.
+    const legacy = new Map<string, Value>();
 
     for (const arg of args) {
       if (!arg.name) continue;
       const value = this.evalExpr(arg.value, scope);
       if (arg.name.startsWith('$')) {
         bound.set(arg.name, value);
+        continue;
+      }
+      const renamed = aliases[arg.name];
+      if (renamed !== undefined) {
+        if (!legacy.has(renamed)) legacy.set(renamed, value);
         continue;
       }
       if (!params.includes(arg.name) && !acceptsExtra) {
@@ -853,6 +864,9 @@ class Interpreter {
       }
       bound.set(arg.name, value);
     }
+
+    // The current name wins wherever both were written.
+    for (const [name, value] of legacy) if (!bound.has(name)) bound.set(name, value);
 
     let next = 0;
     for (const arg of args) {
@@ -1363,6 +1377,18 @@ class Interpreter {
 interface BuiltinModule {
   params: string[];
   /**
+   * Old parameter names still accepted, mapped to what they are called now.
+   *
+   * Kept working, kept out of sight: an alias binds exactly as its replacement
+   * does, but it is absent from `params`, so nothing suggests it, the signature
+   * does not list it, and it never takes a positional slot. Files that used the
+   * old name go on working; nobody learns it from the editor.
+   *
+   * Written on the same call rather than in a shared table, because an alias
+   * only means anything next to the name it replaced.
+   */
+  aliases?: Record<string, string>;
+  /**
    * What each optional parameter falls back to, written as the source you would
    * type to get the same result.
    *
@@ -1588,8 +1614,9 @@ function threadMouthProfile(
  * A cylinder or cone whose ends are eased, built as a revolved profile.
  *
  * The profile is the shape's own cross-section — axis, base, side, top — with
- * the two outer corners replaced by a tangent arc (`round`) or the chord across
- * it (`chamfer`). Revolving that is exact for a cone as well as a cylinder,
+ * the two outer corners replaced by a tangent arc (`"round"`) or the chord
+ * across it (`"chamfer"`). Revolving that is exact for a cone as well as a
+ * cylinder,
  * which a quarter-torus glued to a plain cylinder would not be: on a taper the
  * corner is not a right angle, so the arc that meets both edges tangentially is
  * not a quarter circle.
@@ -1597,7 +1624,7 @@ function threadMouthProfile(
  * Built as the scene subtree the legacy export prints, like the other added
  * shapes, so the two cannot disagree.
  */
-function filletedCylinder(
+function chamferedCylinder(
   spec: {
     h: number;
     r1: number;
@@ -1606,12 +1633,13 @@ function filletedCylinder(
     resolution: Resolution;
     f1: number;
     f2: number;
-    chamfer: boolean;
+    /** A straight cut rather than an arc. Not `chamfer`: that is the size. */
+    flat: boolean;
   },
   interp: Interpreter,
   span: SourceSpan,
 ): SceneNode {
-  const { h, r1, r2, center, resolution, chamfer } = spec;
+  const { h, r1, r2, center, resolution, flat } = spec;
 
   // Axis-side corners first: the profile runs base-outward, up the side, then
   // back to the axis at the top.
@@ -1624,14 +1652,14 @@ function filletedCylinder(
 
   const points: [number, number][] = [corners[0]];
   for (const index of [1, 2] as const) {
-    const fillet = index === 1 ? spec.f1 : spec.f2;
+    const chamfer = index === 1 ? spec.f1 : spec.f2;
     const corner = corners[index];
     const previous = corners[index - 1];
     const next = corners[index + 1];
 
     // A corner at the axis is the tip of a cone: there are no two edges to sit
     // an arc between, so there is nothing to ease.
-    if (fillet <= 0 || corner[0] <= 0) {
+    if (chamfer <= 0 || corner[0] <= 0) {
       points.push(corner);
       continue;
     }
@@ -1652,25 +1680,25 @@ function filletedCylinder(
     }
 
     // How far back along each edge the arc meets it. Clamped to the shorter of
-    // the two edges, so a fillet larger than the shape it is easing eats the
+    // the two edges, so a chamfer larger than the shape it is easing eats the
     // whole edge rather than folding the profile inside out.
-    const reach = fillet / Math.tan(angle / 2);
+    const reach = chamfer / Math.tan(angle / 2);
     const limit = Math.min(distance(previous, corner), distance(next, corner));
     const scale = reach > limit ? limit / reach : 1;
     if (scale < 1) {
       interp.warn(
-        `cylinder(): fillet ${fillet} does not fit this end; using ${round6(fillet * scale)}.`,
+        `cylinder(): chamfer ${chamfer} does not fit this end; using ${round6(chamfer * scale)}.`,
         span,
-        'eval.fillet-clamped',
+        'eval.chamfer-clamped',
       );
     }
     const t = reach * scale;
-    const radius = fillet * scale;
+    const radius = chamfer * scale;
 
     const start: [number, number] = [corner[0] + toPrevious[0] * t, corner[1] + toPrevious[1] * t];
     const end: [number, number] = [corner[0] + toNext[0] * t, corner[1] + toNext[1] * t];
 
-    if (chamfer) {
+    if (flat) {
       // The chord across the same two tangent points: one straight cut, and the
       // reason style is an argument rather than a second shape.
       points.push(start, end);
@@ -1696,7 +1724,7 @@ function filletedCylinder(
     while (sweep < -Math.PI) sweep += 2 * Math.PI;
 
     // Segments follow the same resolution rule the rest of the curve does, so
-    // the fillet is no smoother or coarser than the wall it joins.
+    // the eased corner is no smoother or coarser than the wall it joins.
     const steps = Math.max(2, Math.ceil(fragments(radius, resolution) * Math.abs(sweep) / (2 * Math.PI)));
     for (let step = 0; step <= steps; step++) {
       const at = from + (sweep * step) / steps;
@@ -1851,49 +1879,63 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   },
 
   /**
-   * `cylinder(h, r | r1, r2, center, fillet, fillet1, fillet2, fillet_style)`
+   * `cylinder(h, r | r1, r2, center, chamfer, chamfer1, chamfer2, edge_style)`
    * — a cylinder or cone, with optional eased ends (BetterSCAD extension).
    *
-   * `fillet` sets both ends and `fillet1` / `fillet2` override the bottom and
-   * the top, exactly as `r` / `r1` / `r2` already do for the radii. Naming them
-   * the same way is the whole point: there is one convention on this module for
-   * "both, or each", and a second one would have to be remembered separately.
+   * `chamfer` sets both ends and `chamfer1` / `chamfer2` override the bottom
+   * and the top, exactly as `r` / `r1` / `r2` already do for the radii. Naming
+   * them the same way is the whole point: there is one convention on this
+   * module for "both, or each", and a second one would have to be remembered
+   * separately.
    *
-   * `fillet_style` is `"chamfer"` — a straight cut — or `"round"`, a true
+   * `edge_style` is `"chamfer"` — a straight cut — or `"round"`, a true
    * tangent arc. Both are described by the same tangent-point construction,
    * which is why they are one argument and not two shapes: the chamfer is the
    * chord of the arc.
    *
-   * Chamfer is the default because it is the one people reach for. A broken
-   * edge on a printed part is there to stop it cutting a hand and to keep the
-   * first layer from lifting, and a flat cut does both with fewer facets than
-   * an arc. A round is the deliberate choice, so it is the one you ask for.
+   * A straight cut is the default because it is the one people reach for. A
+   * broken edge on a printed part is there to stop it cutting a hand and to
+   * keep the first layer from lifting, and a flat cut does both with fewer
+   * facets than an arc. A round is the deliberate choice, so it is the one you
+   * ask for.
    *
-   * With no fillet this is the stock primitive and exports untouched.
+   * These were called `fillet*` first, which was the wrong word for something
+   * that is flat by default. The style is `edge_style` rather than
+   * `chamfer_style` for the same reason: a chamfer whose style is round is a
+   * sentence that argues with itself, and what is being styled is the edge.
+   * The old names still bind — see `aliases` — and appear nowhere.
+   *
+   * With no chamfer this is the stock primitive and exports untouched.
    */
   cylinder: {
     params: [
       'h', 'r', 'r1', 'r2', 'center', 'd', 'd1', 'd2',
-      'fillet', 'fillet1', 'fillet2', 'fillet_style',
+      'chamfer', 'chamfer1', 'chamfer2', 'edge_style',
     ],
-    defaults: { h: '1', center: 'false', fillet: '0', fillet_style: '"chamfer"' },
+    aliases: {
+      fillet: 'chamfer',
+      fillet1: 'chamfer1',
+      fillet2: 'chamfer2',
+      fillet_style: 'edge_style',
+    },
+    defaults: { h: '1', center: 'false', chamfer: '0', edge_style: '"chamfer"' },
     build: (args, _children, scope, interp, span) => {
       const { r1, r2 } = cylinderRadii(args);
       const h = Math.max(0, asNumber(args.get('h'), 1));
       const center = isTruthy(args.get('center'));
       const resolution = resolutionFor(args, scope);
 
-      const both = asNumber(args.get('fillet'), 0);
-      const f1 = Math.max(0, asNumber(args.get('fillet1'), both));
-      const f2 = Math.max(0, asNumber(args.get('fillet2'), both));
+      const both = asNumber(args.get('chamfer'), 0);
+      const f1 = Math.max(0, asNumber(args.get('chamfer1'), both));
+      const f2 = Math.max(0, asNumber(args.get('chamfer2'), both));
 
-      const rawStyle = args.get('fillet_style');
+      const rawStyle = args.get('edge_style');
       const style = typeof rawStyle === 'string' ? rawStyle : 'chamfer';
       if (rawStyle !== undefined && style !== 'round' && style !== 'chamfer') {
         interp.warn(
-          `cylinder(): fillet_style must be "round" or "chamfer"; got "${style}". Using "chamfer".`,
+          `cylinder(): edge_style must be "chamfer" or "round"; got "${style}". Using "chamfer".`,
           span,
-          'eval.fillet-style',
+          'eval.edge-style',
         );
       }
 
@@ -1901,8 +1943,8 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         return node('cylinder', { h, r1, r2, center, resolution }, [], [], span);
       }
 
-      return filletedCylinder(
-        { h, r1, r2, center, resolution, f1, f2, chamfer: style === 'chamfer' },
+      return chamferedCylinder(
+        { h, r1, r2, center, resolution, f1, f2, flat: style === 'chamfer' },
         interp,
         span,
       );

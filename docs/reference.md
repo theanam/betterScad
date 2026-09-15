@@ -158,7 +158,7 @@ cylinder(h = 10, r = 12, $fn = 6);
 | `r1 / r2` | Bottom and top radius. |
 | `d / d1 / d2` | Diameter forms. These win over the radius forms. |
 | `center` | `true` centres the height on the origin. Default `false`. |
-| `fillet` | BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and `fillet_style` is `"chamfer"` (default) or `"round"`. |
+| `chamfer` | BetterSCAD: eases both ends. `chamfer1` / `chamfer2` take the bottom and top, and `edge_style` is `"chamfer"` (default) or `"round"`. |
 
 `r` sets both ends. `r1` is the bottom and `r2` the top; `d`, `d1` and `d2` are the diameter versions and win over the radius ones. Set one end to `0` for a proper pointed cone.
 
@@ -168,9 +168,9 @@ Like a sphere, it is really a many-sided prism. With `$fn = 6` you get a clean h
 
 `h` defaults to `1`, and a height of zero or less produces nothing.
 
-BetterSCAD adds `fillet`, which takes the sharp rim off either end. See its own entry for the detail.
+BetterSCAD adds `chamfer`, which takes the sharp rim off either end. See its own entry for the detail.
 
-See also: [`cylinder(fillet)`](#entry-cylinder-fillet) · [`sphere()`](#entry-sphere) · [`$fn`](#entry-fn) · [`rotate_extrude()`](#entry-rotate_extrude)
+See also: [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`sphere()`](#entry-sphere) · [`$fn`](#entry-fn) · [`rotate_extrude()`](#entry-rotate_extrude)
 
 <a id="entry-polyhedron"></a>
 
@@ -2511,7 +2511,7 @@ Both are built as the hull of their corner primitives, which **is** the Minkowsk
 
 **Saved as OpenSCAD `.scad`:** With no `r`, nothing — the call is already stock. With one, a generated module using the same hull of corner circles or spheres, defined once however many times it is used.
 
-See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(fillet)`](#entry-cylinder-fillet) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
+See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
 
 <a id="entry-text-radius"></a>
 
@@ -2546,7 +2546,7 @@ difference() { circle(28); circle(26); }
 ```scad
 $fn = 64;
 difference() {
-  cylinder(h = 4, r = 30, fillet2 = 1);
+  cylinder(h = 4, r = 30, chamfer2 = 1);
   translatez(3) linear_extrude(2)
     text("BETTERSCAD", size = 6, radius = 22, halign = "center");
 }
@@ -2587,70 +2587,70 @@ Without `radius` this is the stock `text()`, and the file exports byte for byte.
 
 **Saved as OpenSCAD `.scad`:** A generated module that places each glyph with its own `text()` call. OpenSCAD has no way to measure a glyph — `textmetrics()` is not in the release this targets — so the letter widths are measured when the file is written and carried into it as a table. Size, spacing, radius and even the string stay live in the exported file; only the measurements are fixed. **Saving needs the font loaded**, and says so rather than writing text in the wrong places.
 
-See also: [`text()`](#entry-text) · [`cube(r), square(r)`](#entry-shape-radius) · [`cylinder(fillet)`](#entry-cylinder-fillet) · [`rotate()`](#entry-rotate)
+See also: [`text()`](#entry-text) · [`cube(r), square(r)`](#entry-shape-radius) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`rotate()`](#entry-rotate)
 
-<a id="entry-cylinder-fillet"></a>
+<a id="entry-cylinder-chamfer"></a>
 
-### cylinder(fillet)
+### cylinder(chamfer)
 
 ```
-cylinder(…, fillet, fillet1, fillet2, fillet_style)
+cylinder(…, chamfer, chamfer1, chamfer2, edge_style)
 ```
 
-Takes the sharp rim off the end of a cylinder — cut flat like a chamfer, or rounded like a worn edge. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.
+Takes the sharp rim off the end of a cylinder — cut flat, or rounded like a worn edge. `chamfer` does both ends; `chamfer1` is the bottom and `chamfer2` the top.
 
 ```scad
-cylinder(h = 24, r = 10, fillet = 3, $fn = 64);
+cylinder(h = 24, r = 10, chamfer = 3, $fn = 64);
 ```
 
-<img src="images/reference/cylinder-fillet.png" alt="Both ends broken by 3 — a flat cut, which is what you get by default." width="420">
+<img src="images/reference/cylinder-chamfer.png" alt="Both ends broken by 3 — a flat cut, which is what you get by default." width="420">
 
 *Both ends broken by 3 — a flat cut, which is what you get by default.*
 
 ```scad
-cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);
+cylinder(h = 24, r = 10, chamfer2 = 6, $fn = 64);
 ```
 
-<img src="images/reference/cylinder-fillet-top.png" alt="fillet2 is the top only — 2 is the top, as it is for r2." width="420">
+<img src="images/reference/cylinder-chamfer-top.png" alt="chamfer2 is the top only — 2 is the top, as it is for r2." width="420">
 
-*`fillet2` is the top only — 2 is the top, as it is for `r2`.*
+*`chamfer2` is the top only — 2 is the top, as it is for `r2`.*
 
 ```scad
-cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round", $fn = 64);
+cylinder(h = 24, r = 10, chamfer = 3, edge_style = "round", $fn = 64);
 ```
 
-<img src="images/reference/cylinder-fillet-round.png" alt="The same 3, rounded instead of cut flat." width="420">
+<img src="images/reference/cylinder-chamfer-round.png" alt="The same 3, rounded instead of cut flat." width="420">
 
 *The same 3, rounded instead of cut flat.*
 
 ```scad
-cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);
+cylinder(h = 24, r1 = 14, r2 = 6, chamfer = 2.5, $fn = 64);
 ```
 
-<img src="images/reference/cylinder-fillet-cone.png" alt="On a taper the corner is not square, and the arc is solved for the real angle." width="420">
+<img src="images/reference/cylinder-chamfer-cone.png" alt="On a taper the corner is not square, and the arc is solved for the real angle." width="420">
 
 *On a taper the corner is not square, and the arc is solved for the real angle.*
 
 | Argument | |
 | --- | --- |
-| `fillet` | Radius at both ends. Default `0`. |
-| `fillet1` | Bottom end, overriding `fillet`. |
-| `fillet2` | Top end, overriding `fillet`. |
-| `fillet_style` | `"chamfer"` (default) or `"round"`. |
+| `chamfer` | How much to take off, at both ends. Default `0`. |
+| `chamfer1` | Bottom end, overriding `chamfer`. |
+| `chamfer2` | Top end, overriding `chamfer`. |
+| `edge_style` | `"chamfer"` (default) or `"round"`. |
 
-`fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` overrides `r`. There is one convention on this module for "both, or each", and this is it.
+`chamfer1` and `chamfer2` are numbered the same way round as `r1` and `r2`: **1 is the bottom, 2 is the top.** Either overrides `chamfer` for its own end, exactly as `r1` overrides `r`. There is one convention on this module for "both, or each", and this is it.
 
-`fillet_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc tangent to both the wall and the face. They are one argument rather than two shapes because they are the same construction: the chamfer is the chord of the arc.
+`edge_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc tangent to both the wall and the face. They are one argument rather than two shapes because they are the same construction: the chamfer is the chord of the arc.
 
 Chamfer is the default because it is what a broken edge is usually for — stopping a printed part from cutting a hand, and keeping the first layer from lifting. A flat cut does both, with fewer facets. A round is the deliberate choice, so it is the one you ask for.
 
 It works on a cone as well as a straight cylinder. On a taper the corner is not a right angle, so the arc that meets both edges is not a quarter circle — the profile is solved for the actual angle rather than assumed.
 
-A fillet larger than the end it is easing is clamped to fit, with a warning.
+A chamfer larger than the end it is easing is clamped to fit, with a warning.
 
-With no fillet this is the stock primitive: it exports byte for byte and is not reported as an extension. `fillet = 0` is the same shape as leaving it out, not a revolve that merely measures the same.
+With no chamfer this is the stock primitive: it exports byte for byte and is not reported as an extension. `chamfer = 0` is the same shape as leaving it out, not a revolve that merely measures the same.
 
-**Saved as OpenSCAD `.scad`:** With no fillet, nothing — the call is already stock. With one, a generated module that revolves the same profile, defined once however many times it is used.
+**Saved as OpenSCAD `.scad`:** With no chamfer, nothing — the call is already stock. With one, a generated module that revolves the same profile, defined once however many times it is used.
 
 See also: [`cylinder()`](#entry-cylinder) · [`cube(r), square(r)`](#entry-shape-radius) · [`rotate_extrude()`](#entry-rotate_extrude) · [`minkowski()`](#entry-minkowski)
 

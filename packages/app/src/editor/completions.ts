@@ -101,9 +101,9 @@ const MODULES: BuiltinDoc[] = [
     info:
       'Cylinder or cone. A zero radius at one end gives a cone.\n\n' +
       'Diameter and radius are interchangeable: d = 2r, d1/d2 = 2r1/2r2.\n\n' +
-      'BetterSCAD adds `fillet`, easing both ends; `fillet1` and `fillet2` ' +
+      'BetterSCAD adds `chamfer`, easing both ends; `chamfer1` and `chamfer2` ' +
       'override the bottom and the top, the same way round as r1 and r2. ' +
-      '`fillet_style` is "chamfer" (default) or "round".',
+      '`edge_style` is "chamfer" (default) or "round".',
     type: 'class',
     forms: [
       { template: 'cylinder(h = ${1:10}, r = ${2:5})', detail: 'cylinder(h, r)', measure: 'radius' },
@@ -118,13 +118,13 @@ const MODULES: BuiltinDoc[] = [
         measure: 'diameter',
       },
       {
-        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1})',
-        detail: 'cylinder(h, d, fillet)  — BetterSCAD',
+        template: 'cylinder(h = ${1:10}, d = ${2:5}, chamfer = ${3:1})',
+        detail: 'cylinder(h, d, chamfer)  — BetterSCAD',
         measure: 'diameter',
       },
       {
-        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1}, fillet_style = "round")',
-        detail: 'cylinder(h, d, fillet, fillet_style)  — BetterSCAD',
+        template: 'cylinder(h = ${1:10}, d = ${2:5}, chamfer = ${3:1}, edge_style = "round")',
+        detail: 'cylinder(h, d, chamfer, edge_style)  — BetterSCAD',
         measure: 'diameter',
       },
       {

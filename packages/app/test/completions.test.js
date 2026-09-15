@@ -111,8 +111,8 @@ test('the round-dimensions setting decides which measurement leads', () => {
         'cylinder(h, d)',
         'cylinder(h, d, center)',
         'cylinder(h, d1, d2)  — a cone',
-        'cylinder(h, d, fillet)  — BetterSCAD',
-        'cylinder(h, d, fillet, fillet_style)  — BetterSCAD',
+        'cylinder(h, d, chamfer)  — BetterSCAD',
+        'cylinder(h, d, chamfer, edge_style)  — BetterSCAD',
         'cylinder(h, d, $fn)',
       ],
     );

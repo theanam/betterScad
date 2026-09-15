@@ -1,6 +1,6 @@
 /**
  * The added shape arguments and shapes: `square(r)`, `cube(r)`,
- * `cylinder(fillet)`, `regular_polygon`.
+ * `cylinder(chamfer)`, `regular_polygon`.
  *
  * Each is defined in the interpreter as the scene subtree its legacy export
  * prints, so the downgrade is equivalent by construction rather than by two
@@ -185,24 +185,24 @@ test('the shapes it replaced say what to write instead', async () => {
   }
 });
 
-// --- cylinder(fillet) -------------------------------------------------------
+// --- cylinder(chamfer) -------------------------------------------------------
 
-test('no fillet is the stock cylinder, and exports byte for byte', async () => {
-  await equivalent('cylinder(h = 10, r = 4, fillet = 0, $fn = 16);', 'cylinder(h = 10, r = 4, $fn = 16);');
+test('no chamfer is the stock cylinder, and exports byte for byte', async () => {
+  await equivalent('cylinder(h = 10, r = 4, chamfer = 0, $fn = 16);', 'cylinder(h = 10, r = 4, $fn = 16);');
 
   const source = 'cylinder(h = 10, r = 4, $fn = 16);\n';
   assert.deepEqual(describeExtensions(parse(source).file), []);
   assert.equal(transpileToLegacyScad(parse(source).file, { header: false }).source.trim(), source.trim());
 });
 
-test('a rounded fillet removes the volume a quarter-torus occupies', async () => {
+test('a rounded chamfer removes the volume a quarter-torus occupies', async () => {
   // Independent of the construction: rounding one end of a cylinder of radius
   // R by f removes the difference between the f-square corner ring and the
   // quarter-disc inside it, swept about the axis. Pappus gives that exactly.
   const R = 8;
   const f = 2;
   const { volume } = await measure(
-    `$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f}, fillet_style = "round");`,
+    `$fn = 512;\ncylinder(h = 20, r = ${R}, chamfer1 = ${f}, edge_style = "round");`,
   );
 
   const square = f * f;
@@ -219,39 +219,78 @@ test('a chamfer is the chord across the same two tangent points', async () => {
   // Which makes it a truncated cone of height f meeting the wall at 45 degrees.
   const R = 8;
   const f = 3;
-  const { volume } = await measure(`$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f}, fillet_style = "chamfer");`);
+  const { volume } = await measure(`$fn = 512;\ncylinder(h = 20, r = ${R}, chamfer1 = ${f}, edge_style = "chamfer");`);
   const cone = (Math.PI * f * (R * R + R * (R - f) + (R - f) * (R - f))) / 3;
   const expected = Math.PI * R * R * (20 - f) + cone;
   assert.ok(Math.abs(volume - expected) / expected < 1e-3, `volume ${volume}, expected ${expected}`);
 });
 
-test('fillet sets both ends and fillet1 / fillet2 override each', async () => {
+test('chamfer sets both ends and chamfer1 / chamfer2 override each', async () => {
   await equivalent(
-    '$fn = 48;\ncylinder(h = 12, r = 5, fillet = 1.5);',
-    '$fn = 48;\ncylinder(h = 12, r = 5, fillet1 = 1.5, fillet2 = 1.5);',
+    '$fn = 48;\ncylinder(h = 12, r = 5, chamfer = 1.5);',
+    '$fn = 48;\ncylinder(h = 12, r = 5, chamfer1 = 1.5, chamfer2 = 1.5);',
   );
   // 1 is the bottom and 2 the top, the same way round as r1 and r2.
-  const low = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, fillet1 = 2);');
-  const high = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, fillet2 = 2);');
+  const low = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, chamfer1 = 2);');
+  const high = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, chamfer2 = 2);');
   assert.ok(near(low.volume, high.volume, 1e-6), 'a symmetric cylinder loses the same either end');
   assert.ok(!near(low.bounds[2], high.bounds[2], 1e-9) === false, 'both keep the full height');
 });
 
-test('the fillet follows a taper rather than assuming a right angle', async () => {
+test('the chamfer follows a taper rather than assuming a right angle', async () => {
   // On a cone the corner is not 90 degrees, so a quarter circle would not meet
   // both edges. The test that it does: the result is still tangent, so its
   // volume sits between the unfilleted cone and one chamfered by the same f.
   const plain = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4);');
   const round = await measure(
-    '$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2, fillet_style = "round");',
+    '$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, chamfer = 2, edge_style = "round");',
   );
-  const cham = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2, fillet_style = "chamfer");');
-  assert.ok(round.volume < plain.volume, 'a fillet removes material');
+  const cham = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, chamfer = 2, edge_style = "chamfer");');
+  assert.ok(round.volume < plain.volume, 'a chamfer removes material');
   assert.ok(cham.volume < round.volume, 'a chamfer removes more than the arc inside it');
 });
 
-test('a fillet larger than the end it eases is clamped, with a warning', async () => {
-  const result = await engine.render('$fn = 32;\ncylinder(h = 10, r = 3, fillet = 40);');
+test('the old fillet names still bind, and say nothing about themselves', async () => {
+  // These were called `fillet*` before the default became a flat cut, which
+  // made the word wrong. They still work so old files do, and they appear
+  // nowhere — not in the signature, not in autocomplete, not in the reference —
+  // so nobody learns them. Nothing else in the suite uses them, which is why
+  // this is the one place that would notice them breaking.
+  const pairs = [
+    ['cylinder(h = 20, r = 8, chamfer = 3);', 'cylinder(h = 20, r = 8, fillet = 3);'],
+    [
+      'cylinder(h = 20, r = 8, chamfer = 3, edge_style = "round");',
+      'cylinder(h = 20, r = 8, fillet = 3, fillet_style = "round");',
+    ],
+    [
+      'cylinder(h = 20, r1 = 12, r2 = 4, chamfer1 = 2, chamfer2 = 1);',
+      'cylinder(h = 20, r1 = 12, r2 = 4, fillet1 = 2, fillet2 = 1);',
+    ],
+  ];
+  for (const [current, legacy] of pairs) {
+    const a = await measure(`$fn = 64;\n${current}`);
+    const b = await measure(`$fn = 64;\n${legacy}`);
+    assert.ok(near(a.volume, b.volume, 1e-9), `${legacy}\n  ${b.volume} vs ${a.volume}`);
+  }
+
+  // Silently, too: an alias is not a deprecation notice.
+  const result = await engine.render('$fn = 32;\ncylinder(h = 10, r = 4, fillet = 1);');
+  assert.deepEqual(result.diagnostics.filter((d) => d.severity !== 'echo'), []);
+});
+
+test('writing both names takes the current one, whichever comes first', async () => {
+  const expected = await measure('$fn = 64;\ncylinder(h = 20, r = 8, chamfer = 3);');
+  for (const source of [
+    '$fn = 64;\ncylinder(h = 20, r = 8, chamfer = 3, fillet = 9);',
+    '$fn = 64;\ncylinder(h = 20, r = 8, fillet = 9, chamfer = 3);',
+  ]) {
+    const { volume } = await measure(source);
+    assert.ok(near(volume, expected.volume, 1e-9), `${source}\n  ${volume} vs ${expected.volume}`);
+  }
+});
+
+test('a chamfer larger than the end it eases is clamped, with a warning', async () => {
+  const result = await engine.render('$fn = 32;\ncylinder(h = 10, r = 3, chamfer = 40);');
   assert.deepEqual(result.diagnostics.filter((d) => d.severity === 'error'), []);
   assert.ok(
     result.diagnostics.some((d) => d.severity === 'warning' && /does not fit/.test(d.message)),
@@ -259,8 +298,8 @@ test('a fillet larger than the end it eases is clamped, with a warning', async (
   );
 });
 
-test('centre still centres, with the fillet on', async () => {
-  const { bounds } = await measure('$fn = 64;\ncylinder(h = 20, r = 6, center = true, fillet = 2);');
+test('centre still centres, with the chamfer on', async () => {
+  const { bounds } = await measure('$fn = 64;\ncylinder(h = 20, r = 6, center = true, chamfer = 2);');
   assert.ok(near(bounds[2], -10, 0.02) && near(bounds[5], 10, 0.02), `expected -10..10, got ${bounds}`);
 });
 

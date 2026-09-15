@@ -182,7 +182,7 @@ numbered suffix rather than shadowing it.
 | --- | --- |
 | [`negative()`](#negative) | `difference()` around the scope |
 | [`cube(r)` / `square(r)`](#cuber-and-squarer) | module: a hull of corner spheres or circles |
-| [`cylinder(fillet)`](#cylinderfillet) | module: a revolve of the same profile |
+| [`cylinder(chamfer)`](#cylinderchamfer) | module: a revolve of the same profile |
 | [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
@@ -293,23 +293,23 @@ resolution of the rounding follows `$fn`/`$fa`/`$fs` as usual.
 **Replaces `rounded_square()` and `rounded_cube()`**, which are gone. Calling
 either reports an error naming the argument to use instead.
 
-### `cylinder(fillet)`
+### `cylinder(chamfer)`
 
 The rim at either end of a cylinder, eased:
 
 ```scad
-cylinder(h = 24, r = 10, fillet = 3);                         // both ends, cut flat
-cylinder(h = 24, r = 10, fillet2 = 6);                        // top only
-cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round"); // rounded instead
-cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5);              // on a taper
+cylinder(h = 24, r = 10, chamfer = 3);                       // both ends, cut flat
+cylinder(h = 24, r = 10, chamfer2 = 6);                      // top only
+cylinder(h = 24, r = 10, chamfer = 3, edge_style = "round"); // rounded instead
+cylinder(h = 24, r1 = 14, r2 = 6, chamfer = 2.5);            // on a taper
 ```
 
-`fillet` sets both ends; `fillet1` and `fillet2` override the bottom and the
+`chamfer` sets both ends; `chamfer1` and `chamfer2` override the bottom and the
 top. **They are numbered the way `r1` and `r2` already are** — 1 is the bottom,
 2 is the top — because this module has one convention for "both, or each" and a
 second one would have to be remembered separately.
 
-`fillet_style` is `"chamfer"` (the default), a straight cut, or `"round"`, the
+`edge_style` is `"chamfer"` (the default), a straight cut, or `"round"`, the
 true arc tangent to both the wall and the end face. One argument rather than two
 shapes, because it is one construction: the tangent points are the same either
 way, and the chamfer is the chord across the arc.
@@ -323,13 +323,13 @@ It is exact on a cone as well as a cylinder. On a taper the corner is not a
 right angle, so the arc meeting both edges is not a quarter circle; the profile
 is solved for the actual angle rather than assumed to be square.
 
-A fillet larger than the end it eases is clamped to fit, with a warning. With no
-fillet — or `fillet = 0` — this is the stock primitive, exported byte for byte;
+A chamfer larger than the end it eases is clamped to fit, with a warning. With no
+chamfer — or `chamfer = 0` — this is the stock primitive, exported byte for byte;
 zero takes the same branch in the engine and in the generated module, so it is
 one shape rather than two that merely measure the same.
 
 **Downgrade:** a generated module that revolves the profile, and nothing when no
-fillet is given.
+chamfer is given.
 
 ### `text(radius)`
 

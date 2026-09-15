@@ -68,9 +68,9 @@ export const NEW_SHAPES: ReferenceGroup = {
           caption: 'At exactly half the shortest side the corners meet: a stadium.',
         },
       ],
-      see: ['cube', 'square', 'cylinder-fillet', 'offset', 'hull', 'minkowski'],
+      see: ['cube', 'square', 'cylinder-chamfer', 'offset', 'hull', 'minkowski'],
       keywords: [
-        'rounded', 'corners', 'radius', 'fillet', 'rounded_cube', 'rounded_square', 'box',
+        'rounded', 'corners', 'radius', 'chamfer', 'rounded_cube', 'rounded_square', 'box',
         'enclosure', 'edges',
       ],
     },
@@ -133,7 +133,7 @@ export const NEW_SHAPES: ReferenceGroup = {
           code: [
             '$fn = 64;',
             'difference() {',
-            '  cylinder(h = 4, r = 30, fillet2 = 1);',
+            '  cylinder(h = 4, r = 30, chamfer2 = 1);',
             '  translatez(3) linear_extrude(2)',
             '    text("BETTERSCAD", size = 6, radius = 22, halign = "center");',
             '}',
@@ -152,26 +152,26 @@ export const NEW_SHAPES: ReferenceGroup = {
           caption: 'One call per label, each at its own angle — a gauge face.',
         },
       ],
-      see: ['text', 'shape-radius', 'cylinder-fillet', 'rotate'],
+      see: ['text', 'shape-radius', 'cylinder-chamfer', 'rotate'],
       keywords: [
         'text on a circle', 'arc', 'curved text', 'around', 'dial', 'bezel', 'coin', 'ring',
         'engrave', 'label', 'path',
       ],
     },
     {
-      id: 'cylinder-fillet',
-      name: 'cylinder(fillet)',
-      signature: 'cylinder(…, fillet, fillet1, fillet2, fillet_style)',
+      id: 'cylinder-chamfer',
+      name: 'cylinder(chamfer)',
+      signature: 'cylinder(…, chamfer, chamfer1, chamfer2, edge_style)',
       extension: true,
       plain:
-        'Takes the sharp rim off the end of a cylinder — cut flat like a chamfer, or rounded ' +
-        'like a worn edge. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.',
+        'Takes the sharp rim off the end of a cylinder — cut flat, or rounded like a worn edge. ' +
+        '`chamfer` does both ends; `chamfer1` is the bottom and `chamfer2` the top.',
       details: [
-        '`fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the ' +
-          'bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` ' +
+        '`chamfer1` and `chamfer2` are numbered the same way round as `r1` and `r2`: **1 is the ' +
+          'bottom, 2 is the top.** Either overrides `chamfer` for its own end, exactly as `r1` ' +
           'overrides `r`. There is one convention on this module for "both, or each", and this ' +
           'is it.',
-        '`fillet_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc ' +
+        '`edge_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc ' +
           'tangent to both the wall and the face. They are one argument rather than two shapes ' +
           'because they are the same construction: the chamfer is the chord of the arc.',
         'Chamfer is the default because it is what a broken edge is usually for — stopping a ' +
@@ -181,44 +181,44 @@ export const NEW_SHAPES: ReferenceGroup = {
         'It works on a cone as well as a straight cylinder. On a taper the corner is not a right ' +
           'angle, so the arc that meets both edges is not a quarter circle — the profile is ' +
           'solved for the actual angle rather than assumed.',
-        'A fillet larger than the end it is easing is clamped to fit, with a warning.',
-        'With no fillet this is the stock primitive: it exports byte for byte and is not reported ' +
-          'as an extension. `fillet = 0` is the same shape as leaving it out, not a revolve that ' +
+        'A chamfer larger than the end it is easing is clamped to fit, with a warning.',
+        'With no chamfer this is the stock primitive: it exports byte for byte and is not reported ' +
+          'as an extension. `chamfer = 0` is the same shape as leaving it out, not a revolve that ' +
           'merely measures the same.',
       ],
       params: [
-        { name: 'fillet', description: 'Radius at both ends. Default `0`.' },
-        { name: 'fillet1', description: 'Bottom end, overriding `fillet`.' },
-        { name: 'fillet2', description: 'Top end, overriding `fillet`.' },
-        { name: 'fillet_style', description: '`"chamfer"` (default) or `"round"`.' },
+        { name: 'chamfer', description: 'How much to take off, at both ends. Default `0`.' },
+        { name: 'chamfer1', description: 'Bottom end, overriding `chamfer`.' },
+        { name: 'chamfer2', description: 'Top end, overriding `chamfer`.' },
+        { name: 'edge_style', description: '`"chamfer"` (default) or `"round"`.' },
       ],
       downgrade:
-        'With no fillet, nothing — the call is already stock. With one, a generated module that ' +
+        'With no chamfer, nothing — the call is already stock. With one, a generated module that ' +
         'revolves the same profile, defined once however many times it is used.',
       examples: [
         {
-          code: 'cylinder(h = 24, r = 10, fillet = 3, $fn = 64);',
-          image: 'cylinder-fillet',
+          code: 'cylinder(h = 24, r = 10, chamfer = 3, $fn = 64);',
+          image: 'cylinder-chamfer',
           caption: 'Both ends broken by 3 — a flat cut, which is what you get by default.',
         },
         {
-          code: 'cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);',
-          image: 'cylinder-fillet-top',
-          caption: '`fillet2` is the top only — 2 is the top, as it is for `r2`.',
+          code: 'cylinder(h = 24, r = 10, chamfer2 = 6, $fn = 64);',
+          image: 'cylinder-chamfer-top',
+          caption: '`chamfer2` is the top only — 2 is the top, as it is for `r2`.',
         },
         {
-          code: 'cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round", $fn = 64);',
-          image: 'cylinder-fillet-round',
+          code: 'cylinder(h = 24, r = 10, chamfer = 3, edge_style = "round", $fn = 64);',
+          image: 'cylinder-chamfer-round',
           caption: 'The same 3, rounded instead of cut flat.',
         },
         {
-          code: 'cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);',
-          image: 'cylinder-fillet-cone',
+          code: 'cylinder(h = 24, r1 = 14, r2 = 6, chamfer = 2.5, $fn = 64);',
+          image: 'cylinder-chamfer-cone',
           caption: 'On a taper the corner is not square, and the arc is solved for the real angle.',
         },
       ],
       see: ['cylinder', 'shape-radius', 'rotate_extrude', 'minkowski'],
-      keywords: ['fillet', 'chamfer', 'round', 'edge', 'rim', 'break edge', 'ease'],
+      keywords: ['chamfer', 'bevel', 'round', 'edge', 'rim', 'break edge', 'ease'],
     },
     {
       id: 'regular_polygon',

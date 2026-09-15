@@ -298,7 +298,7 @@ export function activeParam(call: CallSite, signature: Signature): number {
 /**
  * Arguments whose value is one of a fixed set, and what that set is.
  *
- * Typing `fillet_style = ` and being offered every global name in the language
+ * Typing `edge_style = ` and being offered every global name in the language
  * is the same unhelpfulness parameter completion already fixed one level up.
  * There are only two right answers here and the editor knows both.
  *
@@ -311,9 +311,9 @@ export function activeParam(call: CallSite, signature: Signature): number {
  */
 export const ENUM_ARGUMENTS: Record<string, Record<string, { value: string; info: string }[]>> = {
   cylinder: {
-    fillet_style: [
-      { value: 'round', info: 'A true arc, tangent to both the wall and the end face. The default.' },
-      { value: 'chamfer', info: 'A straight cut across the same two points the arc would meet.' },
+    edge_style: [
+      { value: 'chamfer', info: 'A straight cut across the two points the arc would meet. The default.' },
+      { value: 'round', info: 'A true arc, tangent to both the wall and the end face.' },
     ],
   },
   text: {
