@@ -371,8 +371,17 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
     // that case: the pieces were subtracted away and took the highlight with
     // them.
     if (childDisplay === 'highlight') {
+      // Pieces *and* negatives. A `#` written outside a `negative()` — as in
+      // `#translatez(4) negative() thread(…)` — sees an assembly whose geometry
+      // is entirely in `negatives`, because a negative rides up through
+      // wrappers like that one and never becomes a piece at this level. Copying
+      // only the pieces highlighted nothing at all, which is the same hole the
+      // difference() case had, one layer further in.
       annotations.push(
-        ...evaluated.pieces.map((p) => ({ ...p, display: 'highlight' as Display })),
+        ...[...evaluated.pieces, ...evaluated.negatives].map((p) => ({
+          ...p,
+          display: 'highlight' as Display,
+        })),
       );
     }
 

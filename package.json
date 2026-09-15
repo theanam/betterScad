@@ -1,7 +1,7 @@
 {
   "name": "betterscad",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A modern, local-first, browser-based CAD editor with full OpenSCAD language compatibility.",
   "license": "MIT",
   "type": "module",

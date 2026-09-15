@@ -223,6 +223,13 @@ test('# on a cutter survives the cut it is marking', async () => {
   for (const source of [
     'difference() { cube(20, center = true); #cylinder(h = 30, r = 6, center = true); }',
     'cube(20); negative() #translate([10, 10, -1]) cylinder(h = 30, r = 5);',
+    'cube(20); #negative() translate([10, 10, -1]) cylinder(h = 30, r = 5);',
+    // The `#` outside the `negative()`, which is how you actually write it when
+    // the thing being removed needs positioning. Its geometry never becomes a
+    // piece at that level — a negative rides up through a wrapper like this one
+    // — so copying only the pieces highlighted nothing.
+    'cube(20); #translatez(4) negative() cylinder(h = 30, r = 5);',
+    'cube(20); #translate([10, 10, 0]) rotate([0, 0, 10]) negative() cylinder(h = 30, r = 5);',
   ]) {
     const result = await render(source);
     assert.deepEqual(
