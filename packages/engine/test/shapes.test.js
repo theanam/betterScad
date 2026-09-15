@@ -1,5 +1,6 @@
 /**
- * The added shapes: `rounded_square`, `rounded_cube`, `regular_polygon`.
+ * The added shape arguments and shapes: `square(r)`, `cube(r)`,
+ * `cylinder(fillet)`, `regular_polygon`.
  *
  * Each is defined in the interpreter as the scene subtree its legacy export
  * prints, so the downgrade is equivalent by construction rather than by two
@@ -73,19 +74,19 @@ async function equivalent(sugar, stock) {
   );
 }
 
-// --- rounded_square ---------------------------------------------------------
+// --- square(r) --------------------------------------------------------------
 
-test('rounded_square is a hull of corner circles', async () => {
+test('square(r) is a hull of corner circles', async () => {
   await equivalent(
-    '$fn = 32;\nrounded_square([30, 20], 5, center = true);',
+    '$fn = 32;\nsquare([30, 20], center = true, r = 5);',
     `$fn = 32;
      hull() for (x = [-1, 1], y = [-1, 1])
        translate([x * 10, y * 5]) circle(r = 5);`,
   );
 });
 
-test('rounded_square sits in the positive quadrant unless centred', async () => {
-  const { bounds } = await measure('$fn = 64;\nrounded_square([30, 20], 5);');
+test('square(r) sits in the positive quadrant unless centred', async () => {
+  const { bounds } = await measure('$fn = 64;\nsquare([30, 20], r = 5);');
   const slack = 0.02;
   assert.ok(bounds.slice(0, 2).every((v) => near(v, 0, slack)), `expected a corner at the origin, got ${bounds}`);
   assert.ok(near(bounds[3], 30, slack) && near(bounds[4], 20, slack), `expected 30 x 20, got ${bounds}`);
@@ -94,23 +95,32 @@ test('rounded_square sits in the positive quadrant unless centred', async () => 
 test('the area is the rounded rectangle it claims to be', async () => {
   // Independent of how it is built: a w x h rectangle with r-rounded corners
   // loses exactly (4 - PI) r^2 to the corners.
-  const { area } = await measure('$fn = 256;\nrounded_square([30, 20], 5);');
+  const { area } = await measure('$fn = 256;\nsquare([30, 20], r = 5);');
   const expected = 30 * 20 - (4 - Math.PI) * 25;
   assert.ok(Math.abs(area - expected) / expected < 1e-3, `area ${area}, expected ${expected}`);
 });
 
 test('a scalar size is square', async () => {
-  await equivalent('$fn = 24;\nrounded_square(20, 4);', '$fn = 24;\nrounded_square([20, 20], 4);');
+  await equivalent('$fn = 24;\nsquare(20, r = 4);', '$fn = 24;\nsquare([20, 20], r = 4);');
 });
 
-test('r = 0 is a plain square', async () => {
-  await equivalent('rounded_square([8, 5], 0);', 'square([8, 5]);');
-  await equivalent('rounded_square([8, 5], 0, center = true);', 'square([8, 5], center = true);');
+test('r = 0, or no r at all, is a plain square', async () => {
+  await equivalent('square([8, 5], r = 0);', 'square([8, 5]);');
+  await equivalent('square([8, 5], center = true, r = 0);', 'square([8, 5], center = true);');
+});
+
+test('a square with no r exports byte for byte', async () => {
+  // The whole point of folding the radius into `square` rather than adding a
+  // shape beside it: a file that does not round anything is still stock.
+  const source = 'square([8, 5], center = true);\n';
+  const legacy = transpileToLegacyScad(parse(source).file, { header: false });
+  assert.deepEqual(describeExtensions(parse(source).file), []);
+  assert.equal(legacy.source.trim(), source.trim());
 });
 
 test('a radius past half the shortest side is clamped, with a warning', async () => {
   // Left alone it would ask for a square with a negative straight section.
-  const result = await engine.render('$fn = 32;\nrounded_square([10, 6], 50);');
+  const result = await engine.render('$fn = 32;\nsquare([10, 6], r = 50);');
   assert.deepEqual(result.diagnostics.filter((d) => d.severity === 'error'), []);
   assert.ok(
     result.diagnostics.some((d) => d.severity === 'warning' && /larger than half/.test(d.message)),
@@ -119,25 +129,25 @@ test('a radius past half the shortest side is clamped, with a warning', async ()
   // Clamped to 3 the corners meet, so the shape is a 10 x 6 stadium. This is
   // the case an offset-of-inset-square construction cannot build at all: the
   // square it grows from would be zero-height.
-  const { bounds, area } = await measure('$fn = 256;\nrounded_square([10, 6], 50);');
+  const { bounds, area } = await measure('$fn = 256;\nsquare([10, 6], r = 50);');
   assert.ok(near(bounds[3] - bounds[0], 10, 0.02) && near(bounds[4] - bounds[1], 6, 0.02), `got ${bounds}`);
   const stadium = 4 * 6 + Math.PI * 9; // a 4 x 6 rectangle plus two half-discs
   assert.ok(Math.abs(area - stadium) / stadium < 1e-3, `area ${area}, expected a stadium ${stadium}`);
 });
 
-// --- rounded_cube -----------------------------------------------------------
+// --- cube(r) ----------------------------------------------------------------
 
-test('rounded_cube is a hull of corner spheres', async () => {
+test('cube(r) is a hull of corner spheres', async () => {
   await equivalent(
-    '$fn = 24;\nrounded_cube([20, 14, 8], 3, center = true);',
+    '$fn = 24;\ncube([20, 14, 8], center = true, r = 3);',
     `$fn = 24;
      hull() for (x = [-1, 1], y = [-1, 1], z = [-1, 1])
        translate([x * 7, y * 4, z * 1]) sphere(r = 3);`,
   );
 });
 
-test('rounded_cube sits in the positive octant unless centred', async () => {
-  const { bounds } = await measure('$fn = 24;\nrounded_cube([20, 14, 8], 3);');
+test('cube(r) sits in the positive octant unless centred', async () => {
+  const { bounds } = await measure('$fn = 24;\ncube([20, 14, 8], r = 3);');
   // Loose, because a tessellated sphere's vertices sit just inside its radius,
   // so the hull comes out a hair under the nominal size — as it does in stock
   // OpenSCAD too. The point here is the corner's position, not the rounding.
@@ -153,9 +163,101 @@ test('rounded_cube sits in the positive octant unless centred', async () => {
 });
 
 test('a scalar size is a cube, and r = 0 is a plain one', async () => {
-  await equivalent('$fn = 16;\nrounded_cube(10, 2);', '$fn = 16;\nrounded_cube([10, 10, 10], 2);');
-  await equivalent('rounded_cube([6, 4, 2], 0);', 'cube([6, 4, 2]);');
-  await equivalent('rounded_cube(6, 0, center = true);', 'cube(6, center = true);');
+  await equivalent('$fn = 16;\ncube(10, r = 2);', '$fn = 16;\ncube([10, 10, 10], r = 2);');
+  await equivalent('cube([6, 4, 2], r = 0);', 'cube([6, 4, 2]);');
+  await equivalent('cube(6, center = true, r = 0);', 'cube(6, center = true);');
+});
+
+test('r is the third argument, after the two cube has always had', async () => {
+  // `cube(10, true)` has meant one thing since OpenSCAD was written, so the
+  // radius goes after it rather than in front.
+  await equivalent('$fn = 16;\ncube(10, true, 2);', '$fn = 16;\ncube(10, center = true, r = 2);');
+});
+
+test('the shapes it replaced say what to write instead', async () => {
+  for (const [source, expected] of [
+    ['rounded_cube(10, 2);', /cube\(size, center, r\)/],
+    ['rounded_square([10, 6], 2);', /square\(size, center, r\)/],
+  ]) {
+    const result = await engine.render(source);
+    const errors = result.diagnostics.filter((d) => d.severity === 'error');
+    assert.ok(errors.some((d) => expected.test(d.message)), `${source}: got ${JSON.stringify(errors)}`);
+  }
+});
+
+// --- cylinder(fillet) -------------------------------------------------------
+
+test('no fillet is the stock cylinder, and exports byte for byte', async () => {
+  await equivalent('cylinder(h = 10, r = 4, fillet = 0, $fn = 16);', 'cylinder(h = 10, r = 4, $fn = 16);');
+
+  const source = 'cylinder(h = 10, r = 4, $fn = 16);\n';
+  assert.deepEqual(describeExtensions(parse(source).file), []);
+  assert.equal(transpileToLegacyScad(parse(source).file, { header: false }).source.trim(), source.trim());
+});
+
+test('a rounded fillet removes the volume a quarter-torus occupies', async () => {
+  // Independent of the construction: rounding one end of a cylinder of radius
+  // R by f removes the difference between the f-square corner ring and the
+  // quarter-disc inside it, swept about the axis. Pappus gives that exactly.
+  const R = 8;
+  const f = 2;
+  const { volume } = await measure(`$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f});`);
+
+  const square = f * f;
+  const quarter = (Math.PI * f * f) / 4;
+  // Centroids, measured from the axis: the corner square's is at R - f/2, the
+  // quarter disc's at R - f + 4f/(3*PI).
+  const removed =
+    2 * Math.PI * ((square * (R - f / 2)) - (quarter * (R - f + (4 * f) / (3 * Math.PI))));
+  const expected = Math.PI * R * R * 20 - removed;
+  assert.ok(Math.abs(volume - expected) / expected < 1e-3, `volume ${volume}, expected ${expected}`);
+});
+
+test('a chamfer is the chord across the same two tangent points', async () => {
+  // Which makes it a truncated cone of height f meeting the wall at 45 degrees.
+  const R = 8;
+  const f = 3;
+  const { volume } = await measure(`$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f}, fillet_style = "chamfer");`);
+  const cone = (Math.PI * f * (R * R + R * (R - f) + (R - f) * (R - f))) / 3;
+  const expected = Math.PI * R * R * (20 - f) + cone;
+  assert.ok(Math.abs(volume - expected) / expected < 1e-3, `volume ${volume}, expected ${expected}`);
+});
+
+test('fillet sets both ends and fillet1 / fillet2 override each', async () => {
+  await equivalent(
+    '$fn = 48;\ncylinder(h = 12, r = 5, fillet = 1.5);',
+    '$fn = 48;\ncylinder(h = 12, r = 5, fillet1 = 1.5, fillet2 = 1.5);',
+  );
+  // 1 is the bottom and 2 the top, the same way round as r1 and r2.
+  const low = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, fillet1 = 2);');
+  const high = await measure('$fn = 48;\ncylinder(h = 12, r1 = 5, r2 = 5, fillet2 = 2);');
+  assert.ok(near(low.volume, high.volume, 1e-6), 'a symmetric cylinder loses the same either end');
+  assert.ok(!near(low.bounds[2], high.bounds[2], 1e-9) === false, 'both keep the full height');
+});
+
+test('the fillet follows a taper rather than assuming a right angle', async () => {
+  // On a cone the corner is not 90 degrees, so a quarter circle would not meet
+  // both edges. The test that it does: the result is still tangent, so its
+  // volume sits between the unfilleted cone and one chamfered by the same f.
+  const plain = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4);');
+  const round = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2);');
+  const cham = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2, fillet_style = "chamfer");');
+  assert.ok(round.volume < plain.volume, 'a fillet removes material');
+  assert.ok(cham.volume < round.volume, 'a chamfer removes more than the arc inside it');
+});
+
+test('a fillet larger than the end it eases is clamped, with a warning', async () => {
+  const result = await engine.render('$fn = 32;\ncylinder(h = 10, r = 3, fillet = 40);');
+  assert.deepEqual(result.diagnostics.filter((d) => d.severity === 'error'), []);
+  assert.ok(
+    result.diagnostics.some((d) => d.severity === 'warning' && /does not fit/.test(d.message)),
+    'expected a clamp warning',
+  );
+});
+
+test('centre still centres, with the fillet on', async () => {
+  const { bounds } = await measure('$fn = 64;\ncylinder(h = 20, r = 6, center = true, fillet = 2);');
+  assert.ok(near(bounds[2], -10, 0.02) && near(bounds[5], 10, 0.02), `expected -10..10, got ${bounds}`);
 });
 
 // --- regular_polygon --------------------------------------------------------

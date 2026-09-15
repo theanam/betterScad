@@ -63,6 +63,7 @@ cube(20, center = true);
 | --- | --- |
 | `size` | Number, or `[x, y, z]`. Default `1`. |
 | `center` | `true` centres the box on the origin. Default `false`. |
+| `r` | BetterSCAD: radius on every edge. Default `0`, which is the stock cube. |
 
 `size` is a number, or `[x, y, z]`. It defaults to `1`.
 
@@ -70,7 +71,9 @@ By default the box sits in the corner between the three axes, with one corner on
 
 A size of zero or less on any axis produces nothing, and reports a warning.
 
-See also: [`rounded_cube()`](#entry-rounded_cube) · [`sphere()`](#entry-sphere) · [`cylinder()`](#entry-cylinder)
+BetterSCAD adds a third argument, `r`, which rounds every edge. It sits after `center` so that `cube(10, true)` keeps its meaning. See its own entry for the detail.
+
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`sphere()`](#entry-sphere) · [`cylinder()`](#entry-cylinder)
 
 <a id="entry-sphere"></a>
 
@@ -155,6 +158,7 @@ cylinder(h = 10, r = 12, $fn = 6);
 | `r1 / r2` | Bottom and top radius. |
 | `d / d1 / d2` | Diameter forms. These win over the radius forms. |
 | `center` | `true` centres the height on the origin. Default `false`. |
+| `fillet` | BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and `fillet_style` is `"round"` or `"chamfer"`. |
 
 `r` sets both ends. `r1` is the bottom and `r2` the top; `d`, `d1` and `d2` are the diameter versions and win over the radius ones. Set one end to `0` for a proper pointed cone.
 
@@ -164,7 +168,9 @@ Like a sphere, it is really a many-sided prism. With `$fn = 6` you get a clean h
 
 `h` defaults to `1`, and a height of zero or less produces nothing.
 
-See also: [`sphere()`](#entry-sphere) · [`$fn`](#entry-fn) · [`rotate_extrude()`](#entry-rotate_extrude)
+BetterSCAD adds `fillet`, which takes the sharp rim off either end. See its own entry for the detail.
+
+See also: [`cylinder(fillet)`](#entry-cylinder-fillet) · [`sphere()`](#entry-sphere) · [`$fn`](#entry-fn) · [`rotate_extrude()`](#entry-rotate_extrude)
 
 <a id="entry-polyhedron"></a>
 
@@ -303,12 +309,15 @@ linear_extrude(height = 12) square([40, 25]);
 | --- | --- |
 | `size` | Number, or `[x, y]`. Default `1`. |
 | `center` | `true` centres it on the origin. Default `false`. |
+| `r` | BetterSCAD: corner radius. Default `0`, which is the stock square. |
 
 `size` is a number or `[x, y]`, and defaults to `1`. `center = true` puts the origin in the middle instead of at the bottom-left corner.
 
 A 2D shape has no thickness at all. You cannot mix it with 3D shapes in the same boolean — `union()` of a square and a cube is an error, not a shape.
 
-See also: [`rounded_square()`](#entry-rounded_square) · [`circle()`](#entry-circle) · [`linear_extrude()`](#entry-linear_extrude)
+BetterSCAD adds a third argument, `r`, which rounds the corners. It sits after `center`, matching `cube()`. See its own entry for the detail.
+
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`circle()`](#entry-circle) · [`linear_extrude()`](#entry-linear_extrude)
 
 <a id="entry-circle"></a>
 
@@ -731,7 +740,7 @@ A negative value shrinks. Shrink a shape by more than its own narrowest half-wid
 
 `offset(r = 2) offset(r = -2)` is the standard trick for rounding inside corners while leaving outside ones alone.
 
-See also: [`rounded_square()`](#entry-rounded_square) · [`square()`](#entry-square) · [`minkowski()`](#entry-minkowski)
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`square()`](#entry-square) · [`minkowski()`](#entry-minkowski)
 
 <a id="entry-hull"></a>
 
@@ -769,13 +778,13 @@ hull() {
 
 The result is the **convex hull**: the smallest shape with no dents that still contains everything you gave it.
 
-Two spheres hulled together make a capsule; four circles at the corners of a rectangle hull into a rounded rectangle. That second one is exactly how `rounded_square()` is built.
+Two spheres hulled together make a capsule; four circles at the corners of a rectangle hull into a rounded rectangle. That second one is exactly how `square(r = …)` is built.
 
 All children must be the same dimension — all 2D, or all 3D. A 2D hull gives a 2D shape.
 
 Holes inside the children do not survive: a hull has no interior detail by definition.
 
-See also: [`minkowski()`](#entry-minkowski) · [`rounded_cube()`](#entry-rounded_cube)
+See also: [`minkowski()`](#entry-minkowski) · [`cube(r), square(r)`](#entry-shape-radius)
 
 <a id="entry-minkowski"></a>
 
@@ -804,9 +813,9 @@ The result grows — a `cube(10)` plus a `sphere(2)` is `14` across, not `10`. S
 
 **It is expensive.** Cost rises with the product of the two shapes’ complexity, so keep the second one simple and low-resolution. A `$fn = 12` sphere is usually plenty.
 
-For the common case of rounding a box, `rounded_cube()` gives the same shape from a hull, at a small fraction of the cost.
+For the common case of rounding a box, `cube(r = …)` gives the same shape from a hull, at a small fraction of the cost.
 
-See also: [`hull()`](#entry-hull) · [`rounded_cube()`](#entry-rounded_cube) · [`offset()`](#entry-offset)
+See also: [`hull()`](#entry-hull) · [`cube(r), square(r)`](#entry-shape-radius) · [`offset()`](#entry-offset)
 
 ## Combining shapes
 
@@ -2439,93 +2448,130 @@ What BetterSCAD adds on top, under one rule: every addition has a defined way ba
 
 Four shapes you would otherwise build by hand every time.
 
-<a id="entry-rounded_square"></a>
+<a id="entry-shape-radius"></a>
 
-### rounded_square()
+### cube(r), square(r)
 
 ```
-rounded_square(size, r, center)
+cube(size, center, r) | square(size, center, r)
 ```
 
-A flat rectangle with rounded corners. Exactly like `square()`, plus a number for how round the corners are.
+A box or a rectangle with its edges eased off. It is the same `cube()` and `square()` you already use, with one more number on the end for how round the edges are.
 
 ```scad
-rounded_square([44, 28], 8);
+cube([44, 30, 16], r = 4, $fn = 32);
 ```
 
-<img src="images/reference/rounded-square.png" alt="A 44 x 28 rectangle with corners of radius 8." width="420">
+<img src="images/reference/cube-radius.png" alt="Every edge and corner rounded to a radius of 4." width="420">
 
-*A 44 x 28 rectangle with corners of radius 8.*
+*Every edge and corner rounded to a radius of 4.*
 
 ```scad
-rounded_square(30, 15);
+linear_extrude(height = 16) square([44, 30], r = 6);
 ```
 
-<img src="images/reference/rounded-square-stadium.png" alt="At exactly half the shortest side the corners meet: a stadium." width="420">
+<img src="images/reference/square-radius-extruded.png" alt="Extruding a rounded square instead rounds the sides but leaves the top flat." width="420">
+
+*Extruding a rounded square instead rounds the sides but leaves the top flat.*
+
+```scad
+square([44, 28], r = 8);
+```
+
+<img src="images/reference/square-radius.png" alt="The 2D form: a 44 x 28 rectangle with corners of radius 8." width="420">
+
+*The 2D form: a 44 x 28 rectangle with corners of radius 8.*
+
+```scad
+square(30, r = 15);
+```
+
+<img src="images/reference/square-radius-stadium.png" alt="At exactly half the shortest side the corners meet: a stadium." width="420">
 
 *At exactly half the shortest side the corners meet: a stadium.*
 
 | Argument | |
 | --- | --- |
-| `size` | Number, or `[x, y]`. |
-| `r` | Corner radius, clamped to half the shortest side. |
+| `size` | As always: a number, or `[x, y]` / `[x, y, z]`. |
 | `center` | `true` centres it on the origin. Default `false`. |
+| `r` | Edge radius, clamped to half the shortest side. Default `0`. |
 
-`size` and `center` behave exactly as they do for `square()`: a number or `[x, y]`, and `center = true` puts the origin in the middle.
+`r` is the radius. Leave it out, or set it to `0`, and you have the stock primitive — the file exports byte for byte, and nothing is reported as an extension. It is only a BetterSCAD file once you actually round something.
 
-`r` is the corner radius. It is clamped to half the shortest side, with a warning — past that there is no straight section left to round.
+**`r` comes after `center`, not before it.** `cube(10, true)` has meant one thing since OpenSCAD was written and still does; the radius takes the third slot. Named arguments — `cube(10, r = 2)` — sidestep the question entirely and are what you should write.
 
-At exactly half the shortest side the corners meet and you get a stadium shape. At `r = 0` you get a plain square.
+It is clamped to half the shortest side, with a warning: past that there is no straight section left to round. At exactly half, a square becomes a stadium and a cube a capsule.
 
-It is built as the hull of four corner circles, which **is** the Minkowski sum of the rectangle and a disc, without the cost of computing one. Rounding resolution follows `$fn`/`$fa`/`$fs` as usual.
+`cube(r = …)` rounds **every** edge, not just the vertical ones. For a box with rounded sides and a flat top, extrude a rounded square instead — the second example below.
 
-**Saved as OpenSCAD `.scad`:** A generated module using the same hull of four circles, defined once however many times it is used.
+Both are built as the hull of their corner primitives, which **is** the Minkowski sum of the box and a disc or sphere, without the cost of computing one. The rounding follows `$fn`/`$fa`/`$fs` as usual.
 
-See also: [`square()`](#entry-square) · [`rounded_cube()`](#entry-rounded_cube) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull)
+**Saved as OpenSCAD `.scad`:** With no `r`, nothing — the call is already stock. With one, a generated module using the same hull of corner circles or spheres, defined once however many times it is used.
 
-<a id="entry-rounded_cube"></a>
+See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(fillet)`](#entry-cylinder-fillet) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
 
-### rounded_cube()
+<a id="entry-cylinder-fillet"></a>
+
+### cylinder(fillet)
 
 ```
-rounded_cube(size, r, center)
+cylinder(…, fillet, fillet1, fillet2, fillet_style)
 ```
 
-A box with rounded edges and corners — the shape almost every enclosure actually is. Like `cube()`, plus a radius.
+Takes the sharp rim off the end of a cylinder — rounded like a worn edge, or cut flat like a chamfer. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.
 
 ```scad
-rounded_cube([44, 30, 16], 4, $fn = 32);
+cylinder(h = 24, r = 10, fillet = 3, $fn = 64);
 ```
 
-<img src="images/reference/rounded-cube.png" alt="Every edge and corner rounded to a radius of 4." width="420">
+<img src="images/reference/cylinder-fillet.png" alt="Both ends rounded by 3." width="420">
 
-*Every edge and corner rounded to a radius of 4.*
+*Both ends rounded by 3.*
 
 ```scad
-linear_extrude(height = 16) rounded_square([44, 30], 6);
+cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);
 ```
 
-<img src="images/reference/rounded-cube-vertical.png" alt="Extruding a rounded_square() instead rounds the sides but leaves the top flat." width="420">
+<img src="images/reference/cylinder-fillet-top.png" alt="fillet2 is the top only — 2 is the top, as it is for r2." width="420">
 
-*Extruding a `rounded_square()` instead rounds the sides but leaves the top flat.*
+*`fillet2` is the top only — 2 is the top, as it is for `r2`.*
+
+```scad
+cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer", $fn = 64);
+```
+
+<img src="images/reference/cylinder-chamfer.png" alt="The same 3, cut flat instead of rounded." width="420">
+
+*The same 3, cut flat instead of rounded.*
+
+```scad
+cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);
+```
+
+<img src="images/reference/cylinder-fillet-cone.png" alt="On a taper the corner is not square, and the arc is solved for the real angle." width="420">
+
+*On a taper the corner is not square, and the arc is solved for the real angle.*
 
 | Argument | |
 | --- | --- |
-| `size` | Number, or `[x, y, z]`. |
-| `r` | Radius, clamped to half the shortest side. |
-| `center` | `true` centres it on the origin. Default `false`. |
+| `fillet` | Radius at both ends. Default `0`. |
+| `fillet1` | Bottom end, overriding `fillet`. |
+| `fillet2` | Top end, overriding `fillet`. |
+| `fillet_style` | `"round"` (default) or `"chamfer"`. |
 
-`size` and `center` behave exactly as they do for `cube()`.
+`fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` overrides `r`. There is one convention on this module for "both, or each", and this is it.
 
-`r` is clamped to half the shortest side, with a warning. At exactly half, it is a capsule.
+`fillet_style` is `"round"` (the default) — a true arc, tangent to both the wall and the face — or `"chamfer"`, a straight cut across the same two points. They are one argument rather than two shapes because they are the same construction: the chamfer is the chord of the fillet.
 
-Built as the hull of eight corner spheres — the Minkowski sum of the box and a ball, without paying for a Minkowski. Resolution follows `$fn`/`$fa`/`$fs`.
+It works on a cone as well as a straight cylinder. On a taper the corner is not a right angle, so the arc that meets both edges is not a quarter circle — the profile is solved for the actual angle rather than assumed.
 
-Every edge is rounded, not just the vertical ones. For vertical-only rounding, extrude a `rounded_square()` instead.
+A fillet larger than the end it is easing is clamped to fit, with a warning.
 
-**Saved as OpenSCAD `.scad`:** A generated module using the same hull of eight spheres, defined once however many times it is used.
+With no fillet this is the stock primitive: it exports byte for byte and is not reported as an extension. `fillet = 0` is the same shape as leaving it out, not a revolve that merely measures the same.
 
-See also: [`cube()`](#entry-cube) · [`rounded_square()`](#entry-rounded_square) · [`minkowski()`](#entry-minkowski) · [`hull()`](#entry-hull)
+**Saved as OpenSCAD `.scad`:** With no fillet, nothing — the call is already stock. With one, a generated module that revolves the same profile, defined once however many times it is used.
+
+See also: [`cylinder()`](#entry-cylinder) · [`cube(r), square(r)`](#entry-shape-radius) · [`rotate_extrude()`](#entry-rotate_extrude) · [`minkowski()`](#entry-minkowski)
 
 <a id="entry-regular_polygon"></a>
 
@@ -2901,18 +2947,18 @@ What happens to all of the above when you save a file for someone else.
 Everything on this page can be written back out as ordinary OpenSCAD. The app rewrites it for you, shows you exactly which lines will change first, and a file that needs no changes is saved byte for byte.
 
 ```scad
-translatez(10) rotatez(45) rounded_cube([30, 20, 8], 3);
+translatez(10) rotatez(45) cube([30, 20, 8], r = 3);
 ```
 
 *Written in BetterSCAD…*
 
 ```scad
-module __rounded_cube(size, r) {
+module __rounded_cube(size, center = false, r = 0) {
   hull() for (x = [r, size[0] - r], y = [r, size[1] - r], z = [r, size[2] - r])
     translate([x, y, z]) sphere(r = r);
 }
 
-translate([0, 0, 10]) rotate([0, 0, 45]) __rounded_cube([30, 20, 8], 3);
+translate([0, 0, 10]) rotate([0, 0, 45]) __rounded_cube([30, 20, 8], r = 3);
 ```
 
 *…and the same file saved as stock `.scad`.*

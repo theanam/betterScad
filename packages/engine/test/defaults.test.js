@@ -42,8 +42,6 @@ const CALLS = {
   cylinder: 'cylinder(r = 4, $fn = 16%);',
   square: 'linear_extrude(2) square(%);',
   circle: 'linear_extrude(2) circle($fn = 16%);',
-  rounded_square: 'linear_extrude(2) rounded_square(%);',
-  rounded_cube: 'rounded_cube(%);',
   thread: 'thread(d = 8, pitch = 1.25, h = 5, $fn = 28%);',
   offset: 'linear_extrude(2) offset(r = 2, $fn = 16%) square(10);',
   rotate_extrude: 'rotate_extrude($fn = 16%) translate([6, 0]) square(3);',

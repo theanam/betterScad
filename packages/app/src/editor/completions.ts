@@ -63,12 +63,21 @@ const MODULES: BuiltinDoc[] = [
     label: 'cube',
     template: 'cube(${1:10})',
     detail: 'cube(size)',
-    info: 'Axis-aligned box. `size` is a number or [x, y, z].',
+    info:
+      'Axis-aligned box. `size` is a number or [x, y, z].\n\n' +
+      'BetterSCAD adds `r`, a radius on every edge. It follows `center`, so ' +
+      '`cube(10, true)` still means what it always has. At r = 0 this is the ' +
+      'stock primitive and exports untouched.',
     type: 'class',
     forms: [
       { template: 'cube([${1:10}, ${2:10}, ${3:10}])', detail: 'cube([x, y, z])' },
       { template: 'cube(${1:10}, center = true)', detail: 'cube(size, center)' },
       { template: 'cube([${1:10}, ${2:10}, ${3:10}], center = true)', detail: 'cube([x, y, z], center)' },
+      { template: 'cube(${1:10}, r = ${2:2})', detail: 'cube(size, r)  — BetterSCAD' },
+      {
+        template: 'cube([${1:10}, ${2:10}, ${3:10}], center = true, r = ${4:2})',
+        detail: 'cube([x, y, z], center, r)  — BetterSCAD',
+      },
     ],
   },
   {
@@ -90,7 +99,10 @@ const MODULES: BuiltinDoc[] = [
     measure: 'diameter',
     info:
       'Cylinder or cone. A zero radius at one end gives a cone.\n\n' +
-      'Diameter and radius are interchangeable: d = 2r, d1/d2 = 2r1/2r2.',
+      'Diameter and radius are interchangeable: d = 2r, d1/d2 = 2r1/2r2.\n\n' +
+      'BetterSCAD adds `fillet`, easing both ends; `fillet1` and `fillet2` ' +
+      'override the bottom and the top, the same way round as r1 and r2. ' +
+      '`fillet_style` is "round" (default) or "chamfer".',
     type: 'class',
     forms: [
       { template: 'cylinder(h = ${1:10}, r = ${2:5})', detail: 'cylinder(h, r)', measure: 'radius' },
@@ -102,6 +114,16 @@ const MODULES: BuiltinDoc[] = [
       {
         template: 'cylinder(h = ${1:10}, d1 = ${2:10}, d2 = ${3:5})',
         detail: 'cylinder(h, d1, d2)  — a cone',
+        measure: 'diameter',
+      },
+      {
+        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1})',
+        detail: 'cylinder(h, d, fillet)  — BetterSCAD',
+        measure: 'diameter',
+      },
+      {
+        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1}, fillet_style = "chamfer")',
+        detail: 'cylinder(h, d, fillet, fillet_style)  — BetterSCAD',
         measure: 'diameter',
       },
       {
@@ -121,11 +143,19 @@ const MODULES: BuiltinDoc[] = [
     label: 'square',
     template: 'square(${1:10})',
     detail: 'square(size)',
-    info: '2D rectangle.',
+    info:
+      '2D rectangle.\n\n' +
+      'BetterSCAD adds `r`, a corner radius, after `center`. At r = 0 this is ' +
+      'the stock primitive and exports untouched.',
     type: 'class',
     forms: [
       { template: 'square([${1:10}, ${2:10}])', detail: 'square([x, y])' },
       { template: 'square([${1:10}, ${2:10}], center = true)', detail: 'square([x, y], center)' },
+      { template: 'square(${1:10}, r = ${2:2})', detail: 'square(size, r)  — BetterSCAD' },
+      {
+        template: 'square([${1:10}, ${2:10}], center = true, r = ${3:2})',
+        detail: 'square([x, y], center, r)  — BetterSCAD',
+      },
     ],
   },
   {
@@ -221,34 +251,6 @@ const MODULES: BuiltinDoc[] = [
   },
 
   // Shapes OpenSCAD does not have (BetterSCAD extension).
-  {
-    label: 'rounded_square',
-    template: 'rounded_square([${1:0}, ${2:0}], r = ${3:1})',
-    detail: 'rounded_square([x, y], r)  — BetterSCAD',
-    info: 'A square with rounded corners. `size` is a number or [x, y]; `r` is the corner radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner circles.',
-    type: 'class',
-    forms: [
-      { template: 'rounded_square(${1:10}, r = ${2:1})', detail: 'rounded_square(size, r)  — BetterSCAD' },
-      {
-        template: 'rounded_square([${1:0}, ${2:0}], r = ${3:1}, center = true)',
-        detail: 'rounded_square([x, y], r, center)  — BetterSCAD',
-      },
-    ],
-  },
-  {
-    label: 'rounded_cube',
-    template: 'rounded_cube([${1:0}, ${2:0}, ${3:0}], r = ${4:1})',
-    detail: 'rounded_cube([x, y, z], r)  — BetterSCAD',
-    info: 'A cube with rounded edges and corners. `size` is a number or [x, y, z]; `r` is the radius, clamped to half the shortest side.\n\nExports to `.scad` as a generated module built from a hull of corner spheres.',
-    type: 'class',
-    forms: [
-      { template: 'rounded_cube(${1:10}, r = ${2:1})', detail: 'rounded_cube(size, r)  — BetterSCAD' },
-      {
-        template: 'rounded_cube([${1:0}, ${2:0}, ${3:0}], r = ${4:1}, center = true)',
-        detail: 'rounded_cube([x, y, z], r, center)  — BetterSCAD',
-      },
-    ],
-  },
   {
     label: 'thread',
     template: 'thread(d = ${1:8}, pitch = ${2:1.25}, h = ${3:10})',

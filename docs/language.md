@@ -181,8 +181,8 @@ numbered suffix rather than shadowing it.
 | Extension | Downgrade |
 | --- | --- |
 | [`negative()`](#negative) | `difference()` around the scope |
-| [`rounded_square()`](#rounded_square-and-rounded_cube) | module: a hull of four corner circles |
-| [`rounded_cube()`](#rounded_square-and-rounded_cube) | module: a hull of eight corner spheres |
+| [`cube(r)` / `square(r)`](#cuber-and-squarer) | module: a hull of corner spheres or circles |
+| [`cylinder(fillet)`](#cylinderfillet) | module: a revolve of the same profile |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
@@ -250,27 +250,80 @@ comprehensions. BetterSCAD also accepts it as a statement.
 and the original is preserved in a comment. This is exact only for the common
 `i = start; i < limit; i = i + step` shape, so the export reports it.
 
-### `rounded_square()` and `rounded_cube()`
+### `cube(r)` and `square(r)`
 
-`rounded_square(size, r, center)` and `rounded_cube(size, r, center)` take the
-same `size` and `center` as `square()` and `cube()`, plus a corner radius:
+The corner radius lives on the shapes themselves rather than in a second pair of
+names. `cube(size, center, r)` and `square(size, center, r)` are the stock
+primitives with one argument added:
 
 ```scad
-rounded_square([30, 20], 5);            // 30 x 20, corners of radius 5
-rounded_square(20, 4, center = true);   // a 20 x 20 square about the origin
-rounded_cube([40, 30, 12], 3);
+square([30, 20], r = 5);              // 30 x 20, corners of radius 5
+square(20, center = true, r = 4);     // a 20 x 20 square about the origin
+cube([40, 30, 12], r = 3);
+cube(10, true, 2);                    // positionally: size, center, r
 ```
+
+**`r` is the third argument, after `center`.** `cube(10, true)` has meant one
+thing since OpenSCAD was written and still does, so the radius takes the slot
+after it rather than in front. Named arguments avoid the question.
+
+`r` defaults to `0`, and at `0` these *are* the stock primitives: the call is
+not reported as an extension and the file exports byte for byte. A file only
+becomes a BetterSCAD file once it actually rounds something.
 
 `r` is clamped to half the shortest side, with a warning — beyond that there is
 no straight section left to round. At exactly half, the corners meet and the
-shape is a stadium (2D) or a capsule (3D); `r = 0` gives the plain square or
-cube.
+shape is a stadium (2D) or a capsule (3D).
+
+`cube(r = …)` rounds every edge. For a box with rounded sides and a flat top,
+extrude a rounded square instead:
+
+```scad
+linear_extrude(height = 16) square([44, 30], r = 6);
+```
 
 Both are built as the hull of their corner primitives, which *is* the Minkowski
 sum of the box and a disc or sphere, without the cost of computing one. The
 resolution of the rounding follows `$fn`/`$fa`/`$fs` as usual.
 
-**Downgrade:** a generated module using the same hull.
+**Downgrade:** a generated module using the same hull — and nothing at all when
+`r` is absent, because there is nothing to rewrite.
+
+**Replaces `rounded_square()` and `rounded_cube()`**, which are gone. Calling
+either reports an error naming the argument to use instead.
+
+### `cylinder(fillet)`
+
+The rim at either end of a cylinder, eased:
+
+```scad
+cylinder(h = 24, r = 10, fillet = 3);                           // both ends
+cylinder(h = 24, r = 10, fillet2 = 6);                          // top only
+cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer"); // cut flat
+cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5);                // on a taper
+```
+
+`fillet` sets both ends; `fillet1` and `fillet2` override the bottom and the
+top. **They are numbered the way `r1` and `r2` already are** — 1 is the bottom,
+2 is the top — because this module has one convention for "both, or each" and a
+second one would have to be remembered separately.
+
+`fillet_style` is `"round"` (the default), a true arc tangent to both the wall
+and the end face, or `"chamfer"`, the straight chord across that same arc. One
+argument rather than two shapes, because it is one construction: the tangent
+points are the same either way.
+
+It is exact on a cone as well as a cylinder. On a taper the corner is not a
+right angle, so the arc meeting both edges is not a quarter circle; the profile
+is solved for the actual angle rather than assumed to be square.
+
+A fillet larger than the end it eases is clamped to fit, with a warning. With no
+fillet — or `fillet = 0` — this is the stock primitive, exported byte for byte;
+zero takes the same branch in the engine and in the generated module, so it is
+one shape rather than two that merely measure the same.
+
+**Downgrade:** a generated module that revolves the profile, and nothing when no
+fillet is given.
 
 ### `regular_polygon()`
 

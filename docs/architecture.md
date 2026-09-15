@@ -282,7 +282,7 @@ What each step means here:
 | --- | --- |
 | **minor** | Anything a user can see in the editor, the language, or an extension: a new element, a new panel, a changed behaviour. |
 | **patch** | A release that adds no capability — fixes, documentation, chores. |
-| **major** | A break in the language or in the file format. |
+| **major** | A break in the language or in the file format — once there is a 1.0 to break from. Below 1.0, semver puts breaking changes in minor, and so does this. |
 
 The lock file is the one that bites. `npm ci` compares it against the manifests
 and refuses to install when they disagree, so a partial bump fails CI at the

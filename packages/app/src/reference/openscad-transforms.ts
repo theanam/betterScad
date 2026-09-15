@@ -249,7 +249,7 @@ export const TRANSFORMS: ReferenceGroup = {
           caption: 'The same growth with `delta`: corners stay sharp.',
         },
       ],
-      see: ['rounded_square', 'square', 'minkowski'],
+      see: ['shape-radius', 'square', 'minkowski'],
       keywords: ['grow', 'shrink', 'inset', 'outset', 'round corners', 'chamfer'],
     },
     {
@@ -263,8 +263,7 @@ export const TRANSFORMS: ReferenceGroup = {
         'The result is the **convex hull**: the smallest shape with no dents that still contains ' +
           'everything you gave it.',
         'Two spheres hulled together make a capsule; four circles at the corners of a rectangle ' +
-          'hull into a rounded rectangle. That second one is exactly how `rounded_square()` is ' +
-          'built.',
+          'hull into a rounded rectangle. That second one is exactly how `square(r = …)` is built.',
         'All children must be the same dimension — all 2D, or all 3D. A 2D hull gives a 2D shape.',
         'Holes inside the children do not survive: a hull has no interior detail by definition.',
       ],
@@ -280,7 +279,7 @@ export const TRANSFORMS: ReferenceGroup = {
           caption: 'Four circles hulled into a rounded rectangle.',
         },
       ],
-      see: ['minkowski', 'rounded_cube'],
+      see: ['minkowski', 'shape-radius'],
       keywords: ['wrap', 'convex', 'envelope', 'shrink wrap'],
     },
     {
@@ -297,7 +296,7 @@ export const TRANSFORMS: ReferenceGroup = {
           'original by the rolling radius first if you want to keep the outside size.',
         '**It is expensive.** Cost rises with the product of the two shapes’ complexity, so keep ' +
           'the second one simple and low-resolution. A `$fn = 12` sphere is usually plenty.',
-        'For the common case of rounding a box, `rounded_cube()` gives the same shape from a ' +
+        'For the common case of rounding a box, `cube(r = …)` gives the same shape from a ' +
           'hull, at a small fraction of the cost.',
       ],
       examples: [
@@ -307,7 +306,7 @@ export const TRANSFORMS: ReferenceGroup = {
           caption: 'A slab with every edge and corner rounded by a 3-unit ball.',
         },
       ],
-      see: ['hull', 'rounded_cube', 'offset'],
+      see: ['hull', 'shape-radius', 'offset'],
       keywords: ['sum', 'round edges', 'fillet', 'grow'],
     },
   ],

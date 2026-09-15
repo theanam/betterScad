@@ -111,6 +111,8 @@ test('the round-dimensions setting decides which measurement leads', () => {
         'cylinder(h, d)',
         'cylinder(h, d, center)',
         'cylinder(h, d1, d2)  — a cone',
+        'cylinder(h, d, fillet)  — BetterSCAD',
+        'cylinder(h, d, fillet, fillet_style)  — BetterSCAD',
         'cylinder(h, d, $fn)',
       ],
     );
@@ -135,8 +137,8 @@ test('switching the setting keeps every form, and keeps them ordered', () => {
     for (const measure of ['radius', 'diameter']) {
       setRoundMeasure(measure);
       const forms = formsOf('cylinder');
-      assert.equal(forms.length, 6, `${measure} lost a form`);
-      assert.equal(new Set(forms.map((c) => c.detail)).size, 6, `${measure} duplicated a form`);
+      assert.equal(forms.length, 8, `${measure} lost a form`);
+      assert.equal(new Set(forms.map((c) => c.detail)).size, 8, `${measure} duplicated a form`);
       for (let i = 1; i < forms.length; i++) {
         assert.ok(forms[i].boost < forms[i - 1].boost, `${measure}: forms are not ranked`);
       }

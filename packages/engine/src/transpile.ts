@@ -77,9 +77,61 @@ const AXIS_SUGAR: Record<string, { stock: string; slot: number; fill: number; co
  * spaces. Both are plain text: these are fixed definitions, not something built
  * from the call site.
  */
+/**
+ * Stock modules that BetterSCAD gives an extra argument, and the helper each
+ * one needs when that argument is used.
+ *
+ * Keyed on the argument rather than the module name, because `cube(10)` is
+ * stock OpenSCAD and has to export as itself. Only `cube(10, r = 2)` becomes a
+ * generated module, and only the second of those is reported as an extension.
+ *
+ * `positional` is where the argument sits in the signature, for a call that
+ * passes it without naming it. On `cube` and `square` it is third: `size` and
+ * `center` come first and have meant that since OpenSCAD was written.
+ */
+interface SugaredShape {
+  /** Key into `SHAPE_MODULES`. */
+  helper: string;
+  /** Argument names that mean the helper is needed. */
+  triggers: string[];
+  /** Index of the first trigger when passed positionally, if it can be. */
+  positional?: number;
+  /** How the export describes the rewrite. */
+  describe: string;
+}
+
+const SUGARED_SHAPES: Record<string, SugaredShape> = {
+  cube: {
+    helper: 'rounded_cube',
+    triggers: ['r'],
+    positional: 2,
+    describe: 'cube(r = …)',
+  },
+  square: {
+    helper: 'rounded_square',
+    triggers: ['r'],
+    positional: 2,
+    describe: 'square(r = …)',
+  },
+  cylinder: {
+    helper: 'filleted_cylinder',
+    // Never positional: they sit past `d2` in a signature nobody counts out.
+    triggers: ['fillet', 'fillet1', 'fillet2', 'fillet_style'],
+    describe: 'cylinder(fillet = …)',
+  },
+};
+
+/** Whether this call actually uses the sugar, rather than merely being able to. */
+function usesSugar(shape: SugaredShape, args: Argument[]): boolean {
+  if (args.some((arg) => arg.name !== undefined && shape.triggers.includes(arg.name))) return true;
+  if (shape.positional === undefined) return false;
+  const positional = args.filter((arg) => arg.name === undefined).length;
+  return positional > shape.positional;
+}
+
 const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
   rounded_square: {
-    params: 'size, r, center = false',
+    params: 'size, center = false, r = 0',
     body: [
       's = is_list(size) ? size : [size, size];',
       'rr = min(r, min(s[0], s[1]) / 2);',
@@ -97,7 +149,7 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
     ],
   },
   rounded_cube: {
-    params: 'size, r, center = false',
+    params: 'size, center = false, r = 0',
     body: [
       's = is_list(size) ? size : [size, size, size];',
       'rr = min(r, min(s[0], min(s[1], s[2])) / 2);',
@@ -112,6 +164,57 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '          sphere(r = rr);',
       '  else',
       '    cube(s, center = true);',
+    ],
+  },
+  filleted_cylinder: {
+    params:
+      'h, r1, r2, center = false, fillet1 = 0, fillet2 = 0, chamfer = false',
+    body: [
+      '// The cylinder\'s own cross-section, revolved, with each outer corner',
+      '// replaced by the arc that meets both of its edges tangentially — or by',
+      '// the chord across that arc, which is the chamfer. Exact on a taper as',
+      '// well as a straight wall, where the corner is not a right angle and the',
+      '// fillet is therefore not a quarter circle.',
+      'corners = [[0, 0], [r1, 0], [r2, h], [0, h]];',
+      '',
+      'function unit(a, b) = let (d = b - a, l = norm(d)) l > 1e-12 ? d / l : [0, 0];',
+      '',
+      '// Tangent reach along each edge, clamped to the shorter of the two so a',
+      '// fillet bigger than the end it eases cannot fold the profile inside out.',
+      'function eased(i, f) =',
+      '  let (p = corners[i - 1], c = corners[i], n = corners[i + 1],',
+      '       a = unit(c, p), b = unit(c, n),',
+      '       ang = acos(max(-1, min(1, a * b))),',
+      '       reach = f <= 0 || c[0] <= 0 || ang < 0.001 || ang > 179.999',
+      '         ? 0 : f / tan(ang / 2),',
+      '       lim = min(norm(p - c), norm(n - c)),',
+      '       t = min(reach, lim),',
+      '       rr = reach > 0 ? f * t / reach : 0)',
+      '  t <= 0 ? [c]',
+      '  : chamfer ? [c + a * t, c + b * t]',
+      '  : let (bis = unit([0, 0], a + b),',
+      '         ctr = c + bis * (rr / sin(ang / 2)),',
+      '         s = c + a * t - ctr, e = c + b * t - ctr,',
+      '         a0 = atan2(s[1], s[0]), a1 = atan2(e[1], e[0]),',
+      '         raw = a1 - a0,',
+      '         sweep = raw > 180 ? raw - 360 : raw < -180 ? raw + 360 : raw,',
+      '         segs = $fn > 0 ? max(3, floor($fn))',
+      '                        : max(5, ceil(min(360 / $fa, 2 * PI * rr / $fs))),',
+      '         steps = max(2, ceil(segs * abs(sweep) / 360)))',
+      '    [for (k = [0 : steps]) ctr + rr * [cos(a0 + sweep * k / steps),',
+      '                                       sin(a0 + sweep * k / steps)]];',
+      '',
+      'profile = concat([corners[0]], eased(1, fillet1), eased(2, fillet2), [corners[3]]);',
+      '',
+      '// With nothing to ease this is the stock primitive, not a revolve of the',
+      '// same outline. The two enclose the same volume but do not tessellate',
+      '// alike, and the engine takes this branch too — so `fillet = 0` gives one',
+      '// shape rather than two that merely measure the same.',
+      'if (fillet1 <= 0 && fillet2 <= 0)',
+      '  cylinder(h = h, r1 = r1, r2 = r2, center = center);',
+      'else',
+      '  translate([0, 0, center ? -h / 2 : 0])',
+      '    rotate_extrude() polygon(profile);',
     ],
   },
   thread: {
@@ -454,6 +557,14 @@ class Printer {
       return `${this.helperFor(name)}(${this.args(args)})`;
     }
 
+    // A stock module used with a BetterSCAD argument. Without that argument it
+    // is stock, and prints as itself.
+    const sugared = SUGARED_SHAPES[name];
+    if (sugared && usesSugar(sugared, args)) {
+      this.rewrites.add(`${sugared.describe} rewritten as a module`);
+      return `${this.helperFor(sugared.helper)}(${this.sugarArgs(name, args)})`;
+    }
+
     const axis = AXIS_SUGAR[name];
     if (axis) {
       this.rewrites.add(`${name}() rewritten as ${axis.stock}([…])`);
@@ -482,6 +593,57 @@ class Printer {
     return params
       .map((p) => (p.default ? `${p.name} = ${this.expr(p.default)}` : p.name))
       .join(', ');
+  }
+
+  /**
+   * The arguments for a sugared shape's helper.
+   *
+   * `cube` and `square` hand theirs straight over: the helper takes
+   * `size, center, r` in that order precisely so it can. `cylinder` cannot —
+   * its helper wants two radii and two fillets, where the call may have written
+   * any of `r`, `d`, `r1`, `d1`, `r2`, `d2` and `fillet`, so those are resolved
+   * into the helper's own names here.
+   */
+  private sugarArgs(name: string, args: Argument[]): string {
+    if (name !== 'cylinder') return this.args(args);
+
+    const named = new Map<string, string>();
+    const positional: string[] = [];
+    // `$fn` and friends are dynamically scoped: passed to a call they apply to
+    // everything it builds, including inside the helper, whose own resolution
+    // rule reads them. Rebuilding the argument list from the names this knows
+    // about would drop them, and the export would quietly come out coarse.
+    const specials: string[] = [];
+    for (const arg of args) {
+      if (arg.name?.startsWith('$')) specials.push(`${arg.name} = ${this.expr(arg.value)}`);
+      else if (arg.name) named.set(arg.name, this.expr(arg.value));
+      else positional.push(this.expr(arg.value));
+    }
+    // `cylinder(20, 8)` is h then r; nothing beyond that is written positionally
+    // in practice, and the parameters past it are the ones nobody counts out.
+    const pick = (key: string, index?: number): string | undefined =>
+      named.get(key) ?? (index !== undefined ? positional[index] : undefined);
+
+    const half = (value: string): string => `(${value}) / 2`;
+    const diameter = pick('d');
+    const radius = pick('r', 1);
+    const bottom = pick('d1') ? half(pick('d1')!) : (pick('r1') ?? (diameter ? half(diameter) : radius));
+    const top = pick('d2') ? half(pick('d2')!) : (pick('r2') ?? (diameter ? half(diameter) : radius));
+
+    const both = pick('fillet');
+    const style = pick('fillet_style');
+
+    const out = [
+      `h = ${pick('h', 0) ?? '1'}`,
+      `r1 = ${bottom ?? '1'}`,
+      `r2 = ${top ?? '1'}`,
+    ];
+    const center = pick('center');
+    if (center) out.push(`center = ${center}`);
+    out.push(`fillet1 = ${pick('fillet1') ?? both ?? '0'}`);
+    out.push(`fillet2 = ${pick('fillet2') ?? both ?? '0'}`);
+    if (style) out.push(`chamfer = (${style}) == "chamfer"`);
+    return [...out, ...specials].join(', ');
   }
 
   private args(args: Argument[]): string {
@@ -778,6 +940,21 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
       record(
         stmt.name,
         `${stmt.name}()`,
+        'Rewritten as a generated module, defined once and reused.',
+        stmt.span.start.line,
+      );
+    }
+    if (
+      stmt.kind === 'module-call' &&
+      SUGARED_SHAPES[stmt.name] &&
+      usesSugar(SUGARED_SHAPES[stmt.name], stmt.args)
+    ) {
+      // Reported against the argument, not the module: a plain `cube()` is
+      // stock, and saying otherwise would make the export warn about a file it
+      // is about to copy byte for byte.
+      record(
+        SUGARED_SHAPES[stmt.name].describe,
+        SUGARED_SHAPES[stmt.name].describe,
         'Rewritten as a generated module, defined once and reused.',
         stmt.span.start.line,
       );

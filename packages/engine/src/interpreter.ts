@@ -602,6 +602,18 @@ class Interpreter {
       return;
     }
 
+    const replacement = REPLACED_MODULES[name];
+    if (replacement) {
+      // Naming the new spelling costs one line here and saves a search through
+      // the changelog. "Unknown module" is true and useless.
+      this.diagnostics.error(
+        `\`${name}()\` has been replaced by ${replacement}.`,
+        stmt.nameSpan,
+        'eval.replaced-module',
+      );
+      return;
+    }
+
     this.diagnostics.warn(`Ignoring unknown module \`${name}()\`.`, stmt.nameSpan, 'eval.unknown-module');
   }
 
@@ -1572,6 +1584,180 @@ function threadMouthProfile(
  * section it is cut from would be negative — so it is clamped and reported
  * rather than producing a shape that silently is not the size asked for.
  */
+/**
+ * A cylinder or cone whose ends are eased, built as a revolved profile.
+ *
+ * The profile is the shape's own cross-section — axis, base, side, top — with
+ * the two outer corners replaced by a tangent arc (`round`) or the chord across
+ * it (`chamfer`). Revolving that is exact for a cone as well as a cylinder,
+ * which a quarter-torus glued to a plain cylinder would not be: on a taper the
+ * corner is not a right angle, so the arc that meets both edges tangentially is
+ * not a quarter circle.
+ *
+ * Built as the scene subtree the legacy export prints, like the other added
+ * shapes, so the two cannot disagree.
+ */
+function filletedCylinder(
+  spec: {
+    h: number;
+    r1: number;
+    r2: number;
+    center: boolean;
+    resolution: Resolution;
+    f1: number;
+    f2: number;
+    chamfer: boolean;
+  },
+  interp: Interpreter,
+  span: SourceSpan,
+): SceneNode {
+  const { h, r1, r2, center, resolution, chamfer } = spec;
+
+  // Axis-side corners first: the profile runs base-outward, up the side, then
+  // back to the axis at the top.
+  const corners: [number, number][] = [
+    [0, 0],
+    [r1, 0],
+    [r2, h],
+    [0, h],
+  ];
+
+  const points: [number, number][] = [corners[0]];
+  for (const index of [1, 2] as const) {
+    const fillet = index === 1 ? spec.f1 : spec.f2;
+    const corner = corners[index];
+    const previous = corners[index - 1];
+    const next = corners[index + 1];
+
+    // A corner at the axis is the tip of a cone: there are no two edges to sit
+    // an arc between, so there is nothing to ease.
+    if (fillet <= 0 || corner[0] <= 0) {
+      points.push(corner);
+      continue;
+    }
+
+    const toPrevious = unit(previous, corner);
+    const toNext = unit(next, corner);
+    if (!toPrevious || !toNext) {
+      points.push(corner);
+      continue;
+    }
+
+    // Interior angle between the two edges at this corner.
+    const cosine = clamp(toPrevious[0] * toNext[0] + toPrevious[1] * toNext[1], -1, 1);
+    const angle = Math.acos(cosine);
+    if (!(angle > 1e-6) || Math.PI - angle < 1e-6) {
+      points.push(corner);
+      continue;
+    }
+
+    // How far back along each edge the arc meets it. Clamped to the shorter of
+    // the two edges, so a fillet larger than the shape it is easing eats the
+    // whole edge rather than folding the profile inside out.
+    const reach = fillet / Math.tan(angle / 2);
+    const limit = Math.min(distance(previous, corner), distance(next, corner));
+    const scale = reach > limit ? limit / reach : 1;
+    if (scale < 1) {
+      interp.warn(
+        `cylinder(): fillet ${fillet} does not fit this end; using ${round6(fillet * scale)}.`,
+        span,
+        'eval.fillet-clamped',
+      );
+    }
+    const t = reach * scale;
+    const radius = fillet * scale;
+
+    const start: [number, number] = [corner[0] + toPrevious[0] * t, corner[1] + toPrevious[1] * t];
+    const end: [number, number] = [corner[0] + toNext[0] * t, corner[1] + toNext[1] * t];
+
+    if (chamfer) {
+      // The chord across the same two tangent points: one straight cut, and the
+      // reason style is an argument rather than a second shape.
+      points.push(start, end);
+      continue;
+    }
+
+    const bisector = unit(
+      [corner[0] + toPrevious[0] + toNext[0], corner[1] + toPrevious[1] + toNext[1]],
+      corner,
+    );
+    if (!bisector) {
+      points.push(start, end);
+      continue;
+    }
+    const away = radius / Math.sin(angle / 2);
+    const centre: [number, number] = [corner[0] + bisector[0] * away, corner[1] + bisector[1] * away];
+
+    // The arc runs from one tangent point to the other, the short way round.
+    const from = Math.atan2(start[1] - centre[1], start[0] - centre[0]);
+    const to = Math.atan2(end[1] - centre[1], end[0] - centre[0]);
+    let sweep = to - from;
+    while (sweep > Math.PI) sweep -= 2 * Math.PI;
+    while (sweep < -Math.PI) sweep += 2 * Math.PI;
+
+    // Segments follow the same resolution rule the rest of the curve does, so
+    // the fillet is no smoother or coarser than the wall it joins.
+    const steps = Math.max(2, Math.ceil(fragments(radius, resolution) * Math.abs(sweep) / (2 * Math.PI)));
+    for (let step = 0; step <= steps; step++) {
+      const at = from + (sweep * step) / steps;
+      points.push([centre[0] + radius * Math.cos(at), centre[1] + radius * Math.sin(at)]);
+    }
+  }
+  points.push(corners[3]);
+
+  const revolved = node(
+    'rotate_extrude',
+    { angle: 360, start: 0, resolution },
+    [node('polygon', { points: dedupe(points), paths: undefined }, [], [], span)],
+    [],
+    span,
+  );
+
+  return center ? transformNode(translation(0, 0, -h / 2), [revolved], span) : revolved;
+}
+
+/** Unit vector from `from` toward `to`, or undefined when they coincide. */
+function unit(to: [number, number], from: [number, number]): [number, number] | undefined {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const length = Math.hypot(dx, dy);
+  return length > 1e-12 ? [dx / length, dy / length] : undefined;
+}
+
+function distance(a: [number, number], b: [number, number]): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
+function round6(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+/** Drops points a revolve would turn into zero-area slivers. */
+function dedupe(points: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const point of points) {
+    const last = out[out.length - 1];
+    if (last && distance(last, point) < 1e-9) continue;
+    out.push(point);
+  }
+  return out;
+}
+
+/**
+ * Shapes that used to exist, and what replaced them.
+ *
+ * `rounded_cube()` and `rounded_square()` folded into `cube()` and `square()`
+ * as an `r` argument: one name for a box, whether or not its edges are eased.
+ */
+const REPLACED_MODULES: Record<string, string> = {
+  rounded_cube: '`cube(size, center, r)` — pass `r` to the cube itself',
+  rounded_square: '`square(size, center, r)` — pass `r` to the square itself',
+};
+
 function cornerRadius(
   r: number,
   size: number[],
@@ -1609,12 +1795,48 @@ function cylinderRadii(args: Map<string, Value>): { r1: number; r2: number } {
 
 export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   // --- 3D primitives ---
+  /**
+   * `cube(size, center, r)` — a box, with an optional corner radius
+   * (BetterSCAD extension).
+   *
+   * `r` comes *after* `center`, not before it, because `cube(10, true)` has
+   * meant one thing since OpenSCAD was written and has to keep meaning it.
+   *
+   * With `r` at its default of 0 this is the stock primitive, and exports
+   * untouched. Above 0 it is built as the scene subtree its legacy export
+   * prints — a hull of eight corner spheres, which is `minkowski()` of the box
+   * and a sphere without the cost of running one — so the downgrade is
+   * equivalent by construction rather than by two implementations happening to
+   * agree.
+   */
   cube: {
-    params: ['size', 'center'],
-    defaults: { size: '1', center: 'false' },
-    build: (args, _children, _scope, _interp, span) => {
+    params: ['size', 'center', 'r'],
+    defaults: { size: '1', center: 'false', r: '0' },
+    build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
-      return node('cube', { size, center: isTruthy(args.get('center')) }, [], [], span);
+      const center = isTruthy(args.get('center'));
+      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'cube', interp, span);
+
+      if (r <= 0) return node('cube', { size, center }, [], [], span);
+
+      const corners: SceneNode[] = [];
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            corners.push(
+              transformNode(
+                translation(sx * (size[0] / 2 - r), sy * (size[1] / 2 - r), sz * (size[2] / 2 - r)),
+                [node('sphere', { r, resolution: resolutionFor(args, scope) }, [], [], span)],
+                span,
+              ),
+            );
+          }
+        }
+      }
+
+      const hull = node('hull', {}, corners, [], span);
+      if (center) return hull;
+      return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
     },
   },
 
@@ -1628,22 +1850,54 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
     },
   },
 
+  /**
+   * `cylinder(h, r | r1, r2, center, fillet, fillet1, fillet2, fillet_style)`
+   * — a cylinder or cone, with optional eased ends (BetterSCAD extension).
+   *
+   * `fillet` sets both ends and `fillet1` / `fillet2` override the bottom and
+   * the top, exactly as `r` / `r1` / `r2` already do for the radii. Naming them
+   * the same way is the whole point: there is one convention on this module for
+   * "both, or each", and a second one would have to be remembered separately.
+   *
+   * `fillet_style` is `"round"` — a true tangent arc — or `"chamfer"`, a
+   * straight cut. Both are described by the same tangent-point construction,
+   * which is why they are one argument and not two shapes.
+   *
+   * With no fillet this is the stock primitive and exports untouched.
+   */
   cylinder: {
-    params: ['h', 'r', 'r1', 'r2', 'center', 'd', 'd1', 'd2'],
+    params: [
+      'h', 'r', 'r1', 'r2', 'center', 'd', 'd1', 'd2',
+      'fillet', 'fillet1', 'fillet2', 'fillet_style',
+    ],
     defaults: { h: '1', center: 'false' },
-    build: (args, _children, scope, _interp, span) => {
+    build: (args, _children, scope, interp, span) => {
       const { r1, r2 } = cylinderRadii(args);
-      return node(
-        'cylinder',
-        {
-          h: Math.max(0, asNumber(args.get('h'), 1)),
-          r1,
-          r2,
-          center: isTruthy(args.get('center')),
-          resolution: resolutionFor(args, scope),
-        },
-        [],
-        [],
+      const h = Math.max(0, asNumber(args.get('h'), 1));
+      const center = isTruthy(args.get('center'));
+      const resolution = resolutionFor(args, scope);
+
+      const both = asNumber(args.get('fillet'), 0);
+      const f1 = Math.max(0, asNumber(args.get('fillet1'), both));
+      const f2 = Math.max(0, asNumber(args.get('fillet2'), both));
+
+      const rawStyle = args.get('fillet_style');
+      const style = typeof rawStyle === 'string' ? rawStyle : 'round';
+      if (rawStyle !== undefined && style !== 'round' && style !== 'chamfer') {
+        interp.warn(
+          `cylinder(): fillet_style must be "round" or "chamfer"; got "${style}". Using "round".`,
+          span,
+          'eval.fillet-style',
+        );
+      }
+
+      if ((f1 <= 0 && f2 <= 0) || h <= 0) {
+        return node('cylinder', { h, r1, r2, center, resolution }, [], [], span);
+      }
+
+      return filletedCylinder(
+        { h, r1, r2, center, resolution, f1, f2, chamfer: style === 'chamfer' },
+        interp,
         span,
       );
     },
@@ -1683,39 +1937,27 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   },
 
   // --- 2D primitives ---
-  square: {
-    params: ['size', 'center'],
-    defaults: { size: '1', center: 'false' },
-    build: (args, _children, _scope, _interp, span) => {
-      const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
-      return node('square', { size, center: isTruthy(args.get('center')) }, [], [], span);
-    },
-  },
-
   /**
-   * `rounded_square(size, r, center)` — a square with rounded corners
-   * (BetterSCAD extension).
+   * `square(size, center, r)` — a rectangle, with an optional corner radius
+   * (BetterSCAD extension). `r` follows `center` for the same reason it does
+   * on `cube`.
    *
-   * Built as the scene subtree its legacy export prints, rather than as a new
-   * kernel primitive: `offset(r) square(size - 2r)`, shifted so the result
-   * occupies the size asked for. The downgrade is then equivalent by
-   * construction instead of by two implementations happening to agree.
+   * A hull of four corner circles, which *is* the Minkowski sum of the
+   * rectangle and a disc. `offset(r)` of an inset square says the same thing
+   * until `r` reaches half the shortest side, at which point that square
+   * collapses to a zero-height line and the offset has nothing to work with.
+   * The hull still has four circles.
    */
-  rounded_square: {
-    params: ['size', 'r', 'center'],
-    defaults: { size: '1', r: '0', center: 'false' },
+  square: {
+    params: ['size', 'center', 'r'],
+    defaults: { size: '1', center: 'false', r: '0' },
     build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
       const center = isTruthy(args.get('center'));
-      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'rounded_square', interp, span);
+      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'square', interp, span);
 
       if (r <= 0) return node('square', { size, center }, [], [], span);
 
-      // A hull of four corner circles, which *is* the Minkowski sum of the
-      // rectangle and a disc. `offset(r)` of an inset square says the same
-      // thing until the radius reaches half the shortest side, at which point
-      // the square it is grown from collapses to a zero-height line and the
-      // offset has nothing to work with. The hull still has four circles.
       const corners: SceneNode[] = [];
       for (const sx of [-1, 1]) {
         for (const sy of [-1, 1]) {
@@ -1734,51 +1976,6 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       return transformNode(translation(size[0] / 2, size[1] / 2, 0), [hull], span);
     },
   },
-
-  /**
-   * `rounded_cube(size, r, center)` — a cube with rounded edges and corners
-   * (BetterSCAD extension).
-   *
-   * A hull of eight corner spheres, which is exactly `minkowski()` of the box
-   * and a sphere but without the cost of actually running a Minkowski sum.
-   */
-  rounded_cube: {
-    params: ['size', 'r', 'center'],
-    defaults: { size: '1', r: '0', center: 'false' },
-    build: (args, _children, scope, interp, span) => {
-      const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
-      const center = isTruthy(args.get('center'));
-      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'rounded_cube', interp, span);
-
-      if (r <= 0) {
-        return node('cube', { size, center }, [], [], span);
-      }
-
-      const corners: SceneNode[] = [];
-      for (const sx of [-1, 1]) {
-        for (const sy of [-1, 1]) {
-          for (const sz of [-1, 1]) {
-            corners.push(
-              transformNode(
-                translation(
-                  sx * (size[0] / 2 - r),
-                  sy * (size[1] / 2 - r),
-                  sz * (size[2] / 2 - r),
-                ),
-                [node('sphere', { r, resolution: resolutionFor(args, scope) }, [], [], span)],
-                span,
-              ),
-            );
-          }
-        }
-      }
-
-      const hull = node('hull', {}, corners, [], span);
-      if (center) return hull;
-      return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
-    },
-  },
-
 
   /**
    * `thread(d, pitch, h, …)` — a helical screw thread (BetterSCAD extension).

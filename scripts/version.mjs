@@ -17,7 +17,8 @@
  *   minor  anything a user can see in the editor, the language, or an
  *          extension: a new element, a new panel, a changed behaviour.
  *   patch  a release that adds no capability — fixes, docs, chores.
- *   major  reserved for a break in the language or the file format.
+ *   major  a break in the language or the file format, once there is a 1.0
+ *          to break from. Below 1.0 semver puts those in minor.
  */
 
 import { execFileSync } from 'node:child_process';

@@ -118,8 +118,8 @@ negative never reaches further than the braces it was written in.
 | Syntax | What it does | Becomes, in plain `.scad` |
 | --- | --- | --- |
 | `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
-| `rounded_square(size, r)` | A square with rounded corners. `size` like `square()`, plus a radius | A hull of four corner circles |
-| `rounded_cube(size, r)` | A cube with rounded edges. `size` like `cube()`, plus a radius | A hull of eight corner spheres |
+| `cube(size, center, r)`<br>`square(size, center, r)` | The same box and rectangle, with a radius on the edges. `r = 0` is the stock shape | A hull of corner spheres or circles |
+| `cylinder(…, fillet)`<br>`fillet1`, `fillet2`, `fillet_style` | Takes the rim off either end, rounded or chamfered. `1` is the bottom and `2` the top, as with `r1`/`r2` | A revolve of the same profile |
 | `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
 | `thread(d, pitch, h)` | A screw thread. Add `internal = true` for the hole the same bolt screws into | A generated module sweeping the profile up a twisted extrusion |
 | `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |
@@ -262,7 +262,9 @@ Issues and pull requests welcome. Four non-negotiable rules:
    - **minor** — anything a user can see in the editor, the language, or an
      extension: a new element, a new panel, a changed behaviour.
    - **patch** — a release that adds no capability: fixes, docs, chores.
-   - **major** — a break in the language or in the file format.
+   - **major** — a break in the language or in the file format, once there is a
+     1.0 to break from. Below 1.0 semver puts those in **minor**, and so does
+     this project: `cube(r)` replacing `rounded_cube()` is a 0.2 → 0.3.
 
    Run `npm run bump -- minor` (or `patch`, `major`). The number lives in eleven
    places — five manifests, a literal in the engine's API, and the lock file —

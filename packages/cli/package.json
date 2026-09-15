@@ -1,6 +1,6 @@
 {
   "name": "@betterscad/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Headless BetterSCAD renderer: batch-render .scad/.bscad to STL and friends.",
   "license": "MIT",
   "type": "module",

@@ -14,85 +14,124 @@ export const NEW_SHAPES: ReferenceGroup = {
   blurb: 'Four shapes you would otherwise build by hand every time.',
   entries: [
     {
-      id: 'rounded_square',
-      name: 'rounded_square()',
-      signature: 'rounded_square(size, r, center)',
+      id: 'shape-radius',
+      name: 'cube(r), square(r)',
+      signature: 'cube(size, center, r) | square(size, center, r)',
       extension: true,
       plain:
-        'A flat rectangle with rounded corners. Exactly like `square()`, plus a number for how ' +
-        'round the corners are.',
+        'A box or a rectangle with its edges eased off. It is the same `cube()` and `square()` ' +
+        'you already use, with one more number on the end for how round the edges are.',
       details: [
-        '`size` and `center` behave exactly as they do for `square()`: a number or `[x, y]`, and ' +
-          '`center = true` puts the origin in the middle.',
-        '`r` is the corner radius. It is clamped to half the shortest side, with a warning — past ' +
-          'that there is no straight section left to round.',
-        'At exactly half the shortest side the corners meet and you get a stadium shape. At ' +
-          '`r = 0` you get a plain square.',
-        'It is built as the hull of four corner circles, which **is** the Minkowski sum of the ' +
-          'rectangle and a disc, without the cost of computing one. Rounding resolution follows ' +
+        '`r` is the radius. Leave it out, or set it to `0`, and you have the stock primitive — ' +
+          'the file exports byte for byte, and nothing is reported as an extension. It is only ' +
+          'a BetterSCAD file once you actually round something.',
+        '**`r` comes after `center`, not before it.** `cube(10, true)` has meant one thing since ' +
+          'OpenSCAD was written and still does; the radius takes the third slot. Named ' +
+          'arguments — `cube(10, r = 2)` — sidestep the question entirely and are what you ' +
+          'should write.',
+        'It is clamped to half the shortest side, with a warning: past that there is no straight ' +
+          'section left to round. At exactly half, a square becomes a stadium and a cube a ' +
+          'capsule.',
+        '`cube(r = …)` rounds **every** edge, not just the vertical ones. For a box with rounded ' +
+          'sides and a flat top, extrude a rounded square instead — the second example below.',
+        'Both are built as the hull of their corner primitives, which **is** the Minkowski sum of ' +
+          'the box and a disc or sphere, without the cost of computing one. The rounding follows ' +
           '`$fn`/`$fa`/`$fs` as usual.',
       ],
       params: [
-        { name: 'size', description: 'Number, or `[x, y]`.' },
-        { name: 'r', description: 'Corner radius, clamped to half the shortest side.' },
+        { name: 'size', description: 'As always: a number, or `[x, y]` / `[x, y, z]`.' },
         { name: 'center', description: '`true` centres it on the origin. Default `false`.' },
+        { name: 'r', description: 'Edge radius, clamped to half the shortest side. Default `0`.' },
       ],
       downgrade:
-        'A generated module using the same hull of four circles, defined once however many times ' +
-        'it is used.',
+        'With no `r`, nothing — the call is already stock. With one, a generated module using the ' +
+        'same hull of corner circles or spheres, defined once however many times it is used.',
       examples: [
         {
-          code: 'rounded_square([44, 28], 8);',
-          image: 'rounded-square',
-          caption: 'A 44 x 28 rectangle with corners of radius 8.',
-        },
-        {
-          code: 'rounded_square(30, 15);',
-          image: 'rounded-square-stadium',
-          caption: 'At exactly half the shortest side the corners meet: a stadium.',
-        },
-      ],
-      see: ['square', 'rounded_cube', 'offset', 'hull'],
-      keywords: ['rounded', 'corners', 'radius', 'rectangle', 'fillet', '2d'],
-    },
-    {
-      id: 'rounded_cube',
-      name: 'rounded_cube()',
-      signature: 'rounded_cube(size, r, center)',
-      extension: true,
-      plain:
-        'A box with rounded edges and corners — the shape almost every enclosure actually is. ' +
-        'Like `cube()`, plus a radius.',
-      details: [
-        '`size` and `center` behave exactly as they do for `cube()`.',
-        '`r` is clamped to half the shortest side, with a warning. At exactly half, it is a capsule.',
-        'Built as the hull of eight corner spheres — the Minkowski sum of the box and a ball, ' +
-          'without paying for a Minkowski. Resolution follows `$fn`/`$fa`/`$fs`.',
-        'Every edge is rounded, not just the vertical ones. For vertical-only rounding, extrude a ' +
-          '`rounded_square()` instead.',
-      ],
-      params: [
-        { name: 'size', description: 'Number, or `[x, y, z]`.' },
-        { name: 'r', description: 'Radius, clamped to half the shortest side.' },
-        { name: 'center', description: '`true` centres it on the origin. Default `false`.' },
-      ],
-      downgrade:
-        'A generated module using the same hull of eight spheres, defined once however many times ' +
-        'it is used.',
-      examples: [
-        {
-          code: 'rounded_cube([44, 30, 16], 4, $fn = 32);',
-          image: 'rounded-cube',
+          code: 'cube([44, 30, 16], r = 4, $fn = 32);',
+          image: 'cube-radius',
           caption: 'Every edge and corner rounded to a radius of 4.',
         },
         {
-          code: 'linear_extrude(height = 16) rounded_square([44, 30], 6);',
-          image: 'rounded-cube-vertical',
-          caption: 'Extruding a `rounded_square()` instead rounds the sides but leaves the top flat.',
+          code: 'linear_extrude(height = 16) square([44, 30], r = 6);',
+          image: 'square-radius-extruded',
+          caption: 'Extruding a rounded square instead rounds the sides but leaves the top flat.',
+        },
+        {
+          code: 'square([44, 28], r = 8);',
+          image: 'square-radius',
+          caption: 'The 2D form: a 44 x 28 rectangle with corners of radius 8.',
+        },
+        {
+          code: 'square(30, r = 15);',
+          image: 'square-radius-stadium',
+          caption: 'At exactly half the shortest side the corners meet: a stadium.',
         },
       ],
-      see: ['cube', 'rounded_square', 'minkowski', 'hull'],
-      keywords: ['rounded', 'box', 'fillet', 'enclosure', 'radius', 'edges'],
+      see: ['cube', 'square', 'cylinder-fillet', 'offset', 'hull', 'minkowski'],
+      keywords: [
+        'rounded', 'corners', 'radius', 'fillet', 'rounded_cube', 'rounded_square', 'box',
+        'enclosure', 'edges',
+      ],
+    },
+    {
+      id: 'cylinder-fillet',
+      name: 'cylinder(fillet)',
+      signature: 'cylinder(…, fillet, fillet1, fillet2, fillet_style)',
+      extension: true,
+      plain:
+        'Takes the sharp rim off the end of a cylinder — rounded like a worn edge, or cut flat ' +
+        'like a chamfer. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.',
+      details: [
+        '`fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the ' +
+          'bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` ' +
+          'overrides `r`. There is one convention on this module for "both, or each", and this ' +
+          'is it.',
+        '`fillet_style` is `"round"` (the default) — a true arc, tangent to both the wall and the ' +
+          'face — or `"chamfer"`, a straight cut across the same two points. They are one ' +
+          'argument rather than two shapes because they are the same construction: the chamfer ' +
+          'is the chord of the fillet.',
+        'It works on a cone as well as a straight cylinder. On a taper the corner is not a right ' +
+          'angle, so the arc that meets both edges is not a quarter circle — the profile is ' +
+          'solved for the actual angle rather than assumed.',
+        'A fillet larger than the end it is easing is clamped to fit, with a warning.',
+        'With no fillet this is the stock primitive: it exports byte for byte and is not reported ' +
+          'as an extension. `fillet = 0` is the same shape as leaving it out, not a revolve that ' +
+          'merely measures the same.',
+      ],
+      params: [
+        { name: 'fillet', description: 'Radius at both ends. Default `0`.' },
+        { name: 'fillet1', description: 'Bottom end, overriding `fillet`.' },
+        { name: 'fillet2', description: 'Top end, overriding `fillet`.' },
+        { name: 'fillet_style', description: '`"round"` (default) or `"chamfer"`.' },
+      ],
+      downgrade:
+        'With no fillet, nothing — the call is already stock. With one, a generated module that ' +
+        'revolves the same profile, defined once however many times it is used.',
+      examples: [
+        {
+          code: 'cylinder(h = 24, r = 10, fillet = 3, $fn = 64);',
+          image: 'cylinder-fillet',
+          caption: 'Both ends rounded by 3.',
+        },
+        {
+          code: 'cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);',
+          image: 'cylinder-fillet-top',
+          caption: '`fillet2` is the top only — 2 is the top, as it is for `r2`.',
+        },
+        {
+          code: 'cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer", $fn = 64);',
+          image: 'cylinder-chamfer',
+          caption: 'The same 3, cut flat instead of rounded.',
+        },
+        {
+          code: 'cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);',
+          image: 'cylinder-fillet-cone',
+          caption: 'On a taper the corner is not square, and the arc is solved for the real angle.',
+        },
+      ],
+      see: ['cylinder', 'shape-radius', 'rotate_extrude', 'minkowski'],
+      keywords: ['fillet', 'chamfer', 'round', 'edge', 'rim', 'break edge', 'ease'],
     },
     {
       id: 'regular_polygon',
@@ -525,18 +564,18 @@ export const PORTABILITY: ReferenceGroup = {
       ],
       examples: [
         {
-          code: 'translatez(10) rotatez(45) rounded_cube([30, 20, 8], 3);',
+          code: 'translatez(10) rotatez(45) cube([30, 20, 8], r = 3);',
           norender: true,
           caption: 'Written in BetterSCAD…',
         },
         {
           code: [
-            'module __rounded_cube(size, r) {',
+            'module __rounded_cube(size, center = false, r = 0) {',
             '  hull() for (x = [r, size[0] - r], y = [r, size[1] - r], z = [r, size[2] - r])',
             '    translate([x, y, z]) sphere(r = r);',
             '}',
             '',
-            'translate([0, 0, 10]) rotate([0, 0, 45]) __rounded_cube([30, 20, 8], 3);',
+            'translate([0, 0, 10]) rotate([0, 0, 45]) __rounded_cube([30, 20, 8], r = 3);',
           ].join('\n'),
           norender: true,
           caption: '…and the same file saved as stock `.scad`.',

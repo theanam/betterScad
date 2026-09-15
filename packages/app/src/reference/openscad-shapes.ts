@@ -25,10 +25,16 @@ export const SOLIDS: ReferenceGroup = {
           'origin is in the middle instead — which is usually what you want when you are about ' +
           'to rotate it, because a shape rotates around the origin, not around itself.',
         'A size of zero or less on any axis produces nothing, and reports a warning.',
+        'BetterSCAD adds a third argument, `r`, which rounds every edge. It sits after `center` ' +
+          'so that `cube(10, true)` keeps its meaning. See its own entry for the detail.',
       ],
       params: [
         { name: 'size', description: 'Number, or `[x, y, z]`. Default `1`.' },
         { name: 'center', description: '`true` centres the box on the origin. Default `false`.' },
+        {
+          name: 'r',
+          description: 'BetterSCAD: radius on every edge. Default `0`, which is the stock cube.',
+        },
       ],
       examples: [
         {
@@ -48,7 +54,7 @@ export const SOLIDS: ReferenceGroup = {
             'The ghost is the default position; the solid is the same cube with `center = true`.',
         },
       ],
-      see: ['rounded_cube', 'sphere', 'cylinder'],
+      see: ['shape-radius', 'sphere', 'cylinder'],
       keywords: ['box', 'block', 'rectangle', 'brick'],
     },
     {
@@ -99,6 +105,8 @@ export const SOLIDS: ReferenceGroup = {
           'rod, which is a genuinely useful thing to want — nut pockets and hex shafts are ' +
           'usually drawn this way.',
         '`h` defaults to `1`, and a height of zero or less produces nothing.',
+        'BetterSCAD adds `fillet`, which takes the sharp rim off either end. See its own entry ' +
+          'for the detail.',
       ],
       params: [
         { name: 'h', description: 'Height. Default `1`.' },
@@ -106,6 +114,12 @@ export const SOLIDS: ReferenceGroup = {
         { name: 'r1 / r2', description: 'Bottom and top radius.' },
         { name: 'd / d1 / d2', description: 'Diameter forms. These win over the radius forms.' },
         { name: 'center', description: '`true` centres the height on the origin. Default `false`.' },
+        {
+          name: 'fillet',
+          description:
+            'BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and ' +
+            '`fillet_style` is `"round"` or `"chamfer"`.',
+        },
       ],
       examples: [
         { code: 'cylinder(h = 30, r = 10);', image: 'cylinder', caption: 'A plain round rod.' },
@@ -120,7 +134,7 @@ export const SOLIDS: ReferenceGroup = {
           caption: '`$fn = 6` turns the same call into a hexagon — a nut pocket.',
         },
       ],
-      see: ['sphere', 'fn', 'rotate_extrude'],
+      see: ['cylinder-fillet', 'sphere', 'fn', 'rotate_extrude'],
       keywords: ['tube', 'rod', 'cone', 'pipe', 'hexagon', 'circle'],
     },
     {
@@ -250,10 +264,16 @@ export const FLAT_SHAPES: ReferenceGroup = {
           'the middle instead of at the bottom-left corner.',
         'A 2D shape has no thickness at all. You cannot mix it with 3D shapes in the same ' +
           'boolean — `union()` of a square and a cube is an error, not a shape.',
+        'BetterSCAD adds a third argument, `r`, which rounds the corners. It sits after ' +
+          '`center`, matching `cube()`. See its own entry for the detail.',
       ],
       params: [
         { name: 'size', description: 'Number, or `[x, y]`. Default `1`.' },
         { name: 'center', description: '`true` centres it on the origin. Default `false`.' },
+        {
+          name: 'r',
+          description: 'BetterSCAD: corner radius. Default `0`, which is the stock square.',
+        },
       ],
       examples: [
         { code: 'square([40, 25]);', image: 'square', caption: 'A 40 x 25 rectangle.' },
@@ -263,7 +283,7 @@ export const FLAT_SHAPES: ReferenceGroup = {
           caption: 'The same rectangle, extruded into a solid.',
         },
       ],
-      see: ['rounded_square', 'circle', 'linear_extrude'],
+      see: ['shape-radius', 'circle', 'linear_extrude'],
       keywords: ['rectangle', '2d', 'flat'],
     },
     {
