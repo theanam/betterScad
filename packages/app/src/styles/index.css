@@ -1734,6 +1734,15 @@ kbd {
   color: var(--bs-text);
 }
 
+/* The built-in preview, drawn from outlines shipped with the app rather than
+   from a font nobody has downloaded yet. `currentColor` is what lets one sheet
+   serve the light theme and the dark one. */
+.font__specimen {
+  display: block;
+  max-width: 100%;
+  color: var(--bs-text);
+}
+
 .font__spec {
   display: flex;
   align-items: center;

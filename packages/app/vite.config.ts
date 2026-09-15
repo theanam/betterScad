@@ -40,6 +40,9 @@ function serviceWorkerManifest(): Plugin {
     'fonts/Inter.ttf',
     'fonts/JetBrainsMono.ttf',
     'fonts/google-fonts-index.json',
+    // `fonts/specimens.json` is deliberately absent: a quarter of a megabyte of
+    // preview outlines is not worth a first visit from someone who may never
+    // open the Fonts dialog. The worker's lazy path caches it once it is.
   ];
 
   return {

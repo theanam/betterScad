@@ -46,6 +46,43 @@ export function loadCatalog(baseUrl: string): Promise<CatalogEntry[]> {
   return catalogPromise;
 }
 
+/** One family's preview outline, drawn at build time by `npm run specimens`. */
+export interface Specimen {
+  /** SVG path data for the specimen string. */
+  d: string;
+  width: number;
+  height: number;
+}
+
+export interface SpecimenSheet {
+  /** What the specimens spell, for the label beside them. */
+  text: string;
+  em: number;
+  fonts: Record<string, Specimen>;
+}
+
+let specimenPromise: Promise<SpecimenSheet | undefined> | undefined;
+
+/**
+ * Preview outlines for the catalogue.
+ *
+ * Drawn once at build time rather than by downloading each font: the catalogue
+ * is served as raw `.ttf`, so previewing forty-eight families by fetching them
+ * would cost tens of megabytes to draw eleven characters each — and you would
+ * be paying it to decide whether you wanted the font at all.
+ *
+ * Failure is not an error. Without the sheet the picker falls back to naming
+ * the families in the UI font, which is what it did before.
+ */
+export function loadSpecimens(baseUrl: string): Promise<SpecimenSheet | undefined> {
+  if (!specimenPromise) {
+    specimenPromise = fetch(new URL('fonts/specimens.json', baseUrl))
+      .then((res) => (res.ok ? (res.json() as Promise<SpecimenSheet>) : undefined))
+      .catch(() => undefined);
+  }
+  return specimenPromise;
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB cache
 // ---------------------------------------------------------------------------

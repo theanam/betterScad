@@ -5,7 +5,7 @@
 import { EXPORT_FORMATS, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
 import { button, clear, el } from './dom.js';
 import { extensionList } from './extension-list.js';
-import type { CatalogEntry } from '../files/font-library.js';
+import type { CatalogEntry, SpecimenSheet } from '../files/font-library.js';
 
 function shell(
   title: string,
@@ -141,7 +141,14 @@ export interface FontDialogCallbacks {
   insert(text: string): void;
 }
 
-const DEFAULT_SAMPLE = 'Handgloves 123';
+/**
+ * What a *loaded* font previews with, and what you can change.
+ *
+ * Families that are not loaded yet show their built-in specimen instead —
+ * there are no outlines here to set custom text in until the font is fetched,
+ * and fetching it is the decision the preview exists to inform.
+ */
+const DEFAULT_SAMPLE = 'AaBbGg 0123';
 
 /**
  * Registers a font for *preview only*, under a namespaced CSS family.
@@ -177,6 +184,7 @@ export function showFontDialog(
   loadedFaces: { family: string; style: string }[],
   catalog: CatalogEntry[],
   callbacks: FontDialogCallbacks,
+  specimens?: SpecimenSheet,
 ): HTMLDialogElement {
   const loaded = new Map<string, string[]>();
   for (const face of loadedFaces) {
@@ -207,6 +215,10 @@ export function showFontDialog(
   // Retitle every rendered preview in place, rather than rebuilding the list.
   sample.addEventListener('input', () => {
     for (const node of list.querySelectorAll('.font__preview')) {
+      // Only the ones showing live text. A specimen outline spells what it
+      // spells, and replacing it with a string would lose the preview whose
+      // whole job is to work before the font is fetched.
+      if (node.querySelector('.font__specimen')) continue;
       node.textContent = sampleText();
     }
   });
@@ -268,6 +280,28 @@ export function showFontDialog(
       style: 'font-family: var(--bs-font-ui)',
     });
 
+    // A family nobody has loaded yet still gets a real preview, drawn from the
+    // outlines shipped with the app. `currentColor` is what makes one sheet
+    // serve both themes.
+    const outline = specimens?.fonts[family];
+    if (outline && !isLoaded) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', `0 0 ${outline.width} ${outline.height}`);
+      svg.setAttribute('class', 'font__specimen');
+      // Height fixed, width to suit: the specimens share a baseline and keep
+      // their real relative size, so a face with a small x-height looks
+      // smaller — because it is.
+      svg.setAttribute('height', '26');
+      svg.setAttribute('width', String((26 * outline.width) / outline.height));
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', `${family}, showing ${specimens.text}`);
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', outline.d);
+      path.setAttribute('fill', 'currentColor');
+      svg.appendChild(path);
+      preview.replaceChildren(svg);
+    }
+
     const meta = el('span', {
       class: 'fontlist__meta',
       text: [
@@ -295,7 +329,11 @@ export function showFontDialog(
     /** Swaps the preview onto the real face and reveals the spec snippet. */
     const applyPreview = async (data: Uint8Array): Promise<void> => {
       const cssFamily = await registerPreviewFont(family, data);
-      if (cssFamily) preview.style.fontFamily = `'${cssFamily}', var(--bs-font-ui)`;
+      if (!cssFamily) return;
+      // The real face can render anything, so the fixed outline gives way to
+      // the sample text — which is the point of being able to edit it.
+      preview.replaceChildren(document.createTextNode(sampleText()));
+      preview.style.fontFamily = `'${cssFamily}', var(--bs-font-ui)`;
     };
 
     const showSpecs = (): void => {

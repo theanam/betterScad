@@ -49,7 +49,7 @@ you.
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
 | **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
 | **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
-| **Fonts for `text()`** | Some bundled for offline use, plus ~50 Google Fonts on demand. |
+| **Fonts for `text()`** | Some bundled for offline use, plus ~50 Google Fonts on demand — each previewed in its own typeface before you download it. |
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
 | **Measurement** | Click points in the viewport for coordinates and distances. |
 | **Animation** | `$t` playback in the app, frame export from the CLI. |

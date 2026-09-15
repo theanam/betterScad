@@ -46,6 +46,12 @@ jobs:
       - name: Check the version agrees with itself
         run: npm run version:check
 
+      # Structural only, and deliberately offline: it catches a family added to
+      # the font catalogue without regenerating its preview, without pulling
+      # forty-eight fonts to do it.
+      - name: Check every catalogue font has a preview
+        run: npm run specimens:check
+
       # Renders every example headlessly, which exercises the engine, the CLI
       # and the export pipeline against real models rather than fixtures.
       - name: Render examples

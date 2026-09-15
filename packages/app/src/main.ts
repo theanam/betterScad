@@ -28,8 +28,10 @@ import {
   fetchBundledFont,
   fetchCatalogFont,
   loadCatalog,
+  loadSpecimens,
   querySystemFonts,
   type CatalogEntry,
+  type SpecimenSheet,
 } from './files/font-library.js';
 import {
   fileAccessMode,
@@ -137,6 +139,8 @@ class App {
   private fontFamilies: string[] = [];
   private fontFaces: { family: string; style: string }[] = [];
   private catalog: CatalogEntry[] = [];
+  /** Preview outlines for the catalogue; see `loadSpecimens`. */
+  private specimens: SpecimenSheet | undefined;
   private animationTime = 0;
   /** True until the first render completes, so the boot screen can stay up. */
   private booting = true;
@@ -1104,7 +1108,11 @@ class App {
   }
 
   private async openFontManager(): Promise<void> {
+    // Both fetched on first open rather than at boot: neither is worth a
+    // request from someone who never opens this dialog, and the specimen sheet
+    // is the larger of the two.
     if (this.catalog.length === 0) this.catalog = await loadCatalog(document.baseURI);
+    this.specimens ??= await loadSpecimens(document.baseURI);
 
     showFontDialog(this.fontFaces, this.catalog, {
       loadCatalogFont: async (entry) => {
@@ -1159,7 +1167,7 @@ class App {
         await clearFontCache();
         this.toasts.show('Downloaded fonts cleared. Bundled fonts are unaffected.', 'success');
       },
-    });
+    }, this.specimens);
   }
 
   // -- assets ---------------------------------------------------------------
