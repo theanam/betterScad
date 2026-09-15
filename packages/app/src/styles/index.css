@@ -2055,6 +2055,36 @@ kbd {
   font-weight: 700;
 }
 
+/* Quiet enough to ignore, present enough to quote in a bug report. */
+.reference__version {
+  flex: none;
+  color: var(--bs-text-faint);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 400;
+}
+
+/* The feedback page's heading is prose, not a call, so it drops the mono. */
+.reference__title--plain {
+  font-family: var(--bs-font-ui);
+}
+
+/* A row of things to press, under the paragraph that explains them. */
+.reference__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bs-space-2);
+  margin: var(--bs-space-3) 0;
+}
+
+/* The mailto is an anchor so it can be copied and opened like any link, but it
+   sits in a row of buttons and has to carry their weight. */
+.reference__actions a.btn {
+  text-decoration: none;
+  font-family: var(--bs-font-mono);
+}
+
 .reference__count,
 .reference__footnote {
   color: var(--bs-text-faint);
@@ -2166,6 +2196,13 @@ kbd {
 .reference__output {
   grid-column: 1 / -1;
   color: var(--bs-text-muted);
+}
+
+/* A user-agent string is one long unbreakable line, and scrolling sideways to
+   read what you are about to paste into a bug report is no way to check it. */
+.reference__output--wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Revealed on hover or keyboard focus. They are useful and they are not what
@@ -2352,5 +2389,11 @@ kbd {
 
   .reference__content {
     padding: var(--bs-space-3);
+  }
+
+  /* The footer now carries three buttons; the note explaining where the
+     document lives is the part that can wait for a wider window. */
+  .reference__footnote {
+    display: none;
   }
 }

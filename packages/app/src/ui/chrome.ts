@@ -23,6 +23,10 @@ import type { RenderStats } from '../render/protocol.js';
 
 /** The project's source. */
 export const REPO_URL = 'https://github.com/theanam/betterScad';
+/** Where a bug goes. Issues are public and searchable, which is the point. */
+export const ISSUES_URL = `${REPO_URL}/issues`;
+/** Where everything that is not a bug goes. */
+export const CONTACT_EMAIL = 'anam.ahmed.a@gmail.com';
 
 // ---------------------------------------------------------------------------
 // Settings

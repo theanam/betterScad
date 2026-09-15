@@ -1094,6 +1094,7 @@ class App {
    */
   private openReference(): void {
     showReferenceDialog({
+      engineVersion: ENGINE_VERSION,
       insert: (code) => {
         this.editor.insertAtCursor(code);
         this.toasts.show('Example inserted', 'success');

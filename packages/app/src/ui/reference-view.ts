@@ -15,10 +15,14 @@
 import { IMAGE_DIR, SECTIONS, searchText } from '../reference/index.js';
 import type { ReferenceEntry, ReferenceExample, ReferenceSection } from '../reference/index.js';
 import { button, clear, el, icon } from './dom.js';
+import { CONTACT_EMAIL, ISSUES_URL } from './chrome.js';
+import { fileAccessMode } from '../files/fs-access.js';
 
 export interface ReferenceCallbacks {
   /** Drops an example into the editor at the cursor. */
   insert(code: string): void;
+  /** Shown on the feedback page, so a report names the version it came from. */
+  engineVersion: string;
 }
 
 /** Inline Markdown, cut down to what the catalogue actually uses. */
@@ -237,6 +241,21 @@ export function showReferenceDialog(
     if (next >= 0 && next < ids.length) select(ids[next], { scrollNav: true });
   });
 
+  /**
+   * Swaps the content pane for the feedback page.
+   *
+   * A page rather than a dialog on top of a dialog, and it deselects the entry
+   * behind it so the list is not left pointing at something that is no longer
+   * on screen.
+   */
+  const showFeedback = (): void => {
+    selected = undefined;
+    for (const node of buttons.values()) node.classList.remove('reference__item--active');
+    clear(content);
+    content.appendChild(renderFeedback(callbacks.engineVersion));
+    content.scrollTop = 0;
+  };
+
   const body = el('div', { class: 'reference' }, [
     el('div', { class: 'reference__nav' }, [
       el('div', { class: 'reference__searchwrap' }, [icon('search', 13), search]),
@@ -249,6 +268,10 @@ export function showReferenceDialog(
     el('div', { class: 'dialog__header reference__header' }, [
       el('span', { class: 'reference__heading', text: 'Help & Reference' }),
       tabs,
+      el('span', { class: 'toolbar__spacer' }),
+      // Quiet, but always on screen: the first thing worth knowing when someone
+      // reports that something here is wrong is which version they were reading.
+      el('span', { class: 'reference__version', text: `v${callbacks.engineVersion}` }),
     ]),
     el('div', { class: 'dialog__body dialog__body--flush' }, [body]),
     el('div', { class: 'dialog__footer' }, [
@@ -256,6 +279,18 @@ export function showReferenceDialog(
         ...inline('The same content is in `docs/reference.md`, generated from the same catalogue.'),
       ]),
       el('span', { class: 'toolbar__spacer' }),
+      button({
+        label: 'Report an issue',
+        variant: 'ghost',
+        title: 'Open the issue tracker on GitHub',
+        onClick: () => window.open(ISSUES_URL, '_blank', 'noopener,noreferrer'),
+      }),
+      button({
+        label: 'Send feedback',
+        variant: 'ghost',
+        title: 'How to get in touch',
+        onClick: showFeedback,
+      }),
       button({ label: 'Close', variant: 'primary', onClick: () => dialog.close() }),
     ]),
   ]) as HTMLDialogElement;
@@ -273,6 +308,95 @@ export function showReferenceDialog(
   dialog.showModal();
   search.focus();
   return dialog;
+}
+
+/**
+ * Where to send a bug, and where to send everything else.
+ *
+ * Two routes because they want different things. A bug belongs in the issue
+ * tracker, where it is public, searchable, and still there when somebody hits
+ * the same thing next year. Anything else — a question, a shape that will not
+ * come out right, an opinion about the language — is an email.
+ *
+ * Nothing here is sent anywhere on its own: the environment block is filled in
+ * locally and copied only if the reader presses the button. This is a
+ * local-first tool, and a feedback page that phoned home would be the one part
+ * of it that did.
+ */
+function renderFeedback(engineVersion: string): HTMLElement {
+  const environment = [
+    `BetterSCAD engine ${engineVersion}`,
+    `File access: ${fileAccessMode()}`,
+    navigator.userAgent,
+  ].join('\n');
+
+  const status = el('span', { class: 'reference__caption' });
+
+  // `.btn` is borderless and `--ghost` is the outlined one, so the copies take
+  // the plain treatment and each section's real action takes the outline.
+  const copyButton = (label: string, text: string, done: string): HTMLButtonElement =>
+    button({
+      label,
+      onClick: () => {
+        void navigator.clipboard?.writeText(text).then(
+          () => (status.textContent = done),
+          () => (status.textContent = 'Could not reach the clipboard — select it and copy.'),
+        );
+      },
+    });
+
+  const subject = encodeURIComponent('BetterSCAD feedback');
+
+  return el('article', { class: 'reference__entry' }, [
+    el('div', { class: 'reference__head' }, [
+      el('h2', { class: 'reference__title reference__title--plain', text: 'Feedback' }),
+    ]),
+
+    paragraph(
+      'Something broken, something missing, or something that could be better — all of it is ' +
+        'wanted. There are two places for it, and which one depends only on whether anyone else ' +
+        'is likely to hit the same thing.',
+      'reference__plain',
+    ),
+
+    el('h3', { class: 'reference__subhead', text: 'A bug, or a missing feature' }),
+    paragraph(
+      'The issue tracker. It is public and searchable, so the answer stays findable for whoever ' +
+        'runs into it next. Include the model if you can — a `.scad` file that reproduces it is ' +
+        'worth more than any description of it.',
+    ),
+    el('div', { class: 'reference__actions' }, [
+      button({
+        label: 'Open the issue tracker',
+        variant: 'ghost',
+        onClick: () => window.open(ISSUES_URL, '_blank', 'noopener,noreferrer'),
+      }),
+      copyButton('Copy environment', environment, 'Environment copied — paste it into the issue.'),
+    ]),
+    el('pre', { class: 'reference__output reference__output--wrap', text: environment }),
+
+    el('h3', { class: 'reference__subhead', text: 'Anything else' }),
+    paragraph(
+      'A question, an opinion about the language, a shape you cannot get out of it, or a note to ' +
+        'say it was useful — email is fine and it is read.',
+    ),
+    el('div', { class: 'reference__actions' }, [
+      el('a', {
+        class: 'btn btn--ghost',
+        href: `mailto:${CONTACT_EMAIL}?subject=${subject}`,
+        text: CONTACT_EMAIL,
+      }),
+      copyButton('Copy address', CONTACT_EMAIL, 'Address copied.'),
+    ]),
+    status,
+
+    el('p', { class: 'reference__origin' }, [
+      ...inline(
+        'None of this is sent anywhere by the app. The details above are gathered in your browser ' +
+          'and go nowhere unless you copy them — BetterSCAD has no server to send them to.',
+      ),
+    ]),
+  ]);
 }
 
 function findEntry(id: string): ReferenceEntry | undefined {
