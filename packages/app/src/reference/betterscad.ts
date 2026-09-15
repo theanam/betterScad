@@ -164,17 +164,20 @@ export const NEW_SHAPES: ReferenceGroup = {
       signature: 'cylinder(…, fillet, fillet1, fillet2, fillet_style)',
       extension: true,
       plain:
-        'Takes the sharp rim off the end of a cylinder — rounded like a worn edge, or cut flat ' +
-        'like a chamfer. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.',
+        'Takes the sharp rim off the end of a cylinder — cut flat like a chamfer, or rounded ' +
+        'like a worn edge. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.',
       details: [
         '`fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the ' +
           'bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` ' +
           'overrides `r`. There is one convention on this module for "both, or each", and this ' +
           'is it.',
-        '`fillet_style` is `"round"` (the default) — a true arc, tangent to both the wall and the ' +
-          'face — or `"chamfer"`, a straight cut across the same two points. They are one ' +
-          'argument rather than two shapes because they are the same construction: the chamfer ' +
-          'is the chord of the fillet.',
+        '`fillet_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc ' +
+          'tangent to both the wall and the face. They are one argument rather than two shapes ' +
+          'because they are the same construction: the chamfer is the chord of the arc.',
+        'Chamfer is the default because it is what a broken edge is usually for — stopping a ' +
+          'printed part from cutting a hand, and keeping the first layer from lifting. A flat ' +
+          'cut does both, with fewer facets. A round is the deliberate choice, so it is the one ' +
+          'you ask for.',
         'It works on a cone as well as a straight cylinder. On a taper the corner is not a right ' +
           'angle, so the arc that meets both edges is not a quarter circle — the profile is ' +
           'solved for the actual angle rather than assumed.',
@@ -187,7 +190,7 @@ export const NEW_SHAPES: ReferenceGroup = {
         { name: 'fillet', description: 'Radius at both ends. Default `0`.' },
         { name: 'fillet1', description: 'Bottom end, overriding `fillet`.' },
         { name: 'fillet2', description: 'Top end, overriding `fillet`.' },
-        { name: 'fillet_style', description: '`"round"` (default) or `"chamfer"`.' },
+        { name: 'fillet_style', description: '`"chamfer"` (default) or `"round"`.' },
       ],
       downgrade:
         'With no fillet, nothing — the call is already stock. With one, a generated module that ' +
@@ -196,7 +199,7 @@ export const NEW_SHAPES: ReferenceGroup = {
         {
           code: 'cylinder(h = 24, r = 10, fillet = 3, $fn = 64);',
           image: 'cylinder-fillet',
-          caption: 'Both ends rounded by 3.',
+          caption: 'Both ends broken by 3 — a flat cut, which is what you get by default.',
         },
         {
           code: 'cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);',
@@ -204,9 +207,9 @@ export const NEW_SHAPES: ReferenceGroup = {
           caption: '`fillet2` is the top only — 2 is the top, as it is for `r2`.',
         },
         {
-          code: 'cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer", $fn = 64);',
-          image: 'cylinder-chamfer',
-          caption: 'The same 3, cut flat instead of rounded.',
+          code: 'cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round", $fn = 64);',
+          image: 'cylinder-fillet-round',
+          caption: 'The same 3, rounded instead of cut flat.',
         },
         {
           code: 'cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);',

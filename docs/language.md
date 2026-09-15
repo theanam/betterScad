@@ -298,10 +298,10 @@ either reports an error naming the argument to use instead.
 The rim at either end of a cylinder, eased:
 
 ```scad
-cylinder(h = 24, r = 10, fillet = 3);                           // both ends
-cylinder(h = 24, r = 10, fillet2 = 6);                          // top only
-cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer"); // cut flat
-cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5);                // on a taper
+cylinder(h = 24, r = 10, fillet = 3);                         // both ends, cut flat
+cylinder(h = 24, r = 10, fillet2 = 6);                        // top only
+cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round"); // rounded instead
+cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5);              // on a taper
 ```
 
 `fillet` sets both ends; `fillet1` and `fillet2` override the bottom and the
@@ -309,10 +309,15 @@ top. **They are numbered the way `r1` and `r2` already are** — 1 is the bottom
 2 is the top — because this module has one convention for "both, or each" and a
 second one would have to be remembered separately.
 
-`fillet_style` is `"round"` (the default), a true arc tangent to both the wall
-and the end face, or `"chamfer"`, the straight chord across that same arc. One
-argument rather than two shapes, because it is one construction: the tangent
-points are the same either way.
+`fillet_style` is `"chamfer"` (the default), a straight cut, or `"round"`, the
+true arc tangent to both the wall and the end face. One argument rather than two
+shapes, because it is one construction: the tangent points are the same either
+way, and the chamfer is the chord across the arc.
+
+Chamfer is the default because it is what a broken edge is usually for —
+stopping a printed part from cutting a hand, and keeping the first layer from
+lifting. A flat cut does both, with fewer facets than an arc. A round is the
+deliberate choice, so it is the one you ask for.
 
 It is exact on a cone as well as a cylinder. On a taper the corner is not a
 right angle, so the arc meeting both edges is not a quarter circle; the profile

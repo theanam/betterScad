@@ -201,7 +201,9 @@ test('a rounded fillet removes the volume a quarter-torus occupies', async () =>
   // quarter-disc inside it, swept about the axis. Pappus gives that exactly.
   const R = 8;
   const f = 2;
-  const { volume } = await measure(`$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f});`);
+  const { volume } = await measure(
+    `$fn = 512;\ncylinder(h = 20, r = ${R}, fillet1 = ${f}, fillet_style = "round");`,
+  );
 
   const square = f * f;
   const quarter = (Math.PI * f * f) / 4;
@@ -240,7 +242,9 @@ test('the fillet follows a taper rather than assuming a right angle', async () =
   // both edges. The test that it does: the result is still tangent, so its
   // volume sits between the unfilleted cone and one chamfered by the same f.
   const plain = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4);');
-  const round = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2);');
+  const round = await measure(
+    '$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2, fillet_style = "round");',
+  );
   const cham = await measure('$fn = 256;\ncylinder(h = 20, r1 = 12, r2 = 4, fillet = 2, fillet_style = "chamfer");');
   assert.ok(round.volume < plain.volume, 'a fillet removes material');
   assert.ok(cham.volume < round.volume, 'a chamfer removes more than the arc inside it');

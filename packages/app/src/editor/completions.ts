@@ -103,7 +103,7 @@ const MODULES: BuiltinDoc[] = [
       'Diameter and radius are interchangeable: d = 2r, d1/d2 = 2r1/2r2.\n\n' +
       'BetterSCAD adds `fillet`, easing both ends; `fillet1` and `fillet2` ' +
       'override the bottom and the top, the same way round as r1 and r2. ' +
-      '`fillet_style` is "round" (default) or "chamfer".',
+      '`fillet_style` is "chamfer" (default) or "round".',
     type: 'class',
     forms: [
       { template: 'cylinder(h = ${1:10}, r = ${2:5})', detail: 'cylinder(h, r)', measure: 'radius' },
@@ -123,7 +123,7 @@ const MODULES: BuiltinDoc[] = [
         measure: 'diameter',
       },
       {
-        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1}, fillet_style = "chamfer")',
+        template: 'cylinder(h = ${1:10}, d = ${2:5}, fillet = ${3:1}, fillet_style = "round")',
         detail: 'cylinder(h, d, fillet, fillet_style)  — BetterSCAD',
         measure: 'diameter',
       },

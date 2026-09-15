@@ -158,7 +158,7 @@ cylinder(h = 10, r = 12, $fn = 6);
 | `r1 / r2` | Bottom and top radius. |
 | `d / d1 / d2` | Diameter forms. These win over the radius forms. |
 | `center` | `true` centres the height on the origin. Default `false`. |
-| `fillet` | BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and `fillet_style` is `"round"` or `"chamfer"`. |
+| `fillet` | BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and `fillet_style` is `"chamfer"` (default) or `"round"`. |
 
 `r` sets both ends. `r1` is the bottom and `r2` the top; `d`, `d1` and `d2` are the diameter versions and win over the radius ones. Set one end to `0` for a proper pointed cone.
 
@@ -2597,15 +2597,15 @@ See also: [`text()`](#entry-text) · [`cube(r), square(r)`](#entry-shape-radius)
 cylinder(…, fillet, fillet1, fillet2, fillet_style)
 ```
 
-Takes the sharp rim off the end of a cylinder — rounded like a worn edge, or cut flat like a chamfer. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.
+Takes the sharp rim off the end of a cylinder — cut flat like a chamfer, or rounded like a worn edge. `fillet` does both ends; `fillet1` is the bottom and `fillet2` the top.
 
 ```scad
 cylinder(h = 24, r = 10, fillet = 3, $fn = 64);
 ```
 
-<img src="images/reference/cylinder-fillet.png" alt="Both ends rounded by 3." width="420">
+<img src="images/reference/cylinder-fillet.png" alt="Both ends broken by 3 — a flat cut, which is what you get by default." width="420">
 
-*Both ends rounded by 3.*
+*Both ends broken by 3 — a flat cut, which is what you get by default.*
 
 ```scad
 cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);
@@ -2616,12 +2616,12 @@ cylinder(h = 24, r = 10, fillet2 = 6, $fn = 64);
 *`fillet2` is the top only — 2 is the top, as it is for `r2`.*
 
 ```scad
-cylinder(h = 24, r = 10, fillet = 3, fillet_style = "chamfer", $fn = 64);
+cylinder(h = 24, r = 10, fillet = 3, fillet_style = "round", $fn = 64);
 ```
 
-<img src="images/reference/cylinder-chamfer.png" alt="The same 3, cut flat instead of rounded." width="420">
+<img src="images/reference/cylinder-fillet-round.png" alt="The same 3, rounded instead of cut flat." width="420">
 
-*The same 3, cut flat instead of rounded.*
+*The same 3, rounded instead of cut flat.*
 
 ```scad
 cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);
@@ -2636,11 +2636,13 @@ cylinder(h = 24, r1 = 14, r2 = 6, fillet = 2.5, $fn = 64);
 | `fillet` | Radius at both ends. Default `0`. |
 | `fillet1` | Bottom end, overriding `fillet`. |
 | `fillet2` | Top end, overriding `fillet`. |
-| `fillet_style` | `"round"` (default) or `"chamfer"`. |
+| `fillet_style` | `"chamfer"` (default) or `"round"`. |
 
 `fillet1` and `fillet2` are numbered the same way round as `r1` and `r2`: **1 is the bottom, 2 is the top.** Either overrides `fillet` for its own end, exactly as `r1` overrides `r`. There is one convention on this module for "both, or each", and this is it.
 
-`fillet_style` is `"round"` (the default) — a true arc, tangent to both the wall and the face — or `"chamfer"`, a straight cut across the same two points. They are one argument rather than two shapes because they are the same construction: the chamfer is the chord of the fillet.
+`fillet_style` is `"chamfer"` (the default) — a straight cut — or `"round"`, a true arc tangent to both the wall and the face. They are one argument rather than two shapes because they are the same construction: the chamfer is the chord of the arc.
+
+Chamfer is the default because it is what a broken edge is usually for — stopping a printed part from cutting a hand, and keeping the first layer from lifting. A flat cut does both, with fewer facets. A round is the deliberate choice, so it is the one you ask for.
 
 It works on a cone as well as a straight cylinder. On a taper the corner is not a right angle, so the arc that meets both edges is not a quarter circle — the profile is solved for the actual angle rather than assumed.
 

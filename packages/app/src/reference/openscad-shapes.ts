@@ -118,7 +118,7 @@ export const SOLIDS: ReferenceGroup = {
           name: 'fillet',
           description:
             'BetterSCAD: eases both ends. `fillet1` / `fillet2` take the bottom and top, and ' +
-            '`fillet_style` is `"round"` or `"chamfer"`.',
+            '`fillet_style` is `"chamfer"` (default) or `"round"`.',
         },
       ],
       examples: [

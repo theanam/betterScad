@@ -1859,9 +1859,15 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    * the same way is the whole point: there is one convention on this module for
    * "both, or each", and a second one would have to be remembered separately.
    *
-   * `fillet_style` is `"round"` — a true tangent arc — or `"chamfer"`, a
-   * straight cut. Both are described by the same tangent-point construction,
-   * which is why they are one argument and not two shapes.
+   * `fillet_style` is `"chamfer"` — a straight cut — or `"round"`, a true
+   * tangent arc. Both are described by the same tangent-point construction,
+   * which is why they are one argument and not two shapes: the chamfer is the
+   * chord of the arc.
+   *
+   * Chamfer is the default because it is the one people reach for. A broken
+   * edge on a printed part is there to stop it cutting a hand and to keep the
+   * first layer from lifting, and a flat cut does both with fewer facets than
+   * an arc. A round is the deliberate choice, so it is the one you ask for.
    *
    * With no fillet this is the stock primitive and exports untouched.
    */
@@ -1870,7 +1876,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       'h', 'r', 'r1', 'r2', 'center', 'd', 'd1', 'd2',
       'fillet', 'fillet1', 'fillet2', 'fillet_style',
     ],
-    defaults: { h: '1', center: 'false' },
+    defaults: { h: '1', center: 'false', fillet: '0', fillet_style: '"chamfer"' },
     build: (args, _children, scope, interp, span) => {
       const { r1, r2 } = cylinderRadii(args);
       const h = Math.max(0, asNumber(args.get('h'), 1));
@@ -1882,10 +1888,10 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
       const f2 = Math.max(0, asNumber(args.get('fillet2'), both));
 
       const rawStyle = args.get('fillet_style');
-      const style = typeof rawStyle === 'string' ? rawStyle : 'round';
+      const style = typeof rawStyle === 'string' ? rawStyle : 'chamfer';
       if (rawStyle !== undefined && style !== 'round' && style !== 'chamfer') {
         interp.warn(
-          `cylinder(): fillet_style must be "round" or "chamfer"; got "${style}". Using "round".`,
+          `cylinder(): fillet_style must be "round" or "chamfer"; got "${style}". Using "chamfer".`,
           span,
           'eval.fillet-style',
         );

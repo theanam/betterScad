@@ -221,7 +221,7 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
   },
   filleted_cylinder: {
     params:
-      'h, r1, r2, center = false, fillet1 = 0, fillet2 = 0, chamfer = false',
+      'h, r1, r2, center = false, fillet1 = 0, fillet2 = 0, chamfer = true',
     body: [
       '// The cylinder\'s own cross-section, revolved, with each outer corner',
       '// replaced by the arc that meets both of its edges tangentially — or by',
