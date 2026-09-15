@@ -8,6 +8,7 @@
  */
 
 import {
+  parseFontSpec,
   ENGINE_VERSION,
   applyParametersToSource,
   describeExtensions,
@@ -138,6 +139,10 @@ class App {
   private customizerModel: CustomizerModel = { parameters: [], groups: [] };
   private fontFamilies: string[] = [];
   private fontFaces: { family: string; style: string }[] = [];
+  /** Families already tried, so a font that cannot be found is asked for once. */
+  private readonly attemptedFonts = new Set<string>();
+  /** System families, once the user has let us look. See `useSystemFonts`. */
+  private systemFonts: { family: string; blob: () => Promise<Blob> }[] = [];
   private catalog: CatalogEntry[] = [];
   /** Preview outlines for the catalogue; see `loadSpecimens`. */
   private specimens: SpecimenSheet | undefined;
@@ -525,6 +530,75 @@ class App {
 
     this.refreshChrome();
     this.announceResult(result.diagnostics, result.stats);
+
+    // Naming a font in the source is all it takes to get it.
+    void this.fetchReferencedFonts(result.fontsUsed);
+  }
+
+  /**
+   * Fetches any font the model asked for and does not have, then re-renders.
+   *
+   * Loading a font by hand before you can use it is the wrong way round: the
+   * source already says which one it wants. A Google family is downloaded, a
+   * system family is read from the machine it is already installed on, and
+   * anything else is left to the engine's own fallback.
+   *
+   * Every family is tried once. `resolve()` falls back silently when a family
+   * is missing, so a font that cannot be fetched would otherwise be asked for
+   * again on every render, for ever.
+   */
+  private async fetchReferencedFonts(used: string[]): Promise<void> {
+    const wanted = used
+      .map((spec) => parseFontSpec(spec).family)
+      .filter((family) => family && !this.attemptedFonts.has(family))
+      .filter((family) => !this.fontFamilies.some((have) => have.toLowerCase() === family.toLowerCase()));
+    if (wanted.length === 0) return;
+
+    if (this.catalog.length === 0) this.catalog = await loadCatalog(document.baseURI);
+
+    let loaded = 0;
+    for (const family of new Set(wanted)) {
+      this.attemptedFonts.add(family);
+
+      const entry = this.catalog.find((e) => e.family.toLowerCase() === family.toLowerCase());
+      const system = this.systemFonts.find((f) => f.family.toLowerCase() === family.toLowerCase());
+      if (!entry && !system) {
+        // Not one we can find. The engine already drew it in the default face;
+        // saying so is more use than leaving the text quietly wrong.
+        this.consolePanel.append({
+          severity: 'warning',
+          message: `No font named "${family}" — using the default. Pick one from the Fonts dialog.`,
+        });
+        continue;
+      }
+
+      this.consolePanel.append({
+        severity: 'info',
+        message: entry ? `Downloading the font ${family}…` : `Loading the system font ${family}…`,
+      });
+      this.setBusy(true, entry ? `Downloading ${family}…` : `Loading ${family}…`);
+
+      try {
+        const data = system
+          ? new Uint8Array(await (await system.blob()).arrayBuffer())
+          : (await fetchCatalogFont(entry!)).data;
+        const response = await this.client.loadFont(data);
+        this.fontFamilies = response.families;
+        this.fontFaces = response.faces;
+        if (system) this.localFontBytes.set(response.family ?? family, data);
+        this.consolePanel.append({ severity: 'info', message: `Loaded ${family}.` });
+        loaded++;
+      } catch (err) {
+        this.consolePanel.append({
+          severity: 'warning',
+          message: `Could not load ${family}: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+
+    this.setBusy(false);
+    // One re-render for however many arrived, not one each.
+    if (loaded > 0) void this.render(true);
   }
 
   private announceResult(diagnostics: Diagnostic[], stats: RenderStats): void {
@@ -1115,14 +1189,6 @@ class App {
     this.specimens ??= await loadSpecimens(document.baseURI);
 
     showFontDialog(this.fontFaces, this.catalog, {
-      loadCatalogFont: async (entry) => {
-        const { data } = await fetchCatalogFont(entry);
-        const response = await this.client.loadFont(data);
-        this.fontFamilies = response.families;
-        this.fontFaces = response.faces;
-        void this.render(true);
-        return data;
-      },
       bytesFor: (family) => this.fontBytesFor(family),
       insert: (text) => {
         this.editor.insertAtCursor(text);
@@ -1142,26 +1208,10 @@ class App {
           void this.render(true);
         }
       },
-      loadSystemFonts: async () => {
-        const fonts = await querySystemFonts();
-        const loaded: string[] = [];
-        // Cap this: some machines have thousands of faces, and each one costs
-        // a parse plus a structured clone into the worker.
-        for (const font of fonts.slice(0, 60)) {
-          try {
-            const blob = await font.blob();
-            const bytes = new Uint8Array(await blob.arrayBuffer());
-            const response = await this.client.loadFont(bytes);
-            this.fontFamilies = response.families;
-            this.fontFaces = response.faces;
-            this.localFontBytes.set(response.family ?? font.family, bytes);
-            loaded.push(font.family);
-          } catch {
-            // Skip faces the parser cannot read (bitmap fonts, odd collections).
-          }
-        }
-        if (loaded.length > 0) void this.render(true);
-        return loaded;
+      // Names only. The bytes are read when a model actually asks for one.
+      listSystemFonts: async () => {
+        this.systemFonts = await querySystemFonts();
+        return this.systemFonts.map((font) => font.family).sort();
       },
       clearCache: async () => {
         await clearFontCache();

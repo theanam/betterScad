@@ -290,3 +290,32 @@ first step, before any later step has a chance to explain why. The bump script
 therefore leaves the lock to npm (`npm install --package-lock-only`) rather than
 rewriting it, and `npm run version:check` reads all eleven and names the ones
 that differ.
+
+## Fonts
+
+`packages/app/src/files/font-library.ts`, `scripts/font-specimens.mjs`
+
+Two problems, with opposite answers.
+
+**Choosing one.** The picker could not show a font until it had been loaded,
+which is the wrong way round — loading it is the decision the preview informs.
+The catalogue is served as raw `.ttf`, so there is no subsetting to ask for and
+previewing by fetching would cost tens of megabytes to draw eleven characters
+each. So the specimens are drawn once at build time and shipped as SVG outlines:
+a fraction of a bitmap's size, sharp at any zoom, and `currentColor` means one
+file serves both themes.
+
+System fonts need none of that. They are already installed, so CSS draws them
+with no bytes, no parsing and nothing to wait for. Reading sixty font files to
+show sixty rows was the expensive part, and it bought nothing this does not.
+
+**Using one.** Nothing is loaded by hand. Every render reports the families its
+`text()` nodes named — read from the scene, not the source, so a computed
+`font =` resolves to a real name — and the app fetches what is missing and
+renders again. A Google family is downloaded and cached in IndexedDB; a system
+family is read from the machine; anything else is left to the engine's fallback,
+with a line in the console saying so.
+
+Each family is tried once. `resolve()` falls back silently when a family is
+missing, so a font that cannot be fetched would otherwise be asked for again on
+every render, for ever.

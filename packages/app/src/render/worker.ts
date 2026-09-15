@@ -11,6 +11,7 @@ import {
   Engine,
   FontRegistry,
   exportResult,
+  fontsReferenced,
   toStockScad,
   type AssetProvider,
   type Value,
@@ -182,6 +183,7 @@ async function handleRender(request: RenderRequest): Promise<void> {
       dimension: result.geometry.dimension,
       preview: request.preview,
       diagnostics: result.diagnostics,
+      fontsUsed: fontsReferenced(result.scene),
       customizer: result.customizer,
       stats: {
         ...result.geometry.stats,

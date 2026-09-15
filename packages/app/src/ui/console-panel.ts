@@ -28,6 +28,9 @@ const ICON: Record<ConsoleEntry['severity'], string> = {
 
 type Filter = 'all' | 'problems' | 'info';
 
+/** How many app notices are kept before the oldest is dropped. */
+const MAX_NOTICES = 20;
+
 export class ConsolePanel {
   readonly element: HTMLElement;
   private readonly list: HTMLElement;
@@ -36,6 +39,8 @@ export class ConsolePanel {
   private readonly problemCount: HTMLElement;
   private readonly extensionCount: HTMLElement;
   private entries: ConsoleEntry[] = [];
+  /** App notices, which outlive the render they usually trigger. */
+  private notices: ConsoleEntry[] = [];
   private extensions: ExtensionUse[] = [];
   private hasDocument = false;
   private filter: Filter = 'all';
@@ -106,13 +111,17 @@ export class ConsolePanel {
 
   /** Replaces the log with the results of one render. */
   setDiagnostics(diagnostics: Diagnostic[], stats?: RenderStats): void {
-    this.entries = diagnostics.map((d) => ({
+    // Notices first, and kept: a line like "Downloading the font Lobster" is
+    // followed immediately by the re-render it caused, and wiping it there
+    // would erase the only explanation of why the model just changed.
+    this.entries = [...this.notices];
+    this.entries.push(...diagnostics.map((d) => ({
       severity: d.severity,
       message: d.message,
       line: d.span?.start.line,
       column: d.span?.start.column,
       file: d.span?.file,
-    }));
+    })));
 
     if (stats) {
       this.entries.push({
@@ -129,13 +138,22 @@ export class ConsolePanel {
     this.render();
   }
 
+  /**
+   * A line from the app rather than from a render.
+   *
+   * Kept across renders, and capped: these arrive a handful at a time and only
+   * when something happened that the reader did not ask for directly.
+   */
   append(entry: ConsoleEntry): void {
+    this.notices.push(entry);
+    if (this.notices.length > MAX_NOTICES) this.notices.shift();
     this.entries.push(entry);
     this.render();
   }
 
   clear(): void {
     this.entries = [];
+    this.notices = [];
     this.render();
   }
 

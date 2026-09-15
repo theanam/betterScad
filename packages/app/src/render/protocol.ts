@@ -112,6 +112,13 @@ export interface RenderResponse {
   /** Echoes the request's mode, so the UI can show which one you are looking at. */
   preview: boolean;
   diagnostics: Diagnostic[];
+  /**
+   * Fonts the model asked for, whether or not they were available.
+   *
+   * The app fetches the ones it can and re-renders, so naming a font in the
+   * source is all it takes to get it — there is nothing to load by hand.
+   */
+  fontsUsed: string[];
   customizer: CustomizerModel;
   stats: RenderStats;
   bounds: { min: [number, number, number]; max: [number, number, number] } | null;

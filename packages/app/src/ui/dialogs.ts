@@ -2,7 +2,7 @@
  * Modal dialogs: export, fonts, legacy export, and confirmations.
  */
 
-import { EXPORT_FORMATS, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
+import { EXPORT_FORMATS, formatFontSpec, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
 import { button, clear, el } from './dom.js';
 import { extensionList } from './extension-list.js';
 import type { CatalogEntry, SpecimenSheet } from '../files/font-library.js';
@@ -130,24 +130,23 @@ export function showExportDialog(
 // ---------------------------------------------------------------------------
 
 export interface FontDialogCallbacks {
-  /** Downloads, caches and registers a catalogue font. Resolves to its bytes. */
-  loadCatalogFont(entry: CatalogEntry): Promise<Uint8Array>;
+  /** Loads a font file the user picked. */
   loadFromDisk(): Promise<void>;
-  loadSystemFonts(): Promise<string[]>;
+  /**
+   * Asks the browser for the installed families, by name only.
+   *
+   * Names, not bytes: a system font is already on the machine, so the browser
+   * can preview it with nothing more than a CSS `font-family`. Reading sixty
+   * font files to show sixty rows was the expensive part, and it bought
+   * nothing that this does not.
+   */
+  listSystemFonts(): Promise<string[]>;
   clearCache(): Promise<void>;
   /** Bytes already on hand for a family, from the app or the IndexedDB cache. */
   bytesFor(family: string): Promise<Uint8Array | undefined>;
   /** Inserts text at the editor cursor. */
   insert(text: string): void;
 }
-
-/**
- * What a *loaded* font previews with, and what you can change.
- *
- * Families that are not loaded yet show their built-in specimen instead —
- * there are no outlines here to set custom text in until the font is fetched,
- * and fetching it is the decision the preview exists to inform.
- */
 const DEFAULT_SAMPLE = 'AaBbGg 0123';
 
 /**
@@ -180,6 +179,19 @@ async function registerPreviewFont(family: string, data: Uint8Array): Promise<st
 }
 
 /** Font manager (spec feature 23). */
+/**
+ * The font picker.
+ *
+ * Three tabs, and no Load button anywhere. Picking a font means writing its
+ * name into your model, and the app fetches whatever the model turns out to
+ * need — so the only question this dialog has to answer is "what does it look
+ * like", which is the question it was worst at before.
+ *
+ * Each tab previews differently, because each has different bytes to hand:
+ * Google families use the outlines shipped with the app, system families are
+ * already installed so CSS can draw them, and anything loaded already has a
+ * real face registered.
+ */
 export function showFontDialog(
   loadedFaces: { family: string; style: string }[],
   catalog: CatalogEntry[],
@@ -193,7 +205,13 @@ export function showFontDialog(
     loaded.set(face.family, styles);
   }
 
+  type Tab = 'google' | 'system' | 'files';
+  let tab: Tab = 'google';
+  let systemFamilies: string[] | undefined;
+  let systemRefused = false;
+
   const list = el('div', { class: 'fontlist' });
+  const status = el('p', { class: 'param__hint', text: '' });
 
   const search = el('input', {
     type: 'text',
@@ -212,85 +230,64 @@ export function showFontDialog(
 
   const sampleText = (): string => sample.value || DEFAULT_SAMPLE;
 
-  // Retitle every rendered preview in place, rather than rebuilding the list.
   sample.addEventListener('input', () => {
     for (const node of list.querySelectorAll('.font__preview')) {
-      // Only the ones showing live text. A specimen outline spells what it
-      // spells, and replacing it with a string would lose the preview whose
-      // whole job is to work before the font is fetched.
+      // A specimen outline spells what it spells; only live text follows this.
       if (node.querySelector('.font__specimen')) continue;
       node.textContent = sampleText();
     }
   });
 
-  const status = el('p', { class: 'param__hint', text: '' });
-
-  function specFor(family: string, style?: string): string {
-    if (!style || style.toLowerCase() === 'regular') return family;
-    return `${family}:style=${style}`;
-  }
-
-  /** The `font = "…"` snippet, with Copy and Insert beside it. */
-  function specRow(family: string, style?: string): HTMLElement {
-    const spec = specFor(family, style);
-    const snippet = `font = ${JSON.stringify(spec)}`;
-
+  /** `font = "Family"`, with the buttons that put it in the model. */
+  function specRow(family: string, style: string): HTMLElement {
+    const snippet = `font = "${formatFontSpec(family, style)}"`;
     const copy = button({
       label: 'Copy',
+      variant: 'ghost',
       title: `Copy ${snippet}`,
       onClick: () => {
         void navigator.clipboard
-          .writeText(snippet)
-          .then(() => {
-            copy.replaceChildren(document.createTextNode('Copied'));
-            setTimeout(() => copy.replaceChildren(document.createTextNode('Copy')), 1400);
-          })
-          .catch(() => {
-            // Clipboard access can be denied; the text is selectable regardless.
-            status.textContent = 'Could not reach the clipboard — select the snippet and copy it.';
-          });
+          ?.writeText(snippet)
+          .then(() => (status.textContent = `Copied ${snippet}`));
       },
     });
-
     const insert = button({
       label: 'Insert',
       variant: 'primary',
       title: `Insert ${snippet} at the cursor`,
       onClick: () => {
         callbacks.insert(snippet);
-        status.textContent = `Inserted ${snippet}`;
+        status.textContent = `Inserted ${snippet} — the font loads on the next render.`;
       },
     });
-
     return el('div', { class: 'font__spec' }, [
       el('code', { class: 'font__snippet', title: 'The argument text() expects', text: snippet }),
       el('div', { class: 'font__specactions' }, [copy, insert]),
     ]);
   }
 
-  function row(entry: CatalogEntry | { family: string; license?: string }): HTMLElement {
-    const family = entry.family;
+  /** One family: what it is, what it looks like, and how to use it. */
+  function row(family: string, meta: string, kind: Tab): HTMLElement {
     const styles = loaded.get(family);
     const isLoaded = !!styles;
 
     const preview = el('div', {
       class: 'font__preview',
       text: sampleText(),
-      // Falls back to the UI font until the real face is registered.
       style: 'font-family: var(--bs-font-ui)',
     });
 
-    // A family nobody has loaded yet still gets a real preview, drawn from the
-    // outlines shipped with the app. `currentColor` is what makes one sheet
-    // serve both themes.
+    if (kind === 'system') {
+      // Already installed, so the browser can simply draw it. No bytes, no
+      // parsing, and nothing to wait for.
+      preview.style.fontFamily = `'${family}', var(--bs-font-ui)`;
+    }
+
     const outline = specimens?.fonts[family];
-    if (outline && !isLoaded) {
+    if (kind === 'google' && outline && !isLoaded) {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', `0 0 ${outline.width} ${outline.height}`);
       svg.setAttribute('class', 'font__specimen');
-      // Height fixed, width to suit: the specimens share a baseline and keep
-      // their real relative size, so a face with a small x-height looks
-      // smaller — because it is.
       svg.setAttribute('height', '26');
       svg.setAttribute('width', String((26 * outline.width) / outline.height));
       svg.setAttribute('role', 'img');
@@ -302,107 +299,135 @@ export function showFontDialog(
       preview.replaceChildren(svg);
     }
 
-    const meta = el('span', {
-      class: 'fontlist__meta',
-      text: [
-        'license' in entry && entry.license ? entry.license : null,
-        'variable' in entry && (entry as CatalogEntry).variable ? 'variable' : null,
-        isLoaded && styles.length > 1 ? `${styles.length} styles` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    });
-
-    const actions = el('div', { class: 'font__actions' });
-    const body = el('div', { class: 'font__body' }, [
-      el('div', { class: 'font__head' }, [
-        el('span', { class: 'font__family', text: family }),
-        meta,
-        el('span', { class: 'toolbar__spacer' }),
-        actions,
-      ]),
-      preview,
+    const head = el('div', { class: 'font__head' }, [
+      el('span', { class: 'font__family', text: family }),
+      el('span', { class: 'fontlist__meta', text: meta }),
+      el('span', { class: 'toolbar__spacer' }),
+      isLoaded ? el('span', { class: 'fontlist__state', text: 'Ready' }) : null,
     ]);
 
-    const item = el('div', { class: 'font__item' }, [body]);
+    const body = el('div', { class: 'font__body' }, [head, preview]);
+    for (const style of styles ?? ['Regular']) body.appendChild(specRow(family, style));
 
-    /** Swaps the preview onto the real face and reveals the spec snippet. */
-    const applyPreview = async (data: Uint8Array): Promise<void> => {
-      const cssFamily = await registerPreviewFont(family, data);
-      if (!cssFamily) return;
-      // The real face can render anything, so the fixed outline gives way to
-      // the sample text — which is the point of being able to edit it.
-      preview.replaceChildren(document.createTextNode(sampleText()));
-      preview.style.fontFamily = `'${cssFamily}', var(--bs-font-ui)`;
-    };
-
-    const showSpecs = (): void => {
-      const available = loaded.get(family) ?? ['Regular'];
-      for (const style of available) body.appendChild(specRow(family, style));
-    };
-
-    if (isLoaded) {
-      actions.appendChild(el('span', { class: 'fontlist__state', text: 'Loaded' }));
-      showSpecs();
-      // Bytes may be in the IndexedDB cache or bundled; either way, preview it.
-      void callbacks.bytesFor(family).then((data) => {
-        if (data) void applyPreview(data);
-      });
-    } else {
-      const load = button({
-        label: 'Load',
-        iconName: 'download',
-        title: `Download ${family} and make it available to text()`,
-        onClick: async () => {
-          load.disabled = true;
-          load.replaceChildren(document.createTextNode('Loading…'));
-          try {
-            const data = await callbacks.loadCatalogFont(entry as CatalogEntry);
-            loaded.set(family, ['Regular']);
-            actions.replaceChildren(el('span', { class: 'fontlist__state', text: 'Loaded' }));
-            await applyPreview(data);
-            showSpecs();
-          } catch (err) {
-            load.disabled = false;
-            load.replaceChildren(document.createTextNode('Retry'));
-            status.textContent = err instanceof Error ? err.message : String(err);
-          }
-        },
-      });
-      actions.appendChild(load);
-
-      // If it is already cached from a previous session, preview it for free.
-      void callbacks.bytesFor(family).then((data) => {
-        if (data) void applyPreview(data);
+    // A face already registered can render anything, so the fixed specimen
+    // gives way to the sample text you can edit.
+    if (kind !== 'system' && isLoaded) {
+      void callbacks.bytesFor(family).then(async (data) => {
+        if (!data) return;
+        const cssFamily = await registerPreviewFont(family, data);
+        if (!cssFamily) return;
+        preview.replaceChildren(document.createTextNode(sampleText()));
+        preview.style.fontFamily = `'${cssFamily}', var(--bs-font-ui)`;
       });
     }
 
-    return item;
+    return el('div', { class: 'font__item' }, [body]);
   }
 
   const paint = (): void => {
     clear(list);
     const query = search.value.trim().toLowerCase();
+    const matches = (family: string): boolean => family.toLowerCase().includes(query);
 
-    // Loaded families first — they are the ones usable right now — then the
-    // rest of the catalogue.
-    const catalogued = new Set(catalog.map((e) => e.family));
-    const extras = [...loaded.keys()]
-      .filter((family) => !catalogued.has(family))
-      .map((family) => ({ family }));
-
-    const entries = [...extras, ...catalog].filter((e) => e.family.toLowerCase().includes(query));
-    entries.sort((a, b) => {
-      const rank = (f: string): number => (loaded.has(f) ? 0 : 1);
-      return rank(a.family) - rank(b.family) || a.family.localeCompare(b.family);
-    });
-
-    if (entries.length === 0) {
-      list.appendChild(el('p', { class: 'panel__empty', text: 'No matching families.' }));
+    if (tab === 'google') {
+      const entries = catalog.filter((entry) => matches(entry.family));
+      if (entries.length === 0) {
+        list.appendChild(el('p', { class: 'panel__empty', text: 'No matching families.' }));
+        return;
+      }
+      for (const entry of entries) {
+        const meta = [entry.license, entry.variable ? 'variable' : null].filter(Boolean).join(' · ');
+        list.appendChild(row(entry.family, meta, 'google'));
+      }
       return;
     }
-    for (const entry of entries.slice(0, 200)) list.appendChild(row(entry));
+
+    if (tab === 'system') {
+      if (systemFamilies === undefined) {
+        list.appendChild(
+          el('div', { class: 'font__permission' }, [
+            el('p', {
+              class: 'param__hint',
+              text:
+                'Fonts installed on this computer can be used too. The browser asks your ' +
+                'permission before listing them, and nothing is uploaded.',
+            }),
+            button({
+              label: 'Show my installed fonts',
+              variant: 'primary',
+              onClick: async () => {
+                const families = await callbacks.listSystemFonts();
+                systemFamilies = families;
+                systemRefused = families.length === 0;
+                paint();
+              },
+            }),
+          ]),
+        );
+        return;
+      }
+      if (systemRefused) {
+        list.appendChild(
+          el('p', {
+            class: 'panel__empty',
+            text:
+              'No installed fonts were available. Chrome and Edge can list them with your ' +
+              'permission; other browsers cannot, so load a font file instead.',
+          }),
+        );
+        return;
+      }
+      const families = systemFamilies.filter(matches);
+      if (families.length === 0) {
+        list.appendChild(el('p', { class: 'panel__empty', text: 'No matching families.' }));
+        return;
+      }
+      for (const family of families.slice(0, 500)) {
+        list.appendChild(row(family, 'installed', 'system'));
+      }
+      return;
+    }
+
+    // Anything registered that the catalogue does not list — font files the
+    // user loaded from disk, and any system family already pulled in.
+    const catalogued = new Set(catalog.map((entry) => entry.family));
+    const own = [...loaded.keys()].filter((family) => !catalogued.has(family) && matches(family));
+    if (own.length === 0) {
+      list.appendChild(
+        el('p', {
+          class: 'panel__empty',
+          text: 'No font files loaded. Use "Load font file…" for a font of your own.',
+        }),
+      );
+      return;
+    }
+    for (const family of own.sort()) list.appendChild(row(family, 'loaded from a file', 'files'));
   };
+
+  const tabs = el('div', { class: 'paneltabs font__tabs', role: 'tablist' });
+  const tabButtons = new Map<Tab, HTMLButtonElement>();
+  const addTab = (id: Tab, label: string, count?: number): void => {
+    const node = el('button', {
+      class: 'paneltab',
+      type: 'button',
+      role: 'tab',
+      'aria-selected': String(id === tab),
+      onclick: () => {
+        tab = id;
+        for (const [key, other] of tabButtons) other.setAttribute('aria-selected', String(key === id));
+        paint();
+      },
+    }) as HTMLButtonElement;
+    node.append(el('span', { text: label }));
+    if (count !== undefined) {
+      node.append(el('span', { class: 'paneltab__count', text: String(count) }));
+    }
+    tabButtons.set(id, node);
+    tabs.appendChild(node);
+  };
+  addTab('google', 'Google fonts', catalog.length);
+  addTab('system', 'On this computer');
+  addTab('files', 'Your files');
 
   search.addEventListener('input', paint);
   paint();
@@ -412,33 +437,11 @@ export function showFontDialog(
       class: 'param__hint',
       style: 'margin-top: 0',
       text:
-        'Fonts are used by text(). A few ship with the app for offline use; anything you ' +
-        'load here is cached in your browser and stays available offline.',
+        'Insert a font and it loads itself the next time the model renders — there is nothing ' +
+        'to download by hand. Anything fetched is cached in your browser and stays available ' +
+        'offline.',
     }),
-    el('div', { class: 'toolbar__group', style: 'margin: 12px 0;' }, [
-      button({
-        label: 'Load font file…',
-        iconName: 'open',
-        onClick: () => void callbacks.loadFromDisk().then(paint),
-      }),
-      button({
-        label: 'Use system fonts',
-        title: 'Requires permission; supported in Chrome and Edge',
-        onClick: async () => {
-          status.textContent = 'Requesting access…';
-          const families = await callbacks.loadSystemFonts();
-          status.textContent =
-            families.length > 0
-              ? `Loaded ${families.length} system famil${families.length === 1 ? 'y' : 'ies'}.`
-              : 'This browser does not expose system fonts. Load a font file instead.';
-          for (const family of families) {
-            if (!loaded.has(family)) loaded.set(family, ['Regular']);
-          }
-          paint();
-        },
-      }),
-    ]),
-    status,
+    tabs,
     el('div', { class: 'font__filters' }, [
       el('label', { class: 'font__filter' }, [
         el('span', { class: 'param__hint', text: 'Search' }),
@@ -449,11 +452,23 @@ export function showFontDialog(
         sample,
       ]),
     ]),
+    status,
     list,
   ]);
 
   const dialog = shell('Fonts', body, [
-    button({ label: 'Clear cache', onClick: () => void callbacks.clearCache() }),
+    button({
+      label: 'Load font file…',
+      iconName: 'open',
+      onClick: () =>
+        void callbacks.loadFromDisk().then(() => {
+          tab = 'files';
+          for (const [key, node] of tabButtons) node.setAttribute('aria-selected', String(key === 'files'));
+          paint();
+        }),
+    }),
+    button({ label: 'Clear cache', variant: 'ghost', onClick: () => void callbacks.clearCache() }),
+    el('span', { class: 'toolbar__spacer' }) as HTMLElement,
     button({ label: 'Done', variant: 'primary', onClick: () => dialog.close() }),
   ]);
 

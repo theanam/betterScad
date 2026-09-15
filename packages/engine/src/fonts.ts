@@ -9,6 +9,8 @@
 
 import opentype from 'opentype.js';
 
+import { walk, type SceneNode } from './scene.js';
+
 export interface FontFace {
   family: string;
   /** e.g. `Regular`, `Bold`, `Bold Italic`. */
@@ -197,6 +199,28 @@ export class FontRegistry {
       descender: face.font.descender * scale,
     };
   }
+}
+
+/**
+ * Every font a scene's `text()` nodes ask for, deduplicated.
+ *
+ * Read from the scene rather than the source because by this point the
+ * arguments have been evaluated: `text(label, font = chosen)` names a real
+ * family here, where the source only names two variables.
+ *
+ * This is what lets a font be fetched because the model needs it, rather than
+ * because somebody remembered to press Load. `resolve()` falls back to any face
+ * it holds when a family is missing, so without asking the question there is no
+ * signal at all — the text simply comes out in the wrong typeface.
+ */
+export function fontsReferenced(root: SceneNode): string[] {
+  const specs = new Set<string>();
+  for (const node of walk(root)) {
+    if (node.op !== 'text') continue;
+    const spec = String(node.params.font ?? '').trim();
+    if (spec) specs.add(spec);
+  }
+  return [...specs];
 }
 
 /** One glyph, at its own origin, with the room it takes on the baseline. */

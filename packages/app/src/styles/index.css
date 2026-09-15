@@ -1662,6 +1662,31 @@ kbd {
 
 /* --- font picker ---------------------------------------------------------- */
 
+/* The picker's three tabs, borrowing the panel header's control. */
+.font__tabs {
+  margin: var(--bs-space-3) 0 0;
+  border-bottom: 1px solid var(--bs-border);
+  font-size: var(--bs-font-size-sm);
+}
+
+.font__tabs .paneltab {
+  font-weight: 400;
+}
+
+/* The system-font tab before permission has been asked for. */
+.font__permission {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bs-space-3);
+  padding: var(--bs-space-4) var(--bs-space-2);
+}
+
+.font__permission p {
+  margin: 0;
+  max-width: 46ch;
+}
+
 .font__filters {
   display: grid;
   grid-template-columns: 1fr 1fr;
