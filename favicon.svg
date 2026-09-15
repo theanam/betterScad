@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="BetterSCAD">
+  <title>BetterSCAD</title>
+  <desc>An isometric cube with a round hole bored through its top face: difference() { cube(); cylinder(); }</desc>
+
+  <!--
+    Three flat faces, no gradients: the shading *is* the isometric read, and a
+    gradient on top of it only muddies the silhouette at favicon sizes.
+
+    The hole is drawn as a true circle rather than the ellipse a bored hole
+    would project to. Correct projection costs legibility at 16px, which is
+    where this mark spends most of its life, and the cube around it already
+    establishes the axonometry.
+  -->
+  <g>
+    <!-- top -->
+    <path d="M 64 12 L 109.03 38 L 64 64 L 18.97 38 Z" fill="#efa84e"/>
+    <!-- left -->
+    <path d="M 18.97 38 L 64 64 L 64 116 L 18.97 90 Z" fill="#d9883c"/>
+    <!-- right -->
+    <path d="M 109.03 38 L 64 64 L 64 116 L 109.03 90 Z" fill="#b4682e"/>
+  </g>
+
+  <!-- Sunk into the top face, left of its centre so it sits clear of the
+       cube's front vertical edge. -->
+  <circle cx="57" cy="33" r="9.5" fill="#171310"/>
+</svg>

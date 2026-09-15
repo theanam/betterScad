@@ -1,0 +1,23 @@
+[
+  "./",
+  "manifest.webmanifest",
+  "favicon.svg",
+  "betterscad-mark.svg",
+  "betterscad-logo-dark.svg",
+  "betterscad-logo-light.svg",
+  "betterscad-icon-192.png",
+  "betterscad-icon-512.png",
+  "betterscad-icon-maskable-512.png",
+  "apple-touch-icon.png",
+  "fonts/NotoSans.ttf",
+  "fonts/NotoSerif.ttf",
+  "fonts/Inter.ttf",
+  "fonts/JetBrainsMono.ttf",
+  "fonts/google-fonts-index.json",
+  "assets/manifold-BE4c7gO-.wasm",
+  "assets/index-hN6EdDeZ.css",
+  "assets/codemirror-C559gS8M.js",
+  "assets/three-QhK6HPne.js",
+  "assets/index-DdZl5qeG.js",
+  "assets/worker-BJyYu7e0.js"
+]
