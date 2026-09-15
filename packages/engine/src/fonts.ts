@@ -163,6 +163,76 @@ export class FontRegistry {
     if (!face) return undefined;
     return layoutWithFace(face, request);
   }
+
+  /**
+   * Advance widths at size 1, one per character.
+   *
+   * What the legacy export carries, because OpenSCAD cannot measure a glyph.
+   * At size 1 so the exported module can scale them, which is what keeps `size`
+   * and `spacing` live in the generated file rather than baked into it.
+   */
+  advances(chars: string[], font = ''): number[] | undefined {
+    const face = this.resolve(font);
+    if (!face) return undefined;
+    const scale = 1 / face.font.unitsPerEm;
+    return chars.map((char) => {
+      const [glyph] = face.font.stringToGlyphs(char);
+      return (glyph?.advanceWidth ?? 0) * scale;
+    });
+  }
+
+  /**
+   * The same string as separate glyphs, for anything that places them
+   * individually — text on a curve, and the advance table its export carries.
+   */
+  glyphs(
+    request: TextRequest,
+  ): { glyphs: GlyphPlacement[]; ascender: number; descender: number } | undefined {
+    const face = this.resolve(request.font);
+    if (!face) return undefined;
+    const scale = request.size / face.font.unitsPerEm;
+    return {
+      glyphs: layoutGlyphs(face, request),
+      ascender: face.font.ascender * scale,
+      descender: face.font.descender * scale,
+    };
+  }
+}
+
+/** One glyph, at its own origin, with the room it takes on the baseline. */
+export interface GlyphPlacement {
+  /** The character it came from, for the legacy export's advance table. */
+  char: string;
+  /** Contours with the glyph's own origin at (0, 0) and its baseline at y = 0. */
+  contours: Contour[];
+  /** Advance width in model units, already scaled by `size` and `spacing`. */
+  advance: number;
+}
+
+/**
+ * The same layout, one glyph at a time and each left at its own origin.
+ *
+ * Text on a curve has to move every glyph independently, so it needs them
+ * apart rather than merged into one run. Nothing is lost by splitting them:
+ * this layout applies no kerning, so a glyph's position depends only on the
+ * advances before it.
+ */
+export function layoutGlyphs(face: FontFace, request: TextRequest): GlyphPlacement[] {
+  const { font } = face;
+  const scale = request.size / font.unitsPerEm;
+  const spacing = Number.isFinite(request.spacing) ? request.spacing : 1;
+
+  const glyphs = font.stringToGlyphs(request.text);
+  const chars = [...request.text];
+  const reversed = request.direction === 'rtl' || request.direction === 'btt';
+  const order = reversed ? [...glyphs].reverse() : glyphs;
+  const labels = reversed ? [...chars].reverse() : chars;
+
+  return order.map((glyph, index) => ({
+    char: labels[index] ?? '',
+    contours: flattenPath(glyph.getPath(0, 0, request.size), request.segments),
+    advance: (glyph.advanceWidth ?? 0) * scale * spacing,
+  }));
 }
 
 /**

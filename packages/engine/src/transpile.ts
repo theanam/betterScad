@@ -22,6 +22,7 @@ import {
   Statement,
 } from './ast.js';
 import { Diagnostic } from './diagnostics.js';
+import { FontRegistry } from './fonts.js';
 import { MODIFIER_ROLES, parse } from './parser.js';
 import { getRole } from './roles.js';
 
@@ -38,12 +39,27 @@ export interface TranspileOptions {
   indent?: number;
   /** Emit a header comment naming the tool and the rewrites applied. */
   header?: boolean;
+  /**
+   * Fonts, for the one rewrite that cannot be done without measuring.
+   *
+   * `text(radius = …)` spaces glyphs by their real widths, and OpenSCAD has no
+   * way to ask a font how wide a glyph is — `textmetrics()` is not in the
+   * release this targets. So the widths are measured here and carried into the
+   * generated file as a table. Without a registry the rewrite cannot be done at
+   * all, and the export says so rather than emitting text in the wrong places.
+   */
+  fonts?: FontRegistry;
 }
 
 export interface TranspileResult {
   source: string;
   /** Human-readable list of extensions that were rewritten. */
   rewrites: string[];
+  /**
+   * Set when a rewrite needed glyph widths that could not be measured, which
+   * makes `source` unusable. The caller refuses rather than writing it.
+   */
+  unmeasurable: boolean;
 }
 
 /**
@@ -113,6 +129,13 @@ const SUGARED_SHAPES: Record<string, SugaredShape> = {
     positional: 2,
     describe: 'square(r = …)',
   },
+  text: {
+    helper: 'text_arc',
+    // `start` and `facing` do nothing without a circle to put the text on, so
+    // the radius alone decides whether this is stock.
+    triggers: ['radius'],
+    describe: 'text(radius = …)',
+  },
   cylinder: {
     helper: 'filleted_cylinder',
     // Never positional: they sit past `d2` in a signature nobody counts out.
@@ -164,6 +187,36 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '          sphere(r = rr);',
       '  else',
       '    cube(s, center = true);',
+    ],
+  },
+  text_arc: {
+    params:
+      's, size, radius, start, halign = "left", valign = "baseline", font = "", ' +
+      'spacing = 1, inward = false, keys = [], adv = []',
+    body: [
+      '// Glyph widths, measured at export time and carried in `adv` because',
+      '// OpenSCAD cannot ask a font how wide a glyph is. They are per unit of',
+      '// size, so size and spacing stay live here rather than being baked in.',
+      'function run(v, n, i = 0) = i < n ? v[i] + run(v, n, i + 1) : 0;',
+      '',
+      'w = [for (i = [0 : len(s) - 1]) adv[search(s[i], keys)[0]] * size * spacing];',
+      'total = run(w, len(w));',
+      'lead = halign == "center" ? -total / 2 : halign == "right" ? -total : 0;',
+      '',
+      '// Each glyph sits at the midpoint of its own advance, which is what',
+      '// `halign = "center"` on the single-character text() below gives us.',
+      'for (i = [0 : len(s) - 1])',
+      '  let (arc = lead + run(w, i) + w[i] / 2,',
+      '       deg = arc / radius * 180 / PI,',
+      '       ang = inward ? start + deg : start - deg)',
+      '    rotate([0, 0, ang])',
+      '      translate([radius, 0, 0])',
+      '        rotate([0, 0, inward ? 90 : -90])',
+      '          // `spacing` goes to the glyph as well as into the step: it widens',
+      '          // the advance that halign = "center" centres on, and leaving it out',
+      '          // here shifts every glyph by half of the extra.',
+      '          text(s[i], size = size, halign = "center", valign = valign, font = font,',
+      '               spacing = spacing);',
     ],
   },
   filleted_cylinder: {
@@ -323,11 +376,17 @@ class Printer {
   readonly rewrites = new Set<string>();
   /** Helper modules this file needed, in first-use order. */
   private readonly helpers = new Map<string, string>();
+  /** Glyph-width tables, keyed by font and character set. */
+  private readonly tables = new Map<string, { name: string; source: string }>();
+
+  /** Set when a rewrite needed font metrics that were not supplied. */
+  unmeasurable = false;
 
   constructor(
     private readonly indentWidth: number,
     /** Module names already taken by the file, so a helper cannot shadow one. */
     private readonly taken: Set<string>,
+    private readonly fonts?: FontRegistry,
   ) {}
 
   /**
@@ -348,10 +407,44 @@ class Printer {
     return name;
   }
 
+  /**
+   * Names a glyph-width table, reusing one when the same font is measured
+   * twice.
+   *
+   * Emitted as a top-level pair of lists rather than inlined into the call: a
+   * printable-ASCII table is ninety-five numbers, and three labels around a
+   * dial would otherwise carry three copies of it.
+   */
+  private tableFor(font: string, chars: string[], advances: number[]): string {
+    const signature = `${font}\u0000${chars.join('')}`;
+    const existing = this.tables.get(signature);
+    if (existing) return existing.name;
+
+    let name = '__adv';
+    for (let n = 2; this.taken.has(name); n++) name = `__adv_${n}`;
+    this.taken.add(name);
+
+    const quoted = chars.map((c) => JSON.stringify(c)).join(', ');
+    // Shortest round-tripping form, not a fixed number of decimals: rounding
+    // these to six places moved the glyphs enough to show up against the
+    // engine's own placement.
+    const widths = advances.map((a) => String(a)).join(', ');
+    this.tables.set(signature, {
+      name,
+      source:
+        `// Glyph widths at size 1${font ? ` for ${font}` : ''}, measured when this file was\n` +
+        `// written. OpenSCAD has no way to measure a glyph, so text on a circle\n` +
+        `// cannot be spaced without them.\n` +
+        `${name}_keys = [${quoted}];\n${name} = [${widths}];`,
+    });
+    return name;
+  }
+
   /** The helper definitions, in the order they were first needed. */
   helperDefinitions(): string {
-    if (this.helpers.size === 0) return '';
+    if (this.helpers.size === 0 && this.tables.size === 0) return '';
     const blocks: string[] = [];
+    for (const table of this.tables.values()) blocks.push(table.source);
     for (const [shape, name] of this.helpers) {
       const { params, body } = SHAPE_MODULES[shape];
       const indent = ' '.repeat(this.indentWidth);
@@ -605,6 +698,7 @@ class Printer {
    * into the helper's own names here.
    */
   private sugarArgs(name: string, args: Argument[]): string {
+    if (name === 'text') return this.arcTextArgs(args);
     if (name !== 'cylinder') return this.args(args);
 
     const named = new Map<string, string>();
@@ -644,6 +738,72 @@ class Printer {
     out.push(`fillet2 = ${pick('fillet2') ?? both ?? '0'}`);
     if (style) out.push(`chamfer = (${style}) == "chamfer"`);
     return [...out, ...specials].join(', ');
+  }
+
+  /**
+   * Arguments for `__text_arc`, including the measured widths.
+   *
+   * The string may be any expression, so the table covers printable ASCII
+   * unless the call gives a literal — in which case only the characters it
+   * actually uses are measured, which is usually a handful.
+   */
+  private arcTextArgs(args: Argument[]): string {
+    const named = new Map<string, Argument>();
+    const positional: Argument[] = [];
+    // The same trap the cylinder rewrite has: rebuilding an argument list from
+    // the names this function knows about silently drops `$fn` and friends, and
+    // the export comes out at a different curve resolution than the original.
+    const specials: string[] = [];
+    for (const arg of args) {
+      if (arg.name?.startsWith('$')) specials.push(`${arg.name} = ${this.expr(arg.value)}`);
+      else if (arg.name) named.set(arg.name, arg);
+      else positional.push(arg);
+    }
+    const pick = (key: string, index?: number): Argument | undefined =>
+      named.get(key) ?? (index !== undefined ? positional[index] : undefined);
+
+    const value = (arg: Argument | undefined, fallback: string): string =>
+      arg ? this.expr(arg.value) : fallback;
+
+    const textArg = pick('text', 0);
+    const fontArg = pick('font');
+    // A non-literal font cannot be resolved here, so the default face is
+    // measured — the same face the engine would fall back to.
+    const font = fontArg?.value.kind === 'string' ? fontArg.value.value : '';
+
+    const literal = textArg?.value.kind === 'string' ? textArg.value.value : undefined;
+    const chars =
+      literal !== undefined
+        ? [...new Set([...literal])]
+        : Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i));
+
+    const advances = this.fonts?.advances(chars, font);
+    if (!advances) {
+      // Nothing sensible to emit. Straight text would be the wrong shape, and a
+      // helper call with the original argument names would not even parse — so
+      // the whole export is refused, upstream, and says why.
+      this.unmeasurable = true;
+      return '';
+    }
+    const table = this.tableFor(font, chars, advances);
+
+    const facing = pick('facing');
+    const inward = facing ? `(${this.expr(facing.value)}) == "in"` : 'false';
+
+    return [
+      `s = ${value(textArg, '""')}`,
+      `size = ${value(pick('size', 1), '10')}`,
+      `radius = ${value(pick('radius'), '1')}`,
+      `start = ${value(pick('start'), '90')}`,
+      `halign = ${value(pick('halign'), '"left"')}`,
+      `valign = ${value(pick('valign'), '"baseline"')}`,
+      `font = ${value(fontArg, '""')}`,
+      `spacing = ${value(pick('spacing'), '1')}`,
+      `inward = ${inward}`,
+      `keys = ${table}_keys`,
+      `adv = ${table}`,
+      ...specials,
+    ].join(', ');
   }
 
   private args(args: Argument[]): string {
@@ -842,13 +1002,13 @@ function formatNumberLiteral(n: number): string {
  * what changed.
  */
 export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions = {}): TranspileResult {
-  const printer = new Printer(options.indent ?? 2, declaredModuleNames(file));
+  const printer = new Printer(options.indent ?? 2, declaredModuleNames(file), options.fonts);
   printer.printBody(file.body, 0);
   // Printed first, because printing is what discovers which helpers are needed.
   const body = printer.helperDefinitions() + printer.toString();
   const rewrites = [...printer.rewrites];
 
-  if (options.header === false) return { source: body, rewrites };
+  if (options.header === false) return { source: body, rewrites, unmeasurable: printer.unmeasurable };
 
   const header = [
     '// Generated by BetterSCAD — legacy OpenSCAD export.',
@@ -860,7 +1020,7 @@ export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions 
     '',
   ].join('\n');
 
-  return { source: header + body, rewrites };
+  return { source: header + body, rewrites, unmeasurable: printer.unmeasurable };
 }
 
 /**
@@ -1037,6 +1197,32 @@ export function toStockScad(
     return { source, extensions, rewrites: [], verbatim: true, errors: [] };
   }
 
-  const { source: rewritten, rewrites } = transpileToLegacyScad(parsed.file, options);
+  const { source: rewritten, rewrites, unmeasurable } = transpileToLegacyScad(parsed.file, options);
+
+  // `text(radius = …)` is the one rewrite that cannot be done from the source
+  // alone: it needs the font's glyph widths, because OpenSCAD has no way to
+  // measure them at run time. Asked after the fact rather than before, because
+  // the question is "was the face there", not "was a registry passed" — an
+  // empty registry, or one without this file's font, is no more use than none.
+  // Refusing beats writing a file whose text is in the wrong places, and beats
+  // the half-rewritten one an earlier version of this produced.
+  if (unmeasurable) {
+    return {
+      source,
+      extensions,
+      rewrites: [],
+      verbatim: true,
+      errors: [
+        {
+          severity: 'error',
+          message:
+            'Saving as OpenSCAD needs the font that text(radius = …) is set in, so the glyph ' +
+            'widths can be measured. Load the font and try again.',
+          code: 'transpile.arc-text-unmeasurable',
+        },
+      ],
+    };
+  }
+
   return { source: rewritten, extensions, rewrites, verbatim: false, errors: [] };
 }

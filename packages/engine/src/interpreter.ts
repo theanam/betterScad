@@ -2236,6 +2236,8 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
     params: [
       'text', 'size', 'font', 'halign', 'valign', 'spacing',
       'direction', 'language', 'script',
+      // BetterSCAD: lay the run on a circle rather than a straight baseline.
+      'radius', 'start', 'facing',
     ],
     defaults: {
       size: '10',
@@ -2259,6 +2261,11 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
           direction: args.get('direction') === undefined ? 'ltr' : toStringValue(args.get('direction')),
           language: args.get('language') === undefined ? 'en' : toStringValue(args.get('language')),
           script: args.get('script') === undefined ? 'latin' : toStringValue(args.get('script')),
+          // Absent rather than 0: a radius of 0 is a mistake worth reporting,
+          // and "not on a circle" has to be distinguishable from it.
+          radius: args.get('radius') === undefined ? undefined : asNumber(args.get('radius'), 0),
+          start: asNumber(args.get('start'), 90),
+          facing: args.get('facing') === undefined ? 'out' : toStringValue(args.get('facing')),
           resolution: resolutionFor(args, scope),
         },
         [],

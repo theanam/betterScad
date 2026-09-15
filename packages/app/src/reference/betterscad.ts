@@ -75,6 +75,90 @@ export const NEW_SHAPES: ReferenceGroup = {
       ],
     },
     {
+      id: 'text-radius',
+      name: 'text(radius)',
+      signature: 'text(…, radius, start, facing)',
+      extension: true,
+      plain:
+        'Bends a line of writing around a circle, the way a name runs around the rim of a coin. ' +
+        'Give `text()` a radius and the letters follow it instead of sitting on a straight line.',
+      details: [
+        '`start` is the angle the run begins at, in degrees, measured the way `rotate()` measures ' +
+          'them. It defaults to `90` — the top.',
+        '`facing` is `"out"` (the default), where the letters stand away from the centre, or ' +
+          '`"in"`, where they face it. The far side of a dial wants `"in"`: it keeps the words ' +
+          'the right way up when you read them.',
+        '**`halign` still means what it always did**, measured around `start` rather than around ' +
+          'x = 0 — `"center"` centres the run on the angle, `"right"` ends there. `valign` still ' +
+          'shifts the baseline, which out here moves it towards or away from the centre.',
+        'Letters are spaced by their real widths, so an `i` takes less of the arc than an `M`. ' +
+          'Each one is placed at the middle of its own width and turned to the tangent; the ' +
+          'letters are not themselves bent, so a very tight circle with very large text will ' +
+          'show gaps at the tops of the letters. More radius or less size is the fix.',
+        'A radius of zero is an error rather than a guess, and a circle cannot be combined with ' +
+          'a vertical `direction` — those are two different answers to "which way does the run ' +
+          'go".',
+        'Without `radius` this is the stock `text()`, and the file exports byte for byte.',
+      ],
+      params: [
+        { name: 'radius', description: 'Radius of the baseline circle. Required for an arc.' },
+        { name: 'start', description: 'Angle the run begins at, in degrees. Default `90`.' },
+        { name: 'facing', description: '`"out"` (default) or `"in"`.' },
+      ],
+      downgrade:
+        'A generated module that places each glyph with its own `text()` call. OpenSCAD has no ' +
+        'way to measure a glyph — `textmetrics()` is not in the release this targets — so the ' +
+        'letter widths are measured when the file is written and carried into it as a table. ' +
+        'Size, spacing, radius and even the string stay live in the exported file; only the ' +
+        'measurements are fixed. **Saving needs the font loaded**, and says so rather than ' +
+        'writing text in the wrong places.',
+      examples: [
+        {
+          code: 'text("BETTERSCAD", size = 5, radius = 20, halign = "center", $fn = 48);',
+          image: 'text-radius',
+          caption: 'A run centred on the top of a circle of radius 20.',
+        },
+        {
+          code: [
+            '$fn = 48;',
+            'text("BETTERSCAD", size = 5, radius = 22, halign = "center");',
+            'text("BATTERY CAP", size = 5, radius = 22, halign = "center",',
+            '     start = 270, facing = "in");',
+            'difference() { circle(28); circle(26); }',
+          ].join('\n'),
+          image: 'text-radius-dial',
+          caption: '`facing = "in"` at the bottom, so both halves read the same way up.',
+        },
+        {
+          code: [
+            '$fn = 64;',
+            'difference() {',
+            '  cylinder(h = 4, r = 30, fillet2 = 1);',
+            '  translatez(3) linear_extrude(2)',
+            '    text("BETTERSCAD", size = 6, radius = 22, halign = "center");',
+            '}',
+          ].join('\n'),
+          image: 'text-radius-engraved',
+          caption: 'Extruded and subtracted, which is how it ends up engraved in a lid.',
+        },
+        {
+          code: [
+            '$fn = 32;',
+            'for (i = [0 : 11])',
+            '  text(str(i * 5), size = 3, radius = 22, halign = "center", start = 90 - i * 30);',
+            'difference() { circle(28); circle(26); }',
+          ].join('\n'),
+          image: 'text-radius-gauge',
+          caption: 'One call per label, each at its own angle — a gauge face.',
+        },
+      ],
+      see: ['text', 'shape-radius', 'cylinder-fillet', 'rotate'],
+      keywords: [
+        'text on a circle', 'arc', 'curved text', 'around', 'dial', 'bezel', 'coin', 'ring',
+        'engrave', 'label', 'path',
+      ],
+    },
+    {
       id: 'cylinder-fillet',
       name: 'cylinder(fillet)',
       signature: 'cylinder(…, fillet, fillet1, fillet2, fillet_style)',

@@ -9,6 +9,7 @@
 import type { Value } from '@betterscad/engine';
 import type {
   ExportResponse,
+  TranspileResponse,
   FontResponse,
   RenderResponse,
   WorkerRequest,
@@ -144,6 +145,11 @@ export class RenderClient {
       time: input.time,
       preview: input.preview,
     });
+  }
+
+  /** Rewrites to stock `.scad` in the worker, where the fonts are. */
+  transpile(source: string, file: string): Promise<TranspileResponse> {
+    return this.send<TranspileResponse>({ type: 'transpile', id: this.nextId++, source, file });
   }
 
   exportModel(

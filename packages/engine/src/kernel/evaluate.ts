@@ -1041,6 +1041,31 @@ function buildText(node: SceneNode, ctx: Ctx): Assembly {
     return emptyAssembly();
   }
 
+  const radius = node.params.radius as number | undefined;
+  if (radius !== undefined) {
+    if (!(Math.abs(radius) > 0)) {
+      ctx.diagnostics.error(
+        'text(): radius must not be zero — there is no circle to lay the text on.',
+        node.span,
+        'kernel.text-radius',
+      );
+      return emptyAssembly();
+    }
+    const direction = String(node.params.direction ?? 'ltr');
+    if (direction !== 'ltr') {
+      // Stacking glyphs vertically and laying them on a circle are two
+      // different answers to "which way does the run go". Refused rather than
+      // guessed at.
+      ctx.diagnostics.error(
+        `text(): radius cannot be combined with direction = "${direction}".`,
+        node.span,
+        'kernel.text-radius-direction',
+      );
+      return emptyAssembly();
+    }
+    return buildArcText(node, ctx, radius);
+  }
+
   const res = node.params.resolution as Resolution;
   const laid = ctx.fonts.layout({
     text,
@@ -1059,6 +1084,101 @@ function buildText(node: SceneNode, ctx: Ctx): Assembly {
   return guard(ctx, node.span, 'text', () =>
     // Even-odd fill turns counters (the hole in an 'o') into holes.
     flatPiece(ctx, new ctx.api.CrossSection(laid.contours as Vec2[][], 'EvenOdd')),
+  );
+}
+
+/**
+ * `text(radius = …)` — the run laid on a circle instead of a straight baseline.
+ *
+ * Each glyph is placed rigid: rotated onto the tangent and translated out to
+ * the radius, not bent. Warping the outlines would read better on a tight
+ * circle, but it could only ever be exported as raw polygons — and this way the
+ * legacy export is per-glyph `text()` calls, which keep the reader's own font.
+ *
+ * A glyph sits at the midpoint of its own advance rather than at its left edge.
+ * It costs nothing and it is the difference between a word that looks centred
+ * on the arc and one that drifts.
+ *
+ * Spacing is proportional, which is why this lives here rather than in the
+ * interpreter: advance widths need a font, and fonts arrive with the geometry.
+ *
+ * The legacy export agrees with this to about one part in a billion rather than
+ * bit for bit. It reaches the same placement by a different route — its
+ * per-glyph `text(halign = "center")` measures the advance itself, in a
+ * different multiplication order — and floating-point multiplication is not
+ * associative. The residue is nanometres on a part measured in millimetres, and
+ * closing it would mean pinning the arithmetic of `text()` itself.
+ */
+function buildArcText(node: SceneNode, ctx: Ctx, radius: number): Assembly {
+  const res = node.params.resolution as Resolution;
+  const measured = ctx.fonts!.glyphs({
+    text: String(node.params.text ?? ''),
+    size: node.params.size as number,
+    font: String(node.params.font ?? ''),
+    halign: 'left',
+    valign: 'baseline',
+    spacing: node.params.spacing as number,
+    direction: String(node.params.direction ?? 'ltr'),
+    segments: res.fn > 0 ? Math.max(2, Math.round(res.fn / 4)) : 8,
+  });
+  if (!measured || measured.glyphs.length === 0) return emptyAssembly();
+
+  const { glyphs, ascender, descender } = measured;
+  const total = glyphs.reduce((sum, glyph) => sum + glyph.advance, 0);
+
+  // `halign` keeps its meaning, measured around the start angle rather than
+  // around x = 0.
+  const halign = String(node.params.halign ?? 'left');
+  const lead = halign === 'center' ? -total / 2 : halign === 'right' ? -total : 0;
+
+  // And `valign` still shifts the baseline — which out here is radial.
+  const valign = String(node.params.valign ?? 'baseline');
+  const lift =
+    valign === 'top' ? -ascender
+    : valign === 'center' ? -(ascender + descender) / 2
+    : valign === 'bottom' ? -descender
+    : 0;
+
+  const inward = String(node.params.facing ?? 'out') === 'in';
+  const start = node.params.start as number;
+
+  const contours: [number, number][][] = [];
+  let arc = lead;
+
+  for (const glyph of glyphs) {
+    // The angle subtended by everything before this glyph, plus half of it.
+    // Computed in degrees, the same way round as the generated module does it,
+    // so the two agree to the last bit rather than to a tolerance.
+    const sweep = ((arc + glyph.advance / 2) / radius) * (180 / Math.PI);
+    // Reading runs clockwise seen from +Z, so that a run starting at the top
+    // reads left to right. Facing inward reverses it, which is what keeps the
+    // bottom of a dial readable the same way up.
+    const degrees = inward ? start + sweep : start - sweep;
+    const angle = degrees * (Math.PI / 180);
+    // Upright means "up is away from the centre", so the glyph turns with the
+    // tangent; facing inward turns it the other half-turn.
+    const spin = (inward ? degrees + 90 : degrees - 90) * (Math.PI / 180);
+    const cos = Math.cos(spin);
+    const sin = Math.sin(spin);
+    const cx = radius * Math.cos(angle);
+    const cy = radius * Math.sin(angle);
+
+    for (const contour of glyph.contours) {
+      contours.push(
+        contour.map(([gx, gy]) => {
+          // Centre the glyph on its own advance, then lift it to the circle.
+          const x = gx - glyph.advance / 2;
+          const y = gy + lift;
+          return [cx + x * cos - y * sin, cy + x * sin + y * cos] as [number, number];
+        }),
+      );
+    }
+    arc += glyph.advance;
+  }
+
+  if (contours.length === 0) return emptyAssembly();
+  return guard(ctx, node.span, 'text', () =>
+    flatPiece(ctx, new ctx.api.CrossSection(contours as Vec2[][], 'EvenOdd')),
   );
 }
 

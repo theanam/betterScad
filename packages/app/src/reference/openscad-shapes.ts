@@ -379,6 +379,8 @@ export const FLAT_SHAPES: ReferenceGroup = {
         '`spacing` multiplies the gap between letters — `1` is the font’s own spacing, `1.2` ' +
           'opens it up. `direction` is `"ltr"`, `"rtl"`, `"ttb"` or `"btt"`.',
         '`language` and `script` are accepted for compatibility.',
+        'BetterSCAD adds `radius`, which lays the run on a circle rather than a straight ' +
+          'baseline. See its own entry.',
       ],
       params: [
         { name: 'text', description: 'The string to draw.' },
@@ -402,7 +404,7 @@ export const FLAT_SHAPES: ReferenceGroup = {
           caption: 'Extruded into a solid you could print.',
         },
       ],
-      see: ['linear_extrude', 'offset'],
+      see: ['text-radius', 'linear_extrude', 'offset'],
       keywords: ['label', 'letters', 'word', 'font', 'write', 'engrave'],
     },
   ],

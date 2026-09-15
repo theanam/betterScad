@@ -12,7 +12,6 @@ import {
   applyParametersToSource,
   describeExtensions,
   parse,
-  toStockScad,
   type CustomizerModel,
   type Diagnostic,
   type ExtensionUse,
@@ -286,7 +285,7 @@ class App {
 
     this.consolePanel = new ConsolePanel(
       (line, column) => this.editor.goTo(line, column),
-      () => this.previewDowngrade(),
+      () => void this.previewDowngrade(),
     );
 
     this.rightSplit = new Split({
@@ -876,14 +875,16 @@ class App {
   }
 
   /** Shows the stock `.scad` the open file downgrades to (spec feature 21). */
-  private previewDowngrade(): void {
+  private async previewDowngrade(): Promise<void> {
     const doc = this.workspace.active;
     if (!doc) return;
     doc.text = this.editor.source;
 
-    const result = toStockScad(doc.text, doc.name);
+    // Through the worker: the rewrite of `text(radius = …)` needs the glyph
+    // widths, and the fonts are loaded there.
+    const result = await this.client.transpile(doc.text, doc.name);
     if (result.errors.length > 0) {
-      this.reportError(`Cannot preview the downgrade with parse errors: ${result.errors[0].message}`);
+      this.reportError(`Cannot preview the downgrade: ${result.errors[0].message}`);
       return;
     }
     showDowngradePreviewDialog(doc.name, result.extensions, result.source, result.verbatim);
@@ -948,9 +949,9 @@ class App {
    * original.
    */
   private async writeStockScad(doc: Document): Promise<void> {
-    const result = toStockScad(doc.text, doc.name);
+    const result = await this.client.transpile(doc.text, doc.name);
     if (result.errors.length > 0) {
-      this.reportError(`Cannot save as .scad with parse errors: ${result.errors[0].message}`);
+      this.reportError(`Cannot save as .scad: ${result.errors[0].message}`);
       return;
     }
 

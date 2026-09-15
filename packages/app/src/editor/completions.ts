@@ -185,9 +185,24 @@ const MODULES: BuiltinDoc[] = [
     label: 'text',
     template: 'text("${1:text}", size = ${2:10})',
     detail: 'text(t, size)',
-    info: '2D text outlines. Fonts are managed in the Fonts dialog.',
+    info:
+      '2D text outlines. Fonts are managed in the Fonts dialog.\n\n' +
+      'BetterSCAD adds `radius`, which lays the run on a circle instead of a ' +
+      'straight baseline; `start` is the angle it begins at (default 90, the ' +
+      'top) and `facing` is "out" or "in". Letters are spaced by their real ' +
+      'widths.',
     type: 'class',
     forms: [
+      {
+        template: 'text("${1:LABEL}", size = ${2:5}, radius = ${3:20}, halign = "center")',
+        detail: 'text(text, size, radius, halign)  — BetterSCAD, on a circle',
+      },
+      {
+        template:
+          'text("${1:LABEL}", size = ${2:5}, radius = ${3:20}, halign = "center", ' +
+          'start = ${4:270}, facing = "in")',
+        detail: 'text(…, start, facing)  — BetterSCAD, the far side of a dial',
+      },
       {
         template: 'text("${1:text}", size = ${2:10}, halign = "center", valign = "center")',
         detail: 'text(t, size, halign, valign)',

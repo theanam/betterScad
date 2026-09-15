@@ -317,6 +317,10 @@ export const ENUM_ARGUMENTS: Record<string, Record<string, { value: string; info
     ],
   },
   text: {
+    facing: [
+      { value: 'out', info: 'Letters stand away from the centre. The default.' },
+      { value: 'in', info: 'Letters face the centre — what the bottom of a dial wants.' },
+    ],
     halign: [
       { value: 'left', info: 'The text starts at x = 0. The default.' },
       { value: 'center', info: 'Centred on x = 0, by advance width.' },

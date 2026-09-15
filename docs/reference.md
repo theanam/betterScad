@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 13 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 14 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -452,7 +452,9 @@ linear_extrude(height = 4) text("CAD", size = 24, halign = "center");
 
 `language` and `script` are accepted for compatibility.
 
-See also: [`linear_extrude()`](#entry-linear_extrude) · [`offset()`](#entry-offset)
+BetterSCAD adds `radius`, which lays the run on a circle rather than a straight baseline. See its own entry.
+
+See also: [`text(radius)`](#entry-text-radius) · [`linear_extrude()`](#entry-linear_extrude) · [`offset()`](#entry-offset)
 
 ## Moving and changing shapes
 
@@ -2510,6 +2512,82 @@ Both are built as the hull of their corner primitives, which **is** the Minkowsk
 **Saved as OpenSCAD `.scad`:** With no `r`, nothing — the call is already stock. With one, a generated module using the same hull of corner circles or spheres, defined once however many times it is used.
 
 See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(fillet)`](#entry-cylinder-fillet) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
+
+<a id="entry-text-radius"></a>
+
+### text(radius)
+
+```
+text(…, radius, start, facing)
+```
+
+Bends a line of writing around a circle, the way a name runs around the rim of a coin. Give `text()` a radius and the letters follow it instead of sitting on a straight line.
+
+```scad
+text("BETTERSCAD", size = 5, radius = 20, halign = "center", $fn = 48);
+```
+
+<img src="images/reference/text-radius.png" alt="A run centred on the top of a circle of radius 20." width="420">
+
+*A run centred on the top of a circle of radius 20.*
+
+```scad
+$fn = 48;
+text("BETTERSCAD", size = 5, radius = 22, halign = "center");
+text("BATTERY CAP", size = 5, radius = 22, halign = "center",
+     start = 270, facing = "in");
+difference() { circle(28); circle(26); }
+```
+
+<img src="images/reference/text-radius-dial.png" alt="facing = "in" at the bottom, so both halves read the same way up." width="420">
+
+*`facing = "in"` at the bottom, so both halves read the same way up.*
+
+```scad
+$fn = 64;
+difference() {
+  cylinder(h = 4, r = 30, fillet2 = 1);
+  translatez(3) linear_extrude(2)
+    text("BETTERSCAD", size = 6, radius = 22, halign = "center");
+}
+```
+
+<img src="images/reference/text-radius-engraved.png" alt="Extruded and subtracted, which is how it ends up engraved in a lid." width="420">
+
+*Extruded and subtracted, which is how it ends up engraved in a lid.*
+
+```scad
+$fn = 32;
+for (i = [0 : 11])
+  text(str(i * 5), size = 3, radius = 22, halign = "center", start = 90 - i * 30);
+difference() { circle(28); circle(26); }
+```
+
+<img src="images/reference/text-radius-gauge.png" alt="One call per label, each at its own angle — a gauge face." width="420">
+
+*One call per label, each at its own angle — a gauge face.*
+
+| Argument | |
+| --- | --- |
+| `radius` | Radius of the baseline circle. Required for an arc. |
+| `start` | Angle the run begins at, in degrees. Default `90`. |
+| `facing` | `"out"` (default) or `"in"`. |
+
+`start` is the angle the run begins at, in degrees, measured the way `rotate()` measures them. It defaults to `90` — the top.
+
+`facing` is `"out"` (the default), where the letters stand away from the centre, or `"in"`, where they face it. The far side of a dial wants `"in"`: it keeps the words the right way up when you read them.
+
+**`halign` still means what it always did**, measured around `start` rather than around x = 0 — `"center"` centres the run on the angle, `"right"` ends there. `valign` still shifts the baseline, which out here moves it towards or away from the centre.
+
+Letters are spaced by their real widths, so an `i` takes less of the arc than an `M`. Each one is placed at the middle of its own width and turned to the tangent; the letters are not themselves bent, so a very tight circle with very large text will show gaps at the tops of the letters. More radius or less size is the fix.
+
+A radius of zero is an error rather than a guess, and a circle cannot be combined with a vertical `direction` — those are two different answers to "which way does the run go".
+
+Without `radius` this is the stock `text()`, and the file exports byte for byte.
+
+**Saved as OpenSCAD `.scad`:** A generated module that places each glyph with its own `text()` call. OpenSCAD has no way to measure a glyph — `textmetrics()` is not in the release this targets — so the letter widths are measured when the file is written and carried into it as a table. Size, spacing, radius and even the string stay live in the exported file; only the measurements are fixed. **Saving needs the font loaded**, and says so rather than writing text in the wrong places.
+
+See also: [`text()`](#entry-text) · [`cube(r), square(r)`](#entry-shape-radius) · [`cylinder(fillet)`](#entry-cylinder-fillet) · [`rotate()`](#entry-rotate)
 
 <a id="entry-cylinder-fillet"></a>
 

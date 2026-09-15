@@ -11,6 +11,7 @@ import {
   Engine,
   FontRegistry,
   exportResult,
+  toStockScad,
   type AssetProvider,
   type Value,
 } from '@betterscad/engine';
@@ -19,6 +20,7 @@ import wasmUrl from 'manifold-3d/manifold.wasm?url';
 import type {
   ExportRequest,
   LoadFontRequest,
+  TranspileRequest,
   MeshPayload,
   RenderRequest,
   WorkerRequest,
@@ -54,6 +56,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         return;
       case 'load-font':
         handleFont(request);
+        return;
+      case 'transpile':
+        handleTranspile(request);
         return;
       case 'cancel':
         cancelled.add(request.id);
@@ -229,6 +234,24 @@ async function handleExport(request: ExportRequest): Promise<void> {
     },
     [file.data.buffer as ArrayBuffer],
   );
+}
+
+/**
+ * Rewrites to stock `.scad` here rather than on the main thread, because
+ * `text(radius = …)` is rewritten from measured glyph widths and the fonts are
+ * loaded into this worker.
+ */
+function handleTranspile(request: TranspileRequest): void {
+  const result = toStockScad(request.source, request.file, { fonts });
+  post({
+    type: 'transpile-result',
+    id: request.id,
+    source: result.source,
+    extensions: result.extensions,
+    rewrites: result.rewrites,
+    verbatim: result.verbatim,
+    errors: result.errors,
+  });
 }
 
 function handleFont(request: LoadFontRequest): void {

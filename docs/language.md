@@ -183,6 +183,7 @@ numbered suffix rather than shadowing it.
 | [`negative()`](#negative) | `difference()` around the scope |
 | [`cube(r)` / `square(r)`](#cuber-and-squarer) | module: a hull of corner spheres or circles |
 | [`cylinder(fillet)`](#cylinderfillet) | module: a revolve of the same profile |
+| [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
@@ -324,6 +325,45 @@ one shape rather than two that merely measure the same.
 
 **Downgrade:** a generated module that revolves the profile, and nothing when no
 fillet is given.
+
+### `text(radius)`
+
+Lays a line of writing on a circle rather than a straight baseline:
+
+```scad
+text("BETTERSCAD", size = 5, radius = 20, halign = "center");
+text("BATTERY CAP", size = 5, radius = 22, halign = "center",
+     start = 270, facing = "in");
+```
+
+`start` is the angle the run begins at, in degrees, and defaults to `90` — the
+top. `facing` is `"out"` (default), letters standing away from the centre, or
+`"in"`, letters facing it; the far side of a dial wants `"in"` so the words stay
+the right way up.
+
+`halign` keeps its meaning, measured around `start` instead of around x = 0, and
+`valign` still shifts the baseline — which out here moves it towards or away
+from the centre.
+
+Letters are spaced by their real widths, so an `i` takes less arc than an `M`.
+Each is placed at the middle of its own width and turned to the tangent. **The
+letters themselves are not bent**, so a tight circle with large text shows gaps
+at the cap line; more radius or less size is the fix. Bending the outlines would
+look better and could only ever be exported as raw polygons, which is the trade
+this declines.
+
+A radius of zero is an error, and `radius` cannot be combined with a vertical
+`direction`.
+
+**Downgrade:** a generated module placing each glyph with its own `text()` call.
+OpenSCAD has no way to measure a glyph — `textmetrics()` is not in the 2021.01
+release — so the widths are measured when the file is written and carried into
+it as a table. Size, spacing, radius, start and even the string stay live in the
+exported file; only the measurements are fixed.
+
+Because it needs measuring, **saving as `.scad` needs the font loaded**. Without
+it the export refuses and says so, rather than writing the text in the wrong
+places. The command line takes `--font` as it already does for rendering.
 
 ### `regular_polygon()`
 

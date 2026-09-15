@@ -5,7 +5,13 @@
  * model costs one pointer handoff rather than a structured clone.
  */
 
-import type { CustomizerModel, Diagnostic, ExportFormat, Value } from '@betterscad/engine';
+import type {
+  CustomizerModel,
+  Diagnostic,
+  ExportFormat,
+  ExtensionUse,
+  Value,
+} from '@betterscad/engine';
 
 /** A loaded font face. The style is what makes a `font=` spec unambiguous. */
 export interface FontFaceInfo {
@@ -47,12 +53,30 @@ export interface LoadFontRequest {
   makeDefault?: boolean;
 }
 
+/**
+ * Rewriting to stock `.scad`, which happens in the worker rather than on the
+ * main thread for one reason: `text(radius = …)` is rewritten from measured
+ * glyph widths, and the fonts live here.
+ */
+export interface TranspileRequest {
+  type: 'transpile';
+  id: number;
+  source: string;
+  /** Logical name, for diagnostics. */
+  file: string;
+}
+
 export interface CancelRequest {
   type: 'cancel';
   id: number;
 }
 
-export type WorkerRequest = RenderRequest | ExportRequest | LoadFontRequest | CancelRequest;
+export type WorkerRequest =
+  | RenderRequest
+  | ExportRequest
+  | LoadFontRequest
+  | TranspileRequest
+  | CancelRequest;
 
 /** One colour group of the rendered model. */
 export interface MeshPayload {
@@ -114,6 +138,16 @@ export interface FontResponse {
   faces: FontFaceInfo[];
 }
 
+export interface TranspileResponse {
+  type: 'transpile-result';
+  id: number;
+  source: string;
+  extensions: ExtensionUse[];
+  rewrites: string[];
+  verbatim: boolean;
+  errors: Diagnostic[];
+}
+
 export interface ErrorResponse {
   type: 'error';
   id: number;
@@ -130,5 +164,6 @@ export type WorkerResponse =
   | RenderResponse
   | ExportResponse
   | FontResponse
+  | TranspileResponse
   | ErrorResponse
   | ReadyResponse;

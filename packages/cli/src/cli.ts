@@ -83,12 +83,6 @@ export async function main(argv: string[]): Promise<void> {
     throw new Error(`Unknown format "${format}". Known formats: ${EXPORT_FORMATS.map((f) => f.format).join(', ')}`);
   }
 
-  // Transpiling needs no geometry kernel, so it skips the WASM load entirely.
-  if (options.legacy) {
-    for (const input of options.input) await transpileFile(input, options);
-    return;
-  }
-
   const fonts = new FontRegistry();
   for (const path of options.fonts) {
     const data = await readFile(path);
@@ -96,6 +90,14 @@ export async function main(argv: string[]): Promise<void> {
     if (!face) throw new Error(`Could not read font "${path}".`);
     if (fonts.families.length === 1) fonts.setDefaultFamily(face.family);
     if (!options.quiet) log(`font: ${face.family} (${face.style})`);
+  }
+
+  // Transpiling needs no geometry kernel, so it skips the WASM load entirely —
+  // but it does need the fonts, because `text(radius = …)` is rewritten from
+  // measured glyph widths.
+  if (options.legacy) {
+    for (const input of options.input) await transpileFile(input, options, fonts);
+    return;
   }
 
   const engine = await Engine.create({ fonts });
@@ -171,14 +173,16 @@ async function renderFile(
   }
 }
 
-async function transpileFile(input: string, options: Options): Promise<void> {
+async function transpileFile(input: string, options: Options, fonts: FontRegistry): Promise<void> {
   const raw = await readFile(input, 'utf8');
   const { source } = parseBscad(raw);
-  const result = toStockScad(source, basename(input));
+  const result = toStockScad(source, basename(input), { fonts });
 
   if (result.errors.length > 0) {
     for (const error of result.errors) process.stderr.write(formatDiagnostic(input, error) + '\n');
-    throw new Error('Parse errors; nothing written.');
+    // Not always a parse error: `text(radius = …)` also refuses here when the
+    // font it needs measuring was not given.
+    throw new Error('Nothing written.');
   }
 
   const outPath = resolveOutputPath(input, options, 'scad');

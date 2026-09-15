@@ -120,6 +120,7 @@ negative never reaches further than the braces it was written in.
 | `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
 | `cube(size, center, r)`<br>`square(size, center, r)` | The same box and rectangle, with a radius on the edges. `r = 0` is the stock shape | A hull of corner spheres or circles |
 | `cylinder(…, fillet)`<br>`fillet1`, `fillet2`, `fillet_style` | Takes the rim off either end, rounded or chamfered. `1` is the bottom and `2` the top, as with `r1`/`r2` | A revolve of the same profile |
+| `text(…, radius)`<br>`start`, `facing` | Runs the writing around a circle instead of a straight line, spaced by real letter widths | Per-glyph `text()` calls, with the widths measured into the file |
 | `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
 | `thread(d, pitch, h)` | A screw thread. Add `internal = true` for the hole the same bolt screws into | A generated module sweeping the profile up a twisted extrusion |
 | `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |
