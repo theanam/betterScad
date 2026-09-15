@@ -266,3 +266,27 @@ publishes them at `reference/`, and deliberately keeps them out of the service
 worker's precache — seventy images is a lot to download on a first visit to pay
 for a dialog that may never be opened. The worker's lazy path caches the ones
 actually looked at, so the reference works offline once it has been read.
+
+## The version
+
+`scripts/version.mjs`
+
+`npm run bump -- minor | patch | major`, and never by hand. The number appears
+in eleven places: five `package.json` files, a literal in the engine's public
+API — `ENGINE_VERSION`, which has to be a literal because the engine reports its
+own version and nothing generates that file — and four entries in the lock file.
+
+What each step means here:
+
+| | |
+| --- | --- |
+| **minor** | Anything a user can see in the editor, the language, or an extension: a new element, a new panel, a changed behaviour. |
+| **patch** | A release that adds no capability — fixes, documentation, chores. |
+| **major** | A break in the language or in the file format. |
+
+The lock file is the one that bites. `npm ci` compares it against the manifests
+and refuses to install when they disagree, so a partial bump fails CI at the
+first step, before any later step has a chance to explain why. The bump script
+therefore leaves the lock to npm (`npm install --package-lock-only`) rather than
+rewriting it, and `npm run version:check` reads all eleven and names the ones
+that differ.

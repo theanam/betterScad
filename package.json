@@ -1,7 +1,7 @@
 {
   "name": "betterscad",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A modern, local-first, browser-based CAD editor with full OpenSCAD language compatibility.",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,9 @@
     "bscad": "node packages/cli/bin/bscad.js",
     "reference": "node scripts/reference/build.mjs",
     "reference:check": "node scripts/reference/build.mjs --check",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "bump": "node scripts/version.mjs",
+    "version:check": "node scripts/version.mjs --check"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

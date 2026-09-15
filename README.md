@@ -243,7 +243,7 @@ publishes on every push to `main` with no repo settings to change.
 
 ## Contributing
 
-Issues and pull requests welcome. Three non-negotiable rules:
+Issues and pull requests welcome. Four non-negotiable rules:
 
 1. **Any new language syntax ships with its plain-`.scad` downgrade**,
    implemented in [`transpile.ts`](packages/engine/src/transpile.ts) and covered
@@ -258,13 +258,24 @@ Issues and pull requests welcome. Three non-negotiable rules:
    regenerates [`docs/reference.md`](docs/reference.md), and the app's Help view
    picks it up from the same file. An element that is not in the reference is
    not finished, and CI fails if the reference is out of date.
+4. **Every change moves the version**, by semver:
+   - **minor** — anything a user can see in the editor, the language, or an
+     extension: a new element, a new panel, a changed behaviour.
+   - **patch** — a release that adds no capability: fixes, docs, chores.
+   - **major** — a break in the language or in the file format.
+
+   Run `npm run bump -- minor` (or `patch`, `major`). The number lives in eleven
+   places — five manifests, a literal in the engine's API, and the lock file —
+   so it is never edited by hand, and `npm run version:check` fails CI when any
+   of them drifts.
 
 ```sh
 npm run typecheck
 npm test
 npm run build
-npm run reference     # after adding or changing any element
-npm run screenshot    # retakes the README's app screenshots, needs `npm run dev`
+npm run reference          # after adding or changing any element
+npm run bump -- minor      # or patch; never edit a version by hand
+npm run screenshot         # retakes the README's app screenshots, needs `npm run dev`
 ```
 
 How it all fits together: [`docs/architecture.md`](docs/architecture.md).

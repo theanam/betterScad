@@ -40,6 +40,12 @@ jobs:
       - name: Check the reference is up to date
         run: npm run reference:check
 
+      # The version lives in eleven places. This fails when a bump reached some
+      # of them and not the rest — including the lock file, whose disagreement
+      # would otherwise surface as `npm ci` refusing to install at all.
+      - name: Check the version agrees with itself
+        run: npm run version:check
+
       # Renders every example headlessly, which exercises the engine, the CLI
       # and the export pipeline against real models rather than fixtures.
       - name: Render examples
