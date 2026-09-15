@@ -119,22 +119,16 @@ resolution = 48; // [12:8:120]
 
 $fn = resolution;
 
-module rounded_box(s, r) {
-  // A hull of eight corner spheres is the classic way to round a box.
-  hull() {
-    for (x = [-1, 1], y = [-1, 1], z = [-1, 1]) {
-      translate([x, y, z] * (s / 2 - r)) sphere(r);
-    }
-  }
-}
+// The rounding belongs to the cube, not to a module you have to write first.
+cube(size, center = true, r = fillet);
 
-difference() {
-  rounded_box(size, fillet);
-  sphere(d = bite);
-}
+// negative() makes a shape into a hole in everything beside it, so the bite is
+// written where the bite is rather than hoisted into a difference() up top.
+negative() sphere(d = bite);
 
-// '%' draws a reference without contributing geometry.
-%translate([0, 0, -size / 2 - 2]) cube([size * 1.4, size * 1.4, 1], center = true);
+// '%' draws a reference without contributing geometry, and translatez() moves
+// along one axis without counting commas in a vector.
+%translatez(-size / 2 - 2) cube([size * 1.4, size * 1.4, 1], center = true);
 
 echo("volume target", size, bite);
 `;

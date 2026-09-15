@@ -1551,36 +1551,37 @@ See also: [`* (disable)`](#entry-disable) · [`# (highlight)`](#entry-highlight)
 # shape;
 ```
 
-Draws a shape in a bright colour so you can pick it out of everything around it, while leaving it exactly where it was and exactly what it was.
+Draws a shape as a see-through overlay so you can find it — including the parts hidden inside something else, and including a hole while it is still being cut. Perfect for seeing where a bore actually goes.
+
+```scad
+difference() {
+  cube([40, 40, 12], center = true);
+  #cylinder(h = 30, r = 8, center = true, $fn = 40);
+}
+```
+
+<img src="images/reference/highlight.png" alt="The cutter is visible in cyan, sticking out either side — and it still cuts." width="420">
+
+*The cutter is visible in cyan, sticking out either side — and it still cuts.*
 
 ```scad
 cube([40, 40, 10], center = true);
 #translate([0, 0, 13]) sphere(8, $fn = 48);
 ```
 
-<img src="images/reference/highlight.png" alt="The sphere is still part of the model; the cyan only says "this one"." width="420">
+<img src="images/reference/highlight-solid.png" alt="On something that was going to be drawn anyway, the cyan only says "this one"." width="420">
 
-*The sphere is still part of the model; the cyan only says "this one".*
+*On something that was going to be drawn anyway, the cyan only says "this one".*
 
-```scad
-difference() {
-  cube([40, 40, 12], center = true);
-  cylinder(h = 30, r = 8, center = true, $fn = 40);
-}
-%cylinder(h = 30, r = 8, center = true, $fn = 40);
-```
+It is an overlay, not a colour. The shape goes on doing exactly what it was doing: a `#` on a cutter inside a `difference()` still cuts, and a `#` on a `negative()` still carves. You simply get to see it.
 
-<img src="images/reference/highlight-cutter.png" alt="The workaround: a % ghost of the cutter, alongside the real one." width="420">
+That is the whole reason the modifier is worth having. The interesting case is the one you cannot otherwise see — geometry that is consumed by a boolean and leaves only a hole behind.
 
-*The workaround: a `%` ghost of the cutter, alongside the real one.*
-
-It is a preview treatment only: the shape still contributes whatever it was contributing, and exports are untouched.
+Preview only: exports are untouched.
 
 BetterSCAD draws it in the cool cyan reserved for exactly this, so a highlighted shape can never be mistaken for model material — the model is amber.
 
-**A `#` on a cutting shape inside a `difference()` is not drawn.** Stock OpenSCAD shows the cutter as a transparent highlighted volume, which is the single most common use of the modifier; here the boolean consumes the cutter before the preview sees it, so there is nothing left to colour. Until that gap is closed, use `%` on a copy of the cutter to see where a hole is going.
-
-See also: [`% (ghost)`](#entry-background) · [`difference()`](#entry-difference)
+See also: [`% (ghost)`](#entry-background) · [`difference()`](#entry-difference) · [`negative()`](#entry-negative)
 
 <a id="entry-background"></a>
 

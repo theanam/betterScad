@@ -43,7 +43,7 @@ you.
 | **Full OpenSCAD language** | Existing `.scad` files open and render unchanged. |
 | **Real files** | Opens and saves straight to disk, with a download/upload fallback on Firefox and Safari. |
 | **Live customizer** | Sliders and dropdowns generated from your `//` parameter comments. |
-| **Modern editor** | Syntax highlighting, autocomplete with every call form, the signature kept on screen while you fill a call in, tabs, inline errors. |
+| **Modern editor** | Syntax highlighting, autocomplete with every call form, suggested values for arguments that take a fixed set, the signature kept on screen while you fill a call in, tabs, inline errors. |
 | **Type in inches** | `5in` becomes `127` as you type. The file stays in millimetres — see below. |
 | **Built-in reference** | Every element of the language explained plainly, with a rendered example of each. `F1`, or the Help button. |
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |

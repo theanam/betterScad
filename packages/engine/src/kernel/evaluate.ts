@@ -70,7 +70,7 @@ export interface BuildResult {
   /** 2D result, when the scene is two-dimensional. */
   contours2d: { contours: [number, number][][]; color: RGBA }[];
   /** Preview-only `%`-role geometry. */
-  annotations: { mesh: TriMesh; color: RGBA }[];
+  annotations: { mesh: TriMesh; color: RGBA; display: Display }[];
   dimension: 2 | 3 | 0;
   stats: { nodes: number; triangles: number; vertices: number; volume: number; area: number };
 }
@@ -359,8 +359,25 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
     // A child's own display role (`#`) applies to the geometry it produced,
     // whether that child is a leaf primitive or a whole subtree.
     const childDisplay = resolveDisplay(child.roles);
+
+    // `#` is an overlay, not a colour.
+    //
+    // OpenSCAD draws the marked subtree as a transparent volume *and* lets it
+    // go on doing whatever it was doing — which is the only reason the modifier
+    // is useful on a cutter: the hole is still cut, and you can see where. A
+    // copy therefore rides along in `annotations`, which no boolean can reach,
+    // so it survives being consumed by the very difference it is marking.
+    // Recolouring the pieces instead, as this used to, showed nothing at all in
+    // that case: the pieces were subtracted away and took the highlight with
+    // them.
+    if (childDisplay === 'highlight') {
+      annotations.push(
+        ...evaluated.pieces.map((p) => ({ ...p, display: 'highlight' as Display })),
+      );
+    }
+
     const displayed =
-      childDisplay === 'normal'
+      childDisplay === 'normal' || childDisplay === 'highlight'
         ? evaluated
         : { ...evaluated, pieces: evaluated.pieces.map((p) => ({ ...p, display: childDisplay })) };
 
@@ -375,7 +392,13 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
         negatives.push(...displayed.pieces);
         break;
       default:
-        operands.push(displayed);
+        // Annotations already went into this scope's own list, a few lines up.
+        // Left on the operand they would be collected a second time by
+        // `applyOperation`, which flat-maps them out of every operand it is
+        // given — and since the result of that is itself an operand one level
+        // up, a `%` ghost doubled per level of nesting. Two unions deep, four
+        // copies of the same preview geometry.
+        operands.push(displayed.annotations.length > 0 ? { ...displayed, annotations: [] } : displayed);
     }
   }
 
@@ -402,8 +425,13 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
     }
   }
 
+  // `highlight` is deliberately not applied here: the parent's loop above has
+  // already carried a copy into `annotations`, and recolouring the pieces too
+  // would draw the subtree twice, once solid and once as the overlay.
   const display = resolveDisplay(node.roles);
-  if (display !== 'normal') pieces = pieces.map((p) => ({ ...p, display }));
+  if (display !== 'normal' && display !== 'highlight') {
+    pieces = pieces.map((p) => ({ ...p, display }));
+  }
 
   return {
     pieces,
@@ -1213,7 +1241,11 @@ function extract(result: Assembly, ctx: Ctx, merge: boolean): BuildResult {
     if (piece.dim !== 3) continue;
     const solid = piece.solid as Manifold;
     if (solid.isEmpty()) continue;
-    annotations.push({ mesh: manifoldMesh(solid), color: piece.color ?? [0.6, 0.6, 0.6, 0.25] });
+    annotations.push({
+      mesh: manifoldMesh(solid),
+      color: piece.color ?? [0.6, 0.6, 0.6, 0.25],
+      display: piece.display,
+    });
   }
 
   if (has2 && has3) {

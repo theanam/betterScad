@@ -643,7 +643,10 @@ export function renderGeometry(geometry, options = {}) {
   if (ghosts.length > 0) {
     const layer = makeTarget(target.width, target.height);
     for (const part of ghosts) {
-      drawMesh(layer, camera, part.mesh, ANNOTATION_ALBEDO, 1, true);
+      // `#` arrives by the same route as `%` but is not a ghost: it is the
+      // "look here" overlay, and it keeps the cool cyan the app gives it.
+      const albedo = part.display === 'highlight' ? HIGHLIGHT_COLOR : ANNOTATION_ALBEDO;
+      drawMesh(layer, camera, part.mesh, albedo, 1, true);
     }
     for (let i = 0; i < layer.alpha.length; i++) {
       if (layer.alpha[i] === 0 || layer.depth[i] >= target.depth[i]) continue;

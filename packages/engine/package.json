@@ -1,6 +1,6 @@
 {
   "name": "@betterscad/engine",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "BetterSCAD geometry + language engine. Standalone, UI-agnostic, embeddable.",
   "license": "MIT",
   "type": "module",

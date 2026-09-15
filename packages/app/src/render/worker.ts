@@ -148,8 +148,10 @@ async function handleRender(request: RenderRequest): Promise<void> {
   const meshes = result.geometry.parts.map((part) =>
     toPayload(part.mesh, part.color, part.display, transfer),
   );
+  // Its own display, not a blanket `transparent`: `%` geometry is a grey ghost
+  // and `#` geometry is the cyan overlay, and they arrive by the same route.
   const annotations = result.geometry.annotations.map((part) =>
-    toPayload(part.mesh, part.color, 'transparent', transfer),
+    toPayload(part.mesh, part.color, part.display, transfer),
   );
 
   const contours = result.geometry.contours2d.flatMap((group) =>

@@ -18,6 +18,7 @@
  */
 
 import { BUILTIN_FUNCTIONS, BUILTIN_MODULES } from '@betterscad/engine';
+
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { StateField, type EditorState, type Extension } from '@codemirror/state';
 import { EditorView, showTooltip, type Tooltip } from '@codemirror/view';
@@ -294,6 +295,48 @@ export function activeParam(call: CallSite, signature: Signature): number {
   return call.argument < signature.params.length ? call.argument : -1;
 }
 
+/**
+ * Arguments whose value is one of a fixed set, and what that set is.
+ *
+ * Typing `fillet_style = ` and being offered every global name in the language
+ * is the same unhelpfulness parameter completion already fixed one level up.
+ * There are only two right answers here and the editor knows both.
+ *
+ * Keyed by module as well as argument: `halign` means something on `text()` and
+ * nothing anywhere else, and a user module that happens to share the name
+ * should not inherit the suggestions.
+ *
+ * Every value here is checked against the engine by a test — an enum the editor
+ * offers and the engine rejects is worse than no suggestion at all.
+ */
+export const ENUM_ARGUMENTS: Record<string, Record<string, { value: string; info: string }[]>> = {
+  cylinder: {
+    fillet_style: [
+      { value: 'round', info: 'A true arc, tangent to both the wall and the end face. The default.' },
+      { value: 'chamfer', info: 'A straight cut across the same two points the arc would meet.' },
+    ],
+  },
+  text: {
+    halign: [
+      { value: 'left', info: 'The text starts at x = 0. The default.' },
+      { value: 'center', info: 'Centred on x = 0, by advance width.' },
+      { value: 'right', info: 'The text ends at x = 0.' },
+    ],
+    valign: [
+      { value: 'baseline', info: 'The baseline sits at y = 0. The default.' },
+      { value: 'top', info: 'The font\u2019s ascender line sits at y = 0.' },
+      { value: 'center', info: 'The middle of the descender..ascender band sits at y = 0.' },
+      { value: 'bottom', info: 'The font\u2019s descender line sits at y = 0.' },
+    ],
+    direction: [
+      { value: 'ltr', info: 'Left to right. The default.' },
+      { value: 'rtl', info: 'Right to left.' },
+      { value: 'ttb', info: 'Top to bottom.' },
+      { value: 'btt', info: 'Bottom to top.' },
+    ],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Completion
 // ---------------------------------------------------------------------------
@@ -313,9 +356,12 @@ export function activeParam(call: CallSite, signature: Signature): number {
  */
 export function parameterCompletions(context: CompletionContext): CompletionResult | null {
   const found = signatureAt(context.state.doc.toString(), context.pos);
-  if (!found || !found.call.atArgumentStart) return null;
+  if (!found) return null;
 
   const { call, signature } = found;
+  // Past the name and into the value: a different question, with a much better
+  // answer than the language's global namespace when the argument has one.
+  if (!call.atArgumentStart) return enumCompletions(context, call, signature);
   const options: Completion[] = signature.params
     .filter((param) => !call.named.includes(param.name))
     .map((param, index) => ({
@@ -335,6 +381,50 @@ export function parameterCompletions(context: CompletionContext): CompletionResu
 
   const word = context.matchBefore(/[A-Za-z_$][\w$]*/);
   return { from: word ? word.from : context.pos, options, validFor: /^[\w$]*$/ };
+}
+
+/**
+ * The values an argument accepts, when it accepts a fixed set of them.
+ *
+ * Offered whether or not the quote has been typed yet, because remembering that
+ * a string argument wants quotes is exactly the sort of thing the editor should
+ * be doing for you. When `closeBrackets` has already dropped in the closing
+ * quote, the completion stops short of it rather than leaving a stray one.
+ */
+function enumCompletions(
+  context: CompletionContext,
+  call: CallSite,
+  signature: Signature,
+): CompletionResult | null {
+  const index = activeParam(call, signature);
+  const param = index >= 0 ? signature.params[index] : undefined;
+  const values = param && ENUM_ARGUMENTS[call.name]?.[param.name];
+  if (!values) return null;
+
+  // An open quote, if there is one, is part of what the completion replaces —
+  // otherwise it would insert a second one inside the first.
+  const open = context.matchBefore(/"[^"\n]*/);
+  const word = context.matchBefore(/[\w-]*/);
+  const from = open ? open.from : (word?.from ?? context.pos);
+
+  // `closeBrackets` inserts the pair, so the closing quote is usually already
+  // sitting under the cursor.
+  const closed = context.state.sliceDoc(context.pos, context.pos + 1) === '"';
+
+  return {
+    from,
+    options: values.map((entry, rank) => ({
+      label: `"${entry.value}"`,
+      apply: closed ? `"${entry.value}` : `"${entry.value}"`,
+      detail: 'value',
+      info: entry.info,
+      type: 'enum',
+      // Above everything else: inside a known argument these are the answer,
+      // and the global namespace is noise.
+      boost: 9 - rank / 100,
+    })),
+    validFor: /^"?[\w-]*"?$/,
+  };
 }
 
 // ---------------------------------------------------------------------------

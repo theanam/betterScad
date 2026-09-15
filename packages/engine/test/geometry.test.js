@@ -207,10 +207,46 @@ test('% inside a difference does not cut', async () => {
   assert.ok(Math.abs(volumeOf(result) - 1000) < 1e-4);
 });
 
-test('# highlights while still contributing geometry', async () => {
+test('# draws an overlay and still contributes its geometry', async () => {
+  // OpenSCAD's `#` is a transparent volume laid over the model, not a colour
+  // applied to it. The part itself is untouched; the highlight rides alongside.
   const result = await render('#cube(10);');
   assert.ok(Math.abs(volumeOf(result) - 1000) < 1e-4);
-  assert.equal(result.geometry.parts[0].display, 'highlight');
+  assert.equal(result.geometry.parts[0].display, 'normal');
+  assert.deepEqual(result.geometry.annotations.map((a) => a.display), ['highlight']);
+});
+
+test('# on a cutter survives the cut it is marking', async () => {
+  // The whole reason the modifier exists: the hole is still cut, and you can
+  // see where. Recolouring the piece showed nothing, because the piece was
+  // subtracted away and took the highlight with it.
+  for (const source of [
+    'difference() { cube(20, center = true); #cylinder(h = 30, r = 6, center = true); }',
+    'cube(20); negative() #translate([10, 10, -1]) cylinder(h = 30, r = 5);',
+  ]) {
+    const result = await render(source);
+    assert.deepEqual(
+      result.geometry.annotations.map((a) => a.display),
+      ['highlight'],
+      `no highlight survived: ${source}`,
+    );
+    // And it is still a cut, not merely a picture of one.
+    assert.ok(volumeOf(result) < 8000, `${source}: nothing was removed`);
+  }
+});
+
+test('preview geometry is carried up once, however deep it is nested', async () => {
+  // It used to be collected twice at every level — once into the scope's own
+  // list and again out of the operand — so a ghost two unions deep arrived four
+  // times over.
+  for (const source of [
+    'cube(10); %cylinder(h = 30, r = 6);',
+    'union() { cube(20); %cylinder(h = 30, r = 6); }',
+    'union() { union() { union() { cube(20); %cylinder(h = 30, r = 6); } } }',
+  ]) {
+    const result = await render(source);
+    assert.equal(result.geometry.annotations.length, 1, `duplicated by: ${source}`);
+  }
 });
 
 test('! renders only its subtree, discarding everything else', async () => {

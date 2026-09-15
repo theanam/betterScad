@@ -393,23 +393,27 @@ export class Viewport {
     const [r, g, b, a] = payload.color;
     const highlight = payload.display === 'highlight';
     const transparent = payload.display === 'transparent';
+    // Both are overlays laid over the model rather than part of it, so both
+    // stay out of the depth buffer and draw last. `#` is the more assertive of
+    // the two — it is answering "where is this?" — so it is the less sheer.
+    const overlay = highlight || transparent;
 
     const material = new MeshStandardMaterial({
       color: highlight ? new Color(token('--bs-cut-300', '#5cd3e0')) : new Color(r, g, b),
       roughness: 0.62,
       metalness: 0.04,
       flatShading: false,
-      // `%`-role geometry is a reference, so it must not occlude the model.
-      transparent: transparent || a < 1,
-      opacity: transparent ? 0.22 : a,
-      depthWrite: !transparent,
+      // `%` and `#` geometry are references, so neither may occlude the model.
+      transparent: overlay || a < 1,
+      opacity: transparent ? 0.22 : highlight ? 0.45 : a,
+      depthWrite: !overlay,
       // 2D-derived and imported meshes can have inconsistent winding; drawing
       // both sides avoids confusing black holes in the preview.
       side: DoubleSide,
     });
 
     const mesh = new Mesh(geometry, material);
-    mesh.renderOrder = transparent ? 1 : 0;
+    mesh.renderOrder = overlay ? 1 : 0;
     return mesh;
   }
 
