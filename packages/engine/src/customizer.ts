@@ -62,6 +62,18 @@ const HIDDEN_GROUP = 'Hidden';
 const DEFAULT_GROUP = 'Parameters';
 
 /**
+ * Whether a section marker means "keep these out of the Customizer".
+ *
+ * Matched without regard to case, as OpenSCAD does. `/* [Hidden] *​/` is the
+ * spelling in the documentation, but `[hidden]` is what people type, and a
+ * section that silently shows every parameter it was meant to conceal is a
+ * worse failure than an unknown section name would be.
+ */
+function isHiddenSection(group: string): boolean {
+  return group.trim().toLowerCase() === HIDDEN_GROUP.toLowerCase();
+}
+
+/**
  * Extracts the customizable parameters from a parsed file.
  *
  * Only *top-level* assignments with literal values are customizable, which is
@@ -83,7 +95,7 @@ export function buildCustomizerModel(parsed: ParseResult): CustomizerModel {
 
     const line = stmt.span.start.line;
     const group = sectionAt(sections, stmt.span.start.offset);
-    if (group === HIDDEN_GROUP) continue;
+    if (isHiddenSection(group)) continue;
 
     const literal = literalValue(stmt.value);
     if (literal === NOT_LITERAL) continue;
