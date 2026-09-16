@@ -121,6 +121,7 @@ negative never reaches further than the braces it was written in.
 | `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
 | `cube(size, center, r)`<br>`square(size, center, r)` | The same box and rectangle, with a radius on the edges. `r = 0` is the stock shape | A hull of corner spheres or circles |
 | `cylinder(…, chamfer)`<br>`chamfer1`, `chamfer2`, `edge_style` | Takes the rim off either end — cut flat by default, or `edge_style = "round"`. `1` is the bottom and `2` the top, as with `r1`/`r2` | A revolve of the same profile |
+| `linear_extrude(…, scale, ease)` | Curves a tapered extrusion into its ends instead of running dead straight. `ease = 0` is the stock shape; `[bottom, top]` eases each end on its own | A generated module stacking the same short extrusions |
 | `text(…, radius)`<br>`start`, `facing` | Runs the writing around a circle instead of a straight line, spaced by real letter widths | Per-glyph `text()` calls, with the widths measured into the file |
 | `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
 | `thread(d, pitch, h)` | A screw thread. Add `internal = true` for the hole the same bolt screws into | A generated module sweeping the profile up a twisted extrusion |

@@ -221,6 +221,89 @@ export const NEW_SHAPES: ReferenceGroup = {
       keywords: ['chamfer', 'bevel', 'round', 'edge', 'rim', 'break edge', 'ease'],
     },
     {
+      id: 'linear-extrude-ease',
+      name: 'linear_extrude(ease)',
+      signature: 'linear_extrude(…, scale, ease)',
+      extension: true,
+      plain:
+        'Makes a tapered extrusion curve into its ends instead of running dead straight — the ' +
+        'difference between a cone and a trumpet. `ease` is how much: `0` is the straight taper, ' +
+        '`1` is fully curved.',
+      details: [
+        'It only does anything alongside `scale`. `ease` shapes *how* the taper gets from the ' +
+          'bottom size to the top one; with nothing to taper there is no path to bend.',
+        '`ease = 0` is not merely close to the straight taper, it is the same solid — the curve ' +
+          'is `t` plus a correction at each end, and at `0` the corrections are nothing. So the ' +
+          'argument can be added to an existing model and dialled up from zero without the ' +
+          'shape jumping at the moment it is written.',
+        '`[bottom, top]` eases each end separately, which is the useful one. `[1, 0]` leaves the ' +
+          'base vertical and lets it curve away into the top — a column growing out of a slab, ' +
+          'the shape a fillet makes. A single number does both ends and gives an S.',
+        'The taper is what bends; `twist` stays linear through it. They are separate questions, ' +
+          'and one argument that quietly answered both could not be used for either alone.',
+        'The curve is built from `slices` straight segments, so `slices` is what it costs. Left ' +
+          'alone an eased extrude uses 48 — enough that the facets do not read at ordinary ' +
+          'sizes. A straight one still uses 1, and pays nothing.',
+        'Values outside `0` to `1` are clamped, with a warning. Past `1` the profile would fold ' +
+          'back on itself and build the extrusion inside out.',
+      ],
+      params: [
+        {
+          name: 'ease',
+          description:
+            'How curved the taper is: `0` (straight, the default) to `1`, or `[bottom, top]`.',
+        },
+      ],
+      downgrade:
+        'With no ease, nothing — the call is already stock. With one, a generated module that ' +
+        'stacks the same short extrusions, defined once however many times it is used.',
+      examples: [
+        {
+          code: [
+            'linear_extrude(height = 30, scale = 0.3, $fn = 64)',
+            '  circle(12);',
+            'translate([40, 0, 0])',
+            '  linear_extrude(height = 30, scale = 0.3, ease = 1, $fn = 64)',
+            '    circle(12);',
+          ].join('\n'),
+          image: 'linear-extrude-ease',
+          view: 'front',
+          caption: 'The same taper twice. Straight on the left, `ease = 1` on the right.',
+        },
+        {
+          code: [
+            'linear_extrude(height = 30, scale = 0.25, ease = [1, 0], $fn = 64)',
+            '  circle(12);',
+          ].join('\n'),
+          image: 'linear-extrude-ease-base',
+          view: 'front',
+          caption: '`[1, 0]` eases the bottom only: the base leaves vertical, like a fillet.',
+        },
+        {
+          code: [
+            'linear_extrude(height = 30, scale = 0.25, ease = [0, 1], $fn = 64)',
+            '  circle(12);',
+          ].join('\n'),
+          image: 'linear-extrude-ease-top',
+          view: 'front',
+          caption: 'The other way round — straight off the base, flattening into the top.',
+        },
+        {
+          code: [
+            'linear_extrude(height = 40, scale = 0.4, twist = 120, ease = 1, $fn = 6)',
+            '  circle(14);',
+          ].join('\n'),
+          image: 'linear-extrude-ease-twist',
+          caption: 'The taper curves; the twist stays linear through it.',
+        },
+      ],
+      see: ['linear_extrude', 'cylinder-chamfer', 'rotate_extrude', 'hull'],
+      keywords: [
+        'ease', 'eased', 'curve', 'curved taper', 'smooth', 'smoothstep', 'flare', 'trumpet',
+        'loft', 'blend', 'fillet taper', 'draft',
+      ],
+    },
+    {
       id: 'regular_polygon',
       name: 'regular_polygon()',
       signature: 'regular_polygon(sides, length)',

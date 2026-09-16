@@ -183,6 +183,7 @@ numbered suffix rather than shadowing it.
 | [`negative()`](#negative) | `difference()` around the scope |
 | [`cube(r)` / `square(r)`](#cuber-and-squarer) | module: a hull of corner spheres or circles |
 | [`cylinder(chamfer)`](#cylinderchamfer) | module: a revolve of the same profile |
+| [`linear_extrude(ease)`](#linear_extrudeease) | module: a stack of short straight extrusions |
 | [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
@@ -330,6 +331,65 @@ one shape rather than two that merely measure the same.
 
 **Downgrade:** a generated module that revolves the profile, and nothing when no
 chamfer is given.
+
+### `linear_extrude(ease)`
+
+A tapered extrusion that curves into its ends rather than running dead straight:
+
+```scad
+linear_extrude(height = 30, scale = 0.3, ease = 1) circle(12);        // S-curve
+linear_extrude(height = 30, scale = 0.3, ease = [1, 0]) circle(12);   // base only
+linear_extrude(height = 30, scale = 0.3, ease = 0) circle(12);        // stock
+```
+
+`ease` only means anything alongside `scale`. It shapes *how* the profile gets
+from the bottom size to the top one, so with nothing to taper there is no path
+to bend.
+
+The profile is a cubic, written as the straight line plus a correction hung off
+each end:
+
+```
+f(t) = t − bottom·t(t−1)² − top·t²(t−1)
+```
+
+That form is worth preferring over the Hermite basis it came from, because it
+puts the important property where it can be read off: at `ease = 0` both
+corrections vanish and `f(t) = t`. The straight taper is not approximated by the
+eased one, it **is** the eased one, so the argument can be added to an existing
+model and turned up from zero without the shape jumping at the moment it is
+written. At `ease = 1` both ends flatten and the result is the smoothstep
+`3t² − 2t³`.
+
+`[bottom, top]` eases each end independently, which is the case worth having.
+`[1, 0]` leaves the base vertical and curves away into the top — a column
+growing out of a slab, which is the shape a fillet makes. A single number does
+both ends.
+
+Values are clamped to `0`–`1`, with a warning. The bound is not arbitrary: a
+cubic rising from 0 to 1 is monotonic while both end tangents lie in `[0, 3]`,
+and past that the profile folds back and builds the extrusion inside out. There
+is no useful reading of that, so it is refused rather than rendered.
+
+The taper is what bends. `twist` stays linear through it, because they answer
+separate questions and one argument that quietly bent both could not be used for
+either on its own.
+
+`Manifold.extrude` interpolates its scale linearly and offers no hook, so the
+curve is built as a stack of `slices` short extrusions — each straight, each
+starting where the last one stopped. That is also exactly what the generated
+`.scad` module does, which is the point: the two agree because they are the same
+construction, not because two implementations were kept in step by hand. It goes
+as far as where the `center` offset is applied — folded into each segment rather
+than applied to the union afterwards, because the union merges the coplanar
+faces where segments meet and merging is decided on the coordinates it is given.
+Translating afterwards produced a mesh that differed from the export's by a few
+triangles on an identical solid.
+
+An eased extrude defaults to 48 slices, where a straight one uses 1 and pays
+nothing. The named spellings `"none"`, `"in"`, `"out"` and `"in_out"` also bind,
+resolved inside the generated module as well as the engine so that a computed
+argument behaves like a literal one.
 
 ### `text(radius)`
 

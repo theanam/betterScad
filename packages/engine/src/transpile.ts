@@ -22,6 +22,7 @@ import {
   Statement,
 } from './ast.js';
 import { Diagnostic } from './diagnostics.js';
+import { EASE_SLICES } from './scene.js';
 import { FontRegistry } from './fonts.js';
 import { MODIFIER_ROLES, parse } from './parser.js';
 import { getRole } from './roles.js';
@@ -136,6 +137,12 @@ const SUGARED_SHAPES: Record<string, SugaredShape> = {
     triggers: ['radius'],
     describe: 'text(radius = …)',
   },
+  linear_extrude: {
+    helper: 'eased_extrude',
+    // Never positional: `ease` sits past `v` in a signature nobody counts out.
+    triggers: ['ease'],
+    describe: 'linear_extrude(ease = …)',
+  },
   cylinder: {
     helper: 'chamfered_cylinder',
     // Never positional: they sit past `d2` in a signature nobody counts out.
@@ -158,6 +165,49 @@ function usesSugar(shape: SugaredShape, args: Argument[]): boolean {
 }
 
 const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
+  eased_extrude: {
+    params: 'height, scale = 1, ease = 0, slices = 48, twist = 0, center = false, shear = [0, 0]',
+    body: [
+      '// A tapered extrusion whose scale follows a curve instead of a straight',
+      '// line. stock linear_extrude() interpolates its scale linearly, so the',
+      '// curve is built from short extrusions, each straight, each starting',
+      '// where the last one stopped.',
+      '//',
+      '// The profile is f(t) = t - ease[0]*t*(t-1)^2 - ease[1]*t^2*(t-1): the',
+      '// straight line, with a correction hung off each end. At ease = 0 both',
+      '// corrections vanish and this is exactly a stock linear_extrude().',
+      's = is_list(scale) ? scale : [scale, scale];',
+      '// `ease` is a number, a [bottom, top] pair, or one of the named',
+      '// spellings. All three are resolved here rather than at export time, so',
+      '// an argument that is computed rather than written out behaves the same.',
+      'n = is_string(ease)',
+      '  ? (ease == "in" ? [1, 0] : ease == "out" ? [0, 1] : ease == "in_out" ? [1, 1] : [0, 0])',
+      '  : is_list(ease) ? ease : [ease, ease];',
+      '// Clamped to 0..1, as the evaluator clamps it: past 1 the profile would',
+      '// fold back on itself and build the extrusion inside out.',
+      'e = [min(1, max(0, n[0])), min(1, max(0, n[1]))];',
+      'h = abs(height);',
+      '// `shear` carries v=, and `scale` in Z carries a negative height, both',
+      '// of which the stock module applies around the extrusion rather than',
+      '// inside it. Identity when unused.',
+      'multmatrix([[1, 0, shear[0], 0], [0, 1, shear[1], 0], [0, 0, 1, 0], [0, 0, 0, 1]])',
+      '  scale([1, 1, height < 0 ? -1 : 1])',
+      '    for (i = [0 : slices - 1])',
+      '      let (t0 = i / slices,',
+      '           t1 = (i + 1) / slices,',
+      '           f0 = t0 - e[0] * t0 * (t0 - 1) * (t0 - 1) - e[1] * t0 * t0 * (t0 - 1),',
+      '           f1 = t1 - e[0] * t1 * (t1 - 1) * (t1 - 1) - e[1] * t1 * t1 * (t1 - 1),',
+      '           a = [1 + (s[0] - 1) * f0, 1 + (s[1] - 1) * f0],',
+      '           b = [1 + (s[0] - 1) * f1, 1 + (s[1] - 1) * f1])',
+      '        translate([0, 0, h * t0 - (center ? h / 2 : 0)])',
+      '          rotate([0, 0, -twist * t0])',
+      '            linear_extrude(height = h / slices,',
+      '                           twist = twist * (t1 - t0),',
+      '                           scale = [b[0] / a[0], b[1] / a[1]])',
+      '              scale(a)',
+      '                children();',
+    ],
+  },
   rounded_square: {
     params: 'size, center = false, r = 0',
     body: [
@@ -704,8 +754,50 @@ class Printer {
    * any of `r`, `d`, `r1`, `d1`, `r2`, `d2` and `chamfer`, so those are resolved
    * into the helper's own names here.
    */
+  /**
+   * Maps a `linear_extrude(ease = …)` call onto the generated module.
+   *
+   * `height` is the one argument written positionally often enough to matter;
+   * everything past it is named in practice, and `ease` never sits positionally
+   * at all. `v` becomes the shear the stock module applies around the
+   * extrusion, so the helper can take it as two plain factors.
+   */
+  private easedExtrudeArgs(args: Argument[]): string {
+    const named = new Map<string, string>();
+    const positional: string[] = [];
+    // `$fn` and friends are dynamically scoped, and the profile inside the
+    // helper is built from the child's own resolution — dropping them would
+    // quietly coarsen the export.
+    const specials: string[] = [];
+    for (const arg of args) {
+      if (arg.name?.startsWith('$')) specials.push(`${arg.name} = ${this.expr(arg.value)}`);
+      else if (arg.name) named.set(arg.name, this.expr(arg.value));
+      else positional.push(this.expr(arg.value));
+    }
+
+    const pick = (key: string, index?: number): string | undefined =>
+      named.get(key) ?? (index !== undefined ? positional[index] : undefined);
+
+    const out = [`height = ${pick('height', 0) ?? '100'}`];
+    const scale = pick('scale');
+    if (scale) out.push(`scale = ${scale}`);
+    out.push(`ease = ${pick('ease') ?? '0'}`);
+    // The interpreter's own default when the call is silent; written out
+    // because the helper cannot derive it the way the evaluator does.
+    out.push(`slices = ${pick('slices') ?? String(EASE_SLICES)}`);
+    const twist = pick('twist');
+    if (twist) out.push(`twist = ${twist}`);
+    const center = pick('center');
+    if (center) out.push(`center = ${center}`);
+    const v = pick('v');
+    if (v) out.push(`shear = [(${v})[0] / (${v})[2], (${v})[1] / (${v})[2]]`);
+
+    return [...out, ...specials].join(', ');
+  }
+
   private sugarArgs(name: string, args: Argument[]): string {
     if (name === 'text') return this.arcTextArgs(args);
+    if (name === 'linear_extrude') return this.easedExtrudeArgs(args);
     if (name !== 'cylinder') return this.args(args);
 
     const named = new Map<string, string>();

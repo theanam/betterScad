@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 14 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 15 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -2653,6 +2653,75 @@ With no chamfer this is the stock primitive: it exports byte for byte and is not
 **Saved as OpenSCAD `.scad`:** With no chamfer, nothing — the call is already stock. With one, a generated module that revolves the same profile, defined once however many times it is used.
 
 See also: [`cylinder()`](#entry-cylinder) · [`cube(r), square(r)`](#entry-shape-radius) · [`rotate_extrude()`](#entry-rotate_extrude) · [`minkowski()`](#entry-minkowski)
+
+<a id="entry-linear-extrude-ease"></a>
+
+### linear_extrude(ease)
+
+```
+linear_extrude(…, scale, ease)
+```
+
+Makes a tapered extrusion curve into its ends instead of running dead straight — the difference between a cone and a trumpet. `ease` is how much: `0` is the straight taper, `1` is fully curved.
+
+```scad
+linear_extrude(height = 30, scale = 0.3, $fn = 64)
+  circle(12);
+translate([40, 0, 0])
+  linear_extrude(height = 30, scale = 0.3, ease = 1, $fn = 64)
+    circle(12);
+```
+
+<img src="images/reference/linear-extrude-ease.png" alt="The same taper twice. Straight on the left, ease = 1 on the right." width="420">
+
+*The same taper twice. Straight on the left, `ease = 1` on the right.*
+
+```scad
+linear_extrude(height = 30, scale = 0.25, ease = [1, 0], $fn = 64)
+  circle(12);
+```
+
+<img src="images/reference/linear-extrude-ease-base.png" alt="1, 0 eases the bottom only: the base leaves vertical, like a fillet." width="420">
+
+*`[1, 0]` eases the bottom only: the base leaves vertical, like a fillet.*
+
+```scad
+linear_extrude(height = 30, scale = 0.25, ease = [0, 1], $fn = 64)
+  circle(12);
+```
+
+<img src="images/reference/linear-extrude-ease-top.png" alt="The other way round — straight off the base, flattening into the top." width="420">
+
+*The other way round — straight off the base, flattening into the top.*
+
+```scad
+linear_extrude(height = 40, scale = 0.4, twist = 120, ease = 1, $fn = 6)
+  circle(14);
+```
+
+<img src="images/reference/linear-extrude-ease-twist.png" alt="The taper curves; the twist stays linear through it." width="420">
+
+*The taper curves; the twist stays linear through it.*
+
+| Argument | |
+| --- | --- |
+| `ease` | How curved the taper is: `0` (straight, the default) to `1`, or `[bottom, top]`. |
+
+It only does anything alongside `scale`. `ease` shapes *how* the taper gets from the bottom size to the top one; with nothing to taper there is no path to bend.
+
+`ease = 0` is not merely close to the straight taper, it is the same solid — the curve is `t` plus a correction at each end, and at `0` the corrections are nothing. So the argument can be added to an existing model and dialled up from zero without the shape jumping at the moment it is written.
+
+`[bottom, top]` eases each end separately, which is the useful one. `[1, 0]` leaves the base vertical and lets it curve away into the top — a column growing out of a slab, the shape a fillet makes. A single number does both ends and gives an S.
+
+The taper is what bends; `twist` stays linear through it. They are separate questions, and one argument that quietly answered both could not be used for either alone.
+
+The curve is built from `slices` straight segments, so `slices` is what it costs. Left alone an eased extrude uses 48 — enough that the facets do not read at ordinary sizes. A straight one still uses 1, and pays nothing.
+
+Values outside `0` to `1` are clamped, with a warning. Past `1` the profile would fold back on itself and build the extrusion inside out.
+
+**Saved as OpenSCAD `.scad`:** With no ease, nothing — the call is already stock. With one, a generated module that stacks the same short extrusions, defined once however many times it is used.
+
+See also: [`linear_extrude()`](#entry-linear_extrude) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`rotate_extrude()`](#entry-rotate_extrude) · [`hull()`](#entry-hull)
 
 <a id="entry-regular_polygon"></a>
 

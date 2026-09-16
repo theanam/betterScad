@@ -869,6 +869,8 @@ function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
   const twist = node.params.twist as number;
   const slices = node.params.slices as number;
   const scaleTop = node.params.scaleTop as number[];
+  const ease = (node.params.ease as number[] | undefined) ?? [0, 0];
+  const eased = ease[0] !== 0 || ease[1] !== 0;
   const direction = node.params.v as number[] | undefined;
 
   if (height === 0) {
@@ -890,17 +892,26 @@ function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
       // Manifold cannot extrude downwards, so a negative height is extruded
       // upwards and then mirrored back through the XY plane.
       const magnitude = Math.abs(height);
-      let solid = ctx.arena.track(
-        ctx.api.Manifold.extrude(
-          piece.solid as CrossSection,
-          magnitude,
-          Math.max(0, slices - 1),
-          // OpenSCAD twists clockwise looking down +Z; Manifold's sign is opposite.
-          -twist,
-          [scaleTop[0], scaleTop[1]] as Vec2,
-          center,
-        ),
-      );
+      let solid = eased
+        ? easedExtrude(piece.solid as CrossSection, {
+            height: magnitude,
+            slices,
+            twist,
+            scaleTop,
+            ease,
+            center,
+          }, ctx)
+        : ctx.arena.track(
+            ctx.api.Manifold.extrude(
+              piece.solid as CrossSection,
+              magnitude,
+              Math.max(0, slices - 1),
+              // OpenSCAD twists clockwise looking down +Z; Manifold's sign is opposite.
+              -twist,
+              [scaleTop[0], scaleTop[1]] as Vec2,
+              center,
+            ),
+          );
       if (height < 0) {
         solid = ctx.arena.track(solid.mirror([0, 0, 1] as Vec3));
       }
@@ -920,6 +931,108 @@ function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
   }
 
   return assembly(pieces, inner.annotations);
+}
+
+/**
+ * The easing curve, as a cubic Hermite from 0 to 1.
+ *
+ * The end tangents are the whole parameter: `ease` of 0 at an end leaves the
+ * slope at 1 there, and 1 flattens it to 0. Written out, the cubic collapses to
+ * two correction terms hung off the straight line —
+ *
+ *     f(t) = t − bottom·t(t−1)² − top·t²(t−1)
+ *
+ * — which is worth preferring over the Hermite basis it came from, because it
+ * puts the important property where you can see it: at `ease = 0` both
+ * corrections vanish and `f(t) = t` exactly. The straight taper is not
+ * approximated by the eased one, it *is* the eased one. At `ease = 1` both ends
+ * flatten and the result is the smoothstep `3t² − 2t³`; anything between is a
+ * genuine blend, which is what makes this something you dial rather than pick.
+ *
+ * Monotonic for every input it accepts: a cubic Hermite rising from 0 to 1 is
+ * monotonic while both tangents sit in [0, 3], and these are clamped to [0, 1].
+ * That matters more than it looks — a profile that folded back on itself would
+ * put the extrusion inside out, and no warning could make that a useful result.
+ */
+function easeAt(t: number, bottom: number, top: number): number {
+  return t - bottom * t * (t - 1) * (t - 1) - top * t * t * (t - 1);
+}
+
+interface EasedExtrude {
+  height: number;
+  slices: number;
+  twist: number;
+  scaleTop: number[];
+  ease: number[];
+  center: boolean;
+}
+
+/**
+ * A tapered extrusion whose scale follows a curve rather than a straight line.
+ *
+ * `Manifold.extrude` interpolates its scale linearly and offers no hook, so the
+ * curve is built as a stack of short extrusions, each straight, each starting
+ * where the last one stopped. This is the same construction the `.scad`
+ * downgrade emits, which is the point: the two agree because they are the same
+ * shape, not because two implementations were kept in step by hand.
+ *
+ * Twist stays linear through the stack. `ease` names what the *taper* does, and
+ * a parameter that quietly bent the twist as well would be impossible to use
+ * for either one on its own.
+ */
+function easedExtrude(section: CrossSection, spec: EasedExtrude, ctx: Ctx): Manifold {
+  const { height, slices, twist, scaleTop, ease, center } = spec;
+  const segments: Manifold[] = [];
+
+  for (let i = 0; i < slices; i++) {
+    const t0 = i / slices;
+    const t1 = (i + 1) / slices;
+    const f0 = easeAt(t0, ease[0], ease[1]);
+    const f1 = easeAt(t1, ease[0], ease[1]);
+
+    const at = (f: number): Vec2 => [
+      1 + (scaleTop[0] - 1) * f,
+      1 + (scaleTop[1] - 1) * f,
+    ];
+    const from = at(f0);
+    const to = at(f1);
+
+    // `scale = 0` is a legal cone, and with the profile starting at 1 only the
+    // top can reach it — so the ratio below divides by zero only if a caller
+    // asks for a segment that starts nowhere, which this loop cannot produce.
+    if (from[0] === 0 || from[1] === 0) continue;
+
+    const base = ctx.arena.track(section.scale(from));
+    const segment = ctx.arena.track(
+      ctx.api.Manifold.extrude(
+        base,
+        height / slices,
+        0,
+        -twist * (t1 - t0),
+        [to[0] / from[0], to[1] / from[1]] as Vec2,
+        false,
+      ),
+    );
+    // Each segment twists from zero at its own base, so it is turned to meet
+    // the twist the stack has already accumulated underneath it.
+    //
+    // `center` is folded into the same translation rather than applied to the
+    // union afterwards. Both put the solid in the same place, but the union
+    // merges the coplanar faces where segments meet, and merging is decided on
+    // the coordinates it is given — so translating afterwards produced a mesh
+    // that differed from the `.scad` downgrade's by a few triangles on exactly
+    // the same solid. Doing it in the same order as the downgrade makes the two
+    // meshes identical, which is a far easier property to test than "close".
+    segments.push(
+      ctx.arena.track(
+        ctx.arena
+          .track(segment.rotate([0, 0, -twist * t0] as Vec3))
+          .translate([0, 0, height * t0 - (center ? height / 2 : 0)] as Vec3),
+      ),
+    );
+  }
+
+  return ctx.arena.track(ctx.api.Manifold.union(segments));
 }
 
 function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {

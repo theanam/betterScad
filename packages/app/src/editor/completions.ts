@@ -348,6 +348,10 @@ const MODULES: BuiltinDoc[] = [
         detail: 'linear_extrude(height, twist, slices)',
       },
       { template: 'linear_extrude(height = ${1:10}, scale = ${2:0.5}) ${}', detail: 'linear_extrude(height, scale)' },
+      {
+        template: 'linear_extrude(height = ${1:10}, scale = ${2:0.3}, ease = ${3:1}) ${}',
+        detail: 'linear_extrude(height, scale, ease)  — a curved taper',
+      },
     ],
   },
   {

@@ -27,6 +27,7 @@ import { BUILTIN_FUNCTIONS, BuiltinContext, echoArgs } from './builtins.js';
 import { DiagnosticBag, ScadError, SourceSpan } from './diagnostics.js';
 import {
   DEFAULT_RESOLUTION,
+  EASE_SLICES,
   IDENTITY,
   Mat4,
   Resolution,
@@ -1807,6 +1808,63 @@ function cornerRadius(
 }
 
 /** OpenSCAD's cylinder parameter juggling: r/d, r1/r2, d1/d2. */
+/**
+ * Reads the `ease` argument into `[bottom, top]`.
+ *
+ * A number eases both ends by that much; `[a, b]` eases each end separately,
+ * which is what makes a one-sided flare expressible. `0` is a straight taper
+ * and is exactly what the stock extrude does, so the parameter costs nothing
+ * until it is used.
+ *
+ * The named spellings bind silently and appear in no documentation: they are a
+ * convenience for the common cases, on the same footing as the old `fillet*`
+ * names on `cylinder()`. `in` and `out` follow the animation sense of the
+ * words — `in` eases away from the start, which is the bottom.
+ */
+const EASE_NAMES: Record<string, [number, number]> = {
+  none: [0, 0],
+  in: [1, 0],
+  out: [0, 1],
+  in_out: [1, 1],
+};
+
+function easePair(value: Value | undefined, interp: Interpreter, span: SourceSpan): [number, number] {
+  if (value === undefined) return [0, 0];
+
+  if (typeof value === 'string') {
+    const named = EASE_NAMES[value];
+    if (named) return named;
+    interp.warn(
+      `linear_extrude(): ease must be a number, [bottom, top], or one of ` +
+        `${Object.keys(EASE_NAMES).join(', ')}; got "${value}". Using 0.`,
+      span,
+      'eval.ease',
+    );
+    return [0, 0];
+  }
+
+  const pair = Array.isArray(value)
+    ? (asVector(value, 2, 0) ?? [0, 0])
+    : [asNumber(value, 0), asNumber(value, 0)];
+
+  // Clamped rather than rejected, the way an oversized chamfer is: the useful
+  // reading of `ease = 2` is "as eased as it goes", and a render that stops is
+  // a worse answer than one that goes as far as the parameter can.
+  const clamped: [number, number] = [clamp01(pair[0]), clamp01(pair[1])];
+  if (clamped[0] !== pair[0] || clamped[1] !== pair[1]) {
+    interp.warn(
+      `linear_extrude(): ease is clamped to the range 0 to 1.`,
+      span,
+      'eval.ease-range',
+    );
+  }
+  return clamped;
+}
+
+function clamp01(value: number): number {
+  return !Number.isFinite(value) ? 0 : Math.min(1, Math.max(0, value));
+}
+
 function cylinderRadii(args: Map<string, Value>): { r1: number; r2: number } {
   const r = args.get('r');
   const d = args.get('d');
@@ -2495,23 +2553,33 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
 
   // --- 2D <-> 3D ---
   linear_extrude: {
-    params: ['height', 'center', 'convexity', 'twist', 'slices', 'scale', 'v'],
-    defaults: { height: '100', center: 'false', twist: '0', scale: '1' },
-    build: (args, children, scope, _interp, span) => {
+    params: ['height', 'center', 'convexity', 'twist', 'slices', 'scale', 'v', 'ease'],
+    defaults: { height: '100', center: 'false', twist: '0', scale: '1', ease: '0' },
+    build: (args, children, scope, interp, span) => {
       const scaleArg = args.get('scale');
       const scaleTop = scaleArg === undefined ? [1, 1] : (asVector(scaleArg, 2, 1) ?? [1, 1]);
       const twist = asNumber(args.get('twist'), 0);
       const height = asNumber(args.get('height'), 100);
       const res = resolutionFor(args, scope);
+      const ease = easePair(args.get('ease'), interp, span);
+      const eased = ease[0] !== 0 || ease[1] !== 0;
       const slicesArg = args.get('slices');
       // Twisted extrusions need enough slices to stay smooth; OpenSCAD derives
       // a default from the twist angle and $fa/$fs when `slices` is absent.
+      // An eased taper is a curve rather than a straight line, so it needs the
+      // same treatment for the same reason: the slices are where the curve
+      // lives, and at one slice there is no curve left to see.
       const slices =
         slicesArg !== undefined
           ? Math.max(1, Math.floor(asNumber(slicesArg, 1)))
           : twist === 0
-            ? 1
-            : Math.max(1, Math.ceil(Math.abs(twist) / Math.max(res.fa, 1)));
+            ? eased
+              ? EASE_SLICES
+              : 1
+            : Math.max(
+                eased ? EASE_SLICES : 1,
+                Math.ceil(Math.abs(twist) / Math.max(res.fa, 1)),
+              );
       return node(
         'linear_extrude',
         {
@@ -2520,6 +2588,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
           twist,
           slices,
           scaleTop,
+          ease,
           // `v=` extrudes along an arbitrary vector rather than straight up.
           v: args.get('v') === undefined ? undefined : asVector(args.get('v'), 3, 0),
           resolution: res,

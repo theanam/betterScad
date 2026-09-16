@@ -28,6 +28,17 @@ export interface Resolution {
 export const DEFAULT_RESOLUTION: Resolution = { fn: 0, fa: 12, fs: 2 };
 
 /**
+ * Slices used for an eased taper when the call does not say.
+ *
+ * Shared because two places need the same number and must not disagree: the
+ * evaluator builds the stack from it, and the `.scad` downgrade writes it into
+ * the generated module, which cannot derive it the way the evaluator does. The
+ * ease is a curve and the slices are the only place a curve can live, since
+ * every segment between them is straight.
+ */
+export const EASE_SLICES = 48;
+
+/**
  * Number of segments for a circle of the given radius.
  *
  * `$fn` wins outright when set; otherwise the count is the tighter of the
