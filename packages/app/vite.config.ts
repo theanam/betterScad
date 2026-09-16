@@ -171,13 +171,185 @@ function analyticsTag(): Plugin {
 }
 
 /**
+ * Everything that needs to know the site's own address.
+ *
+ * `base` is relative on purpose (see below), so the HTML has no idea what host
+ * it will be served from — and a social card cannot be relative: Open Graph and
+ * Twitter both require absolute image URLs, and a canonical link that is not
+ * absolute says nothing. Only one build knows the answer, and it already writes
+ * it down: `public/CNAME` is what GitHub Pages serves the site under, and the
+ * deploy workflow calls it "the authoritative site URL" for its own summary.
+ *
+ * So the address is read from there rather than hardcoded. A fork with its own
+ * CNAME gets its own card for free; a fork with none gets no absolute tags at
+ * all, which is the honest outcome — a canonical pointing at betterscad.org
+ * from someone else's deployment would be actively harmful, telling search
+ * engines their copy is a duplicate of ours.
+ *
+ * The same reasoning as `analyticsTag()` below, for the same reason: this
+ * repository is MIT and expects to be built by people who are not us.
+ */
+function siteMetadata(): Plugin {
+  const site = resolveSiteUrl();
+
+  return {
+    name: 'betterscad:site-metadata',
+    apply: 'build',
+
+    transformIndexHtml(html) {
+      // Read back out of the document rather than repeating them here. Social
+      // copy that is written twice is social copy that disagrees with the page
+      // as soon as either is edited, and the disagreement is invisible until
+      // somebody shares a link.
+      const title = /<title>([^<]*)<\/title>/.exec(html)?.[1]?.trim();
+      const description = /<meta\s+name="description"\s+content="([^"]*)"/s.exec(html)?.[1]?.trim();
+      if (!title || !description) {
+        throw new Error(
+          'index.html is missing its <title> or meta description; the social tags are generated from them.',
+        );
+      }
+
+      const meta = (attrs: Record<string, string>) => ({
+        tag: 'meta',
+        attrs,
+        injectTo: 'head' as const,
+      });
+
+      const tags = [
+        meta({ property: 'og:title', content: title }),
+        meta({ property: 'og:description', content: description }),
+        meta({ name: 'twitter:title', content: title }),
+        meta({ name: 'twitter:description', content: description }),
+      ];
+
+      if (!site) return { tags };
+
+      const socialImage = `${site}betterscad-social.png`;
+      const imageAlt =
+        'The BetterSCAD mark beside the words BetterSCAD and the tagline CODE IT. SEE IT. PRINT IT.';
+
+      tags.push(
+        { tag: 'link', attrs: { rel: 'canonical', href: site }, injectTo: 'head' as const },
+        meta({ property: 'og:url', content: site }),
+        meta({ property: 'og:image', content: socialImage }),
+        meta({ property: 'og:image:width', content: '1280' }),
+        meta({ property: 'og:image:height', content: '640' }),
+        meta({ property: 'og:image:alt', content: imageAlt }),
+        meta({ name: 'twitter:image', content: socialImage }),
+        meta({ name: 'twitter:image:alt', content: imageAlt }),
+        {
+          tag: 'script',
+          attrs: { type: 'application/ld+json' },
+          children: JSON.stringify(structuredData(site, title, description)),
+          injectTo: 'head' as const,
+        },
+      );
+      return { tags };
+    },
+
+    generateBundle() {
+      // No address, no sitemap: a `Sitemap:` line has to be absolute, and a
+      // sitemap listing the wrong origin is worse than none.
+      if (!site) {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'robots.txt',
+          source: 'User-agent: *\nAllow: /\n',
+        });
+        return;
+      }
+
+      this.emitFile({
+        type: 'asset',
+        fileName: 'robots.txt',
+        source: `User-agent: *\nAllow: /\n\nSitemap: ${site}sitemap.xml\n`,
+      });
+
+      // One page, because the app is one page. The reference and the language
+      // guide are Markdown on GitHub rather than routes here, so listing them
+      // would be listing URLs this site does not serve.
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sitemap.xml',
+        source:
+          '<?xml version="1.0" encoding="UTF-8"?>\n' +
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+          `  <url>\n    <loc>${site}</loc>\n` +
+          `    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>\n` +
+          '    <changefreq>weekly</changefreq>\n  </url>\n' +
+          '</urlset>\n',
+      });
+    },
+  };
+}
+
+/** `https://host/`, from an explicit override or the published CNAME. */
+function resolveSiteUrl(): string | undefined {
+  const override = process.env.BETTERSCAD_SITE_URL?.trim();
+  if (override) return override.endsWith('/') ? override : `${override}/`;
+
+  const cname = fileURLToPath(new URL('./public/CNAME', import.meta.url));
+  if (!existsSync(cname)) return undefined;
+  const host = readFileSync(cname, 'utf8').trim();
+  // A CNAME is a bare hostname. Anything else is a file we do not understand,
+  // and guessing at it would put a malformed canonical on every page.
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host) ? `https://${host}/` : undefined;
+}
+
+/**
+ * Schema.org data for the search result.
+ *
+ * Deliberately only what is checkable: what it is, that it is free, what it
+ * runs on, what licence it carries. No `aggregateRating` — there are no ratings
+ * to report, and inventing them is both a lie and a manual action waiting to
+ * happen.
+ */
+function structuredData(site: string, name: string, description: string): unknown {
+  const { version } = JSON.parse(
+    readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+  ) as { version: string };
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'BetterSCAD',
+    alternateName: name,
+    url: site,
+    image: `${site}betterscad-social.png`,
+    description,
+    applicationCategory: 'DesignApplication',
+    applicationSubCategory: 'Computer-aided design',
+    operatingSystem: 'Any modern web browser',
+    browserRequirements: 'Requires JavaScript, WebAssembly and WebGL2',
+    softwareVersion: version,
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    license: 'https://opensource.org/licenses/MIT',
+    codeRepository: 'https://github.com/theanam/betterScad',
+    featureList: [
+      'Full OpenSCAD language compatibility',
+      'Runs entirely in the browser — no server and no account',
+      'Live customizer generated from parameter comments',
+      'Export to STL, 3MF, OFF, AMF, SVG and DXF',
+      'Import STL, OBJ, OFF, DXF, SVG and heightmaps',
+      'Project files shared across tabs, and saved as a zip',
+      'Works offline',
+    ],
+  };
+}
+
+/**
  * BetterSCAD is a fully static site (spec features 1 and 7), so `base` is
  * relative: the same build works from a domain root, from a GitHub Pages
  * project path, and from `file://` in the desktop shell.
  */
 export default defineConfig({
   base: './',
-  plugins: [serviceWorkerManifest(), referenceImages(), analyticsTag()],
+  // `siteMetadata` goes last on purpose: it emits `robots.txt` and
+  // `sitemap.xml` during `generateBundle`, and `serviceWorkerManifest` builds
+  // its precache list from whatever is in the bundle when *it* runs. Neither
+  // file is any use offline, and the precache is a first-visit download.
+  plugins: [serviceWorkerManifest(), referenceImages(), analyticsTag(), siteMetadata()],
   build: {
     target: 'es2022',
     sourcemap: true,

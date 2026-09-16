@@ -1,6 +1,6 @@
 {
   "name": "@betterscad/desktop",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Desktop packaging for BetterSCAD, reusing the same WASM engine and web UI.",
   "license": "MIT",

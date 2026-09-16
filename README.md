@@ -284,6 +284,15 @@ The site is fully static: `npm run build`, then serve `packages/app/dist`
 anywhere. For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
 publishes on every push to `main` with no repo settings to change.
 
+The build has no fixed base URL — one `dist/` works from a domain root, from a
+Pages project path and from `file://` in the desktop shell. The few tags that
+*must* be absolute (`<link rel="canonical">`, the Open Graph image, the sitemap)
+are therefore generated from `packages/app/public/CNAME`, which is the address
+the site is actually served under. Point that file at your own domain and they
+follow it; delete it and they are simply omitted, rather than pointing search
+engines at ours and declaring your deployment a duplicate. `BETTERSCAD_SITE_URL`
+overrides it if you serve from a path rather than a domain root.
+
 ## Contributing
 
 Issues and pull requests welcome. Four non-negotiable rules:

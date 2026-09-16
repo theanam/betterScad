@@ -55,6 +55,35 @@ textarea {
   color: var(--bs-text-muted);
 }
 
+/* The no-JavaScript fallback. It renders inside the boot screen's centred
+   grid, so it only needs its own measure and a little rhythm — and it is the
+   whole page for whoever sees it, so it gets read as prose rather than as a
+   status message. */
+.noscript {
+  max-width: 54ch;
+  text-align: left;
+  color: var(--bs-text-muted);
+}
+
+.noscript h1 {
+  margin: 0 0 var(--bs-space-3);
+  color: var(--bs-text);
+  font-size: 1.4rem;
+}
+
+.noscript p {
+  margin: 0 0 var(--bs-space-3);
+}
+
+.noscript code {
+  font-family: var(--bs-font-mono);
+  font-size: 0.92em;
+}
+
+.noscript a {
+  color: var(--bs-accent-ink);
+}
+
 .boot--error .boot__mark {
   animation: none;
   opacity: 0.4;

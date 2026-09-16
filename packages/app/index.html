@@ -3,20 +3,84 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>BetterSCAD</title>
-    <meta name="description" content="Local-first parametric CAD in the browser, fully compatible with OpenSCAD." />
+
+    <!-- The title and the description below are the single source for the
+         social tags too: `siteMetadata()` in vite.config.ts reads them out of
+         this file and writes og: and twitter: copies at build time, so the two
+         cannot drift the way duplicated metadata always eventually does. -->
+    <title>BetterSCAD — OpenSCAD-compatible CAD in your browser</title>
+    <meta
+      name="description"
+      content="Free parametric CAD in your browser, speaking the whole OpenSCAD language. Open and render .scad files, export STL, 3MF, SVG and DXF. Nothing is uploaded."
+    />
+
+    <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0e0c0b" />
+
+    <!-- The rest of the social card, and everything needing an absolute URL —
+         canonical, og:url, the images, the structured data — is injected by the
+         same plugin. It cannot live here: this build is deliberately
+         relative-path so that one `dist/` works from a domain root, from a
+         GitHub Pages project path and from file:// in the desktop shell, which
+         means the HTML does not know what host it will be served from. Only the
+         build that has a CNAME does. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BetterSCAD" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./src/styles/index.css" />
+
+    <!-- Without scripts the kernel is never going to start, so the boot screen
+         must stop saying it is: the message goes, the mark stops pulsing, and
+         what is left is the fallback below rather than a progress indicator for
+         progress that cannot happen. `<noscript>` in the head is allowed to
+         carry a stylesheet, which is the only way CSS can know. -->
+    <noscript>
+      <style>
+        .boot__text {
+          display: none;
+        }
+        .boot__mark {
+          animation: none;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
     <!-- Replaced by the app on boot; visible while the WASM kernel loads. -->
     <div id="boot" class="boot">
       <img src="./betterscad-mark.svg" alt="" width="72" height="72" class="boot__mark" />
       <p class="boot__text">Starting the geometry kernel…</p>
-      <noscript>BetterSCAD needs JavaScript. It runs entirely in your browser — nothing is uploaded.</noscript>
+      <!-- A real page for a real visitor without JavaScript, not a keyword
+           dump: everything here is true of the app and said the way the app
+           says it. It doubles as the only text a crawler that does not run
+           scripts will ever see, since the editor itself is built at runtime. -->
+      <noscript>
+        <div class="noscript">
+          <h1>BetterSCAD</h1>
+          <p>
+            A parametric CAD editor that runs entirely in your browser and speaks the whole
+            OpenSCAD language. Existing <code>.scad</code> files open and render unchanged, and
+            models export to STL, 3MF, OFF, AMF, SVG and DXF.
+          </p>
+          <p>
+            It needs JavaScript, because the geometry kernel, the editor and the renderer all run
+            on your own machine. There is no server to do it instead — which is also why nothing
+            you write here is ever uploaded.
+          </p>
+          <p>
+            <a href="https://github.com/theanam/betterScad">Source on GitHub</a>
+            ·
+            <a href="https://github.com/theanam/betterScad/blob/main/docs/reference.md"
+              >Language reference</a
+            >
+          </p>
+        </div>
+      </noscript>
     </div>
     <div id="app" class="app" hidden></div>
     <script type="module" src="./src/main.ts"></script>
