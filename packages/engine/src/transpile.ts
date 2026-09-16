@@ -528,21 +528,33 @@ class Printer {
     // A scope containing negatives becomes a difference() whose first child is
     // everything else. This is the whole downgrade for the extension, and it is
     // exact: the role's contribution is "subtract from every sibling in scope".
-    const solids: Statement[] = [];
+    const kept: Statement[] = [];
     const cutters: Statement[] = [];
 
     for (const stmt of statements) {
       const split = splitNegatives(stmt);
-      if (split.solid) solids.push(split.solid);
+      if (split.solid) kept.push(split.solid);
       cutters.push(...split.cutters);
     }
 
     if (cutters.length === 0) {
-      for (const stmt of solids) this.printStatement(stmt, depth);
+      for (const stmt of kept) this.printStatement(stmt, depth);
       return;
     }
 
     this.rewrites.add('negative() rewritten as difference()');
+
+    // Only geometry goes inside the difference. Declarations stay in the scope
+    // they were written in, because a block is a scope in OpenSCAD too: an
+    // assignment or a `function` swept into the `union()` would be invisible to
+    // the cutters standing beside it, so `negative() cylinder(r = bore())`
+    // would lose `bore()` and quietly stop cutting. Hoisting them is safe in
+    // the other direction — assignments are scope-wide, so a declaration that
+    // moves outward is visible to everything that could already see it.
+    const declarations = kept.filter(isDeclaration);
+    const solids = kept.filter((stmt) => !isDeclaration(stmt));
+
+    for (const stmt of declarations) this.printStatement(stmt, depth);
 
     if (solids.length === 0) {
       // Nothing to cut, so the scope produces nothing — exactly what the
@@ -991,6 +1003,26 @@ class Printer {
 interface NegativeSplit {
   solid?: Statement;
   cutters: Statement[];
+}
+
+/**
+ * Statements that declare rather than build.
+ *
+ * They are the ones that must not be swept into the `difference()` a
+ * `negative()` produces. Everything else either makes geometry or contains
+ * something that does, and belongs inside. `echo` and `assert` are deliberately
+ * not here: they run where they are written, and moving them would reorder the
+ * console against the geometry they are describing.
+ */
+function isDeclaration(stmt: Statement): boolean {
+  return (
+    stmt.kind === 'assign' ||
+    stmt.kind === 'module-decl' ||
+    stmt.kind === 'function-decl' ||
+    stmt.kind === 'include' ||
+    stmt.kind === 'use' ||
+    stmt.kind === 'empty'
+  );
 }
 
 /**

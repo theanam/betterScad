@@ -192,3 +192,82 @@ test('negative() matches the difference() it transpiles to', async () => {
   `);
   assert.ok(Math.abs(withNegative - withDifference) < 1e-6, 'the two forms must agree exactly');
 });
+
+// --- declarations are not geometry ------------------------------------------
+//
+// The downgrade wraps a scope's geometry in `difference()`. A block is a scope
+// in OpenSCAD too, so anything swept into that wrapper stops being visible to
+// the cutters standing beside it. Every case above is pure geometry, which is
+// exactly why this went unnoticed: it only bites when a cutter refers to
+// something the scope declared.
+
+test('a cutter can still see a function the scope declares', async () => {
+  await check(
+    `function bore() = 5;
+     cube([20, 20, 10], center = true);
+     negative() cube([bore(), bore(), 40], center = true);`,
+    3750,
+  );
+});
+
+test('a cutter can still see a variable the scope declares', async () => {
+  await check(
+    `a = 6;
+     cube([20, 20, 10], center = true);
+     negative() cube([a, a, 40], center = true);`,
+    3640,
+  );
+});
+
+test('assignments reach the cutter however late they are written', async () => {
+  // Assignments are scope-wide, so this is legal and means the same thing. The
+  // export has to preserve that, not just the common top-down spelling.
+  await check(
+    `cube([20, 20, 10], center = true);
+     negative() cube([w, w, 40], center = true);
+     w = 8;`,
+    3360,
+  );
+});
+
+test('the same holds inside a module body', async () => {
+  await check(
+    `module lid() {
+       t = 4;
+       cube([20, 20, 10], center = true);
+       negative() cube([t, t, 40], center = true);
+     }
+     lid();`,
+    3840,
+  );
+});
+
+test('a module the scope declares survives the rewrite', async () => {
+  await check(
+    `module bore() { cube([5, 5, 40], center = true); }
+     cube([20, 20, 10], center = true);
+     negative() bore();`,
+    3750,
+  );
+});
+
+test('declarations are printed outside the generated difference', async () => {
+  const legacy = transpileToLegacyScad(
+    parse(
+      `size = 30;
+       function bore() = size / 6;
+       module plate() { cube([size, size, 4], center = true); }
+       plate();
+       negative() cube([bore(), bore(), 40], center = true);`,
+    ).file,
+    { header: false },
+  ).source;
+
+  const cut = legacy.indexOf('difference() {');
+  assert.ok(cut > 0, `expected a difference() in:\n${legacy}`);
+  for (const declaration of ['size = 30;', 'function bore()', 'module plate()']) {
+    const at = legacy.indexOf(declaration);
+    assert.ok(at >= 0, `${declaration} is missing from:\n${legacy}`);
+    assert.ok(at < cut, `${declaration} was swept inside the difference:\n${legacy}`);
+  }
+});
