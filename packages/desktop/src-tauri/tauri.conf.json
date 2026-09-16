@@ -5,7 +5,7 @@
   "identifier": "dev.betterscad.app",
   "build": {
     "frontendDist": "../../app/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5174",
     "beforeDevCommand": "npm run dev -w @betterscad/app",
     "beforeBuildCommand": "npm run build -w @betterscad/app"
   },

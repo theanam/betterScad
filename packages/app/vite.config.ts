@@ -209,7 +209,11 @@ export default defineConfig({
     },
   },
   worker: { format: 'es' },
-  server: { port: 5173 },
+  // Pinned, and pinned strictly: a sibling BetterSCAD checkout runs on Vite's
+  // default 5173, and `strictPort` makes a clash fail loudly instead of
+  // silently drifting to the next free port — which would leave the Tauri
+  // dev shell and `npm run screenshot` pointing at the wrong server.
+  server: { port: 5174, strictPort: true },
   // The engine is consumed as source in dev so edits hot-reload.
   optimizeDeps: { exclude: ['manifold-3d'] },
 });
