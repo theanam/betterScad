@@ -273,9 +273,9 @@ export class Toolbar {
       ]),
       el('div', { class: 'toolbar__group' }, [
         this.filesButton,
+        button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
         this.customizerButton,
         this.consoleButton,
-        button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
         // Help sits with the panels rather than out by the GitHub link: it is
         // part of the app, not a way out of it, and a newcomer looking for
         // "where do I find out what cylinder() takes" looks along this row.
