@@ -12,6 +12,7 @@ import type {
   TranspileResponse,
   FontResponse,
   RenderResponse,
+  SetFilesRequest,
   WorkerRequest,
   WorkerResponse,
 } from './protocol.js';
@@ -20,7 +21,6 @@ export interface RenderInput {
   source: string;
   files: Record<string, string>;
   parameters: Record<string, Value>;
-  assets: Record<string, Uint8Array>;
   time: number;
   preview: boolean;
 }
@@ -36,6 +36,8 @@ export class RenderClient {
   private readonly pending = new Map<number, Pending>();
 
   private inFlightRender: number | undefined;
+  /** The project-directory revision the worker has. See `setProjectFiles`. */
+  private sentFilesRevision = -1;
   private queuedRender: { input: RenderInput; resolve(r: RenderResponse): void; reject(e: Error): void } | undefined;
 
   private readyResolve!: () => void;
@@ -141,10 +143,26 @@ export class RenderClient {
       source: input.source,
       files: input.files,
       parameters: input.parameters,
-      assets: input.assets,
       time: input.time,
       preview: input.preview,
     });
+  }
+
+  /**
+   * Hands the worker the project directory, if it does not already have it.
+   *
+   * Called before every render, and a no-op for all but the handful that follow
+   * a change — which is the point: the worker keeps the bytes, so auto-render
+   * ships source and parameters and nothing else.
+   *
+   * Nothing is transferred and nothing is awaited. The buffers stay usable on
+   * this side, and `postMessage` is ordered, so the render queued immediately
+   * after this call is guaranteed to see the new directory.
+   */
+  setProjectFiles(files: Record<string, Uint8Array>, revision: number): void {
+    if (revision === this.sentFilesRevision) return;
+    this.sentFilesRevision = revision;
+    this.worker.postMessage({ type: 'set-files', files } satisfies SetFilesRequest);
   }
 
   /** Rewrites to stock `.scad` in the worker, where the fonts are. */
@@ -163,7 +181,6 @@ export class RenderClient {
       source: input.source,
       files: input.files,
       parameters: input.parameters,
-      assets: input.assets,
       time: input.time,
     });
   }
@@ -177,7 +194,11 @@ export class RenderClient {
     );
   }
 
-  private send<T>(request: WorkerRequest, transfer: Transferable[] = []): Promise<T> {
+  /** Every request that expects an answer; `set-files` is posted directly. */
+  private send<T>(
+    request: Exclude<WorkerRequest, SetFilesRequest>,
+    transfer: Transferable[] = [],
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.pending.set(request.id, {
         resolve: resolve as Pending['resolve'],

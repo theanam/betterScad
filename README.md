@@ -49,6 +49,7 @@ you.
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
 | **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
 | **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
+| **Project files** | Add images, drawings, meshes, fonts and libraries once; every tab reaches them by name, as though they sat in the same folder. |
 | **Fonts for `text()`** | Name a font and it loads itself — ~50 Google Fonts, the ones installed on your machine, or a file of your own. Every one previewed in its own typeface. |
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
 | **Measurement** | Click points in the viewport for coordinates and distances. |
@@ -79,7 +80,7 @@ To run it locally:
 git clone https://github.com/theanam/betterScad.git
 cd betterScad
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # http://localhost:5174
 npm run build        # static site in packages/app/dist — serve it anywhere
 ```
 
@@ -183,6 +184,47 @@ assumes. None of them changes what a saved file means.
 | **Tab completion** | Tab takes the open suggestion. With none open it indents, as it always did. |
 | **Auto-render** | Re-render as you type, or only on `F5`. |
 | **Indent** | Two spaces or four. |
+
+## Project files
+
+A model that says `import("bracket.stl")` needs a folder to find it in, and a
+browser has none. The **Files** panel is that folder: add a file once and every
+open tab can name it, exactly as it would on disk.
+
+<img src="docs/images/files-panel.png" alt="The Files panel in the left column under the editor, listing plate.svg, terrain.png and — under an MCAD/ heading — knurl.scad, each with its kind and size. A filled dot marks plate.svg and knurl.scad as used by the model on screen and a hollow one marks terrain.png as unused. The editor shows a model that extrudes plate.svg and calls a module from the library, and the viewport shows the resulting plate with its bolt holes and a knurled post." width="900">
+
+Drop files anywhere in the window, or use **Add files**. What goes in there:
+
+| | Used by |
+| --- | --- |
+| `.png` `.jpg` `.dat` | `surface("terrain.png")` |
+| `.svg` `.dxf` `.stl` `.obj` `.off` `.3mf` | `import("logo.svg")` |
+| `.scad` `.bscad` | `use <MCAD/gears.scad>`, `include <…>` |
+| `.ttf` `.otf` `.ttc` | `text("Hi", font = "Orbitron")` |
+
+Folders work, and so does a bare name: `use <MCAD/gears.scad>` finds a file you
+added as `gears.scad`. A library can be opened in a tab to edit — the tab is
+then what your model renders against, and Save puts it back.
+
+The files are kept in your browser, so they are still there after a reload.
+Nothing is uploaded, here as everywhere else.
+
+### Save as `.zip`
+
+Once a model uses a project file, the Save menu offers **Save as `.zip`**: the
+model plus every file it actually used, laid out so the paths in the script
+resolve as they stand. Unzip it and it opens in OpenSCAD.
+
+What goes in is what the render resolved, not what the text mentions — a library
+three levels down an `include` chain is in, an `import` inside an `if` that never
+ran is not.
+
+Opening a `.zip` does the reverse: models at the top level become tabs and
+everything else joins the Files panel.
+
+Fonts are the one thing a zip cannot fully deliver. `text(font = "Orbitron")`
+names a family, and OpenSCAD looks for families in its own font path rather than
+beside the file. The font travels in `fonts/` with a note saying so.
 
 ## File formats
 

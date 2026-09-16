@@ -19,8 +19,10 @@ import {
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
 
 import type {
+  Dependency,
   ExportRequest,
   LoadFontRequest,
+  SetFilesRequest,
   TranspileRequest,
   MeshPayload,
   RenderRequest,
@@ -30,6 +32,15 @@ import type {
 
 const fonts = new FontRegistry();
 let enginePromise: Promise<Engine> | undefined;
+
+/**
+ * The project directory, as the app last sent it.
+ *
+ * Held here rather than arriving with each render: it is the same on every
+ * keystroke, and it is the only part of a render request that can be measured
+ * in megabytes.
+ */
+let projectFiles: Record<string, Uint8Array> = {};
 
 /** The id of the newest render request; older ones are abandoned mid-flight. */
 let latestRenderId = 0;
@@ -61,6 +72,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'transpile':
         handleTranspile(request);
         return;
+      case 'set-files':
+        projectFiles = request.files;
+        return;
       case 'cancel':
         cancelled.add(request.id);
         return;
@@ -68,7 +82,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   } catch (err) {
     post({
       type: 'error',
-      id: request.id,
+      // `set-files` is the one request with nothing to answer to; 0 matches no
+      // pending entry, so a failure there surfaces as a general error instead
+      // of rejecting an unrelated promise.
+      id: 'id' in request ? request.id : 0,
       ok: false,
       message: err instanceof Error ? err.message : String(err),
     });
@@ -77,28 +94,54 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
 // ---------------------------------------------------------------------------
 
-function makeResolver(files: Record<string, string>) {
+/**
+ * Finds a path in one directory, exactly or by basename.
+ *
+ * The basename fallback is what lets `use <MCAD/gears.scad>` find a file added
+ * as a bare `gears.scad`. Someone opening an existing model has the includes
+ * already written and only the files to supply, and making them recreate a
+ * folder structure to satisfy a path would be busywork.
+ */
+function lookup<T>(directory: Record<string, T>, path: string): { key: string; value: T } | undefined {
+  if (path in directory) return { key: path, value: directory[path] };
+  const base = path.split('/').pop() ?? path;
+  for (const [key, value] of Object.entries(directory)) {
+    if (key === base || key.split('/').pop() === base) return { key, value };
+  }
+  return undefined;
+}
+
+/**
+ * Resolves `include`/`use` against open tabs first, then the project directory.
+ *
+ * Tabs win so that editing a library in a tab is what the model renders
+ * against. The stored copy is the one you have not opened; the tab is the one
+ * you are changing, and a preview that ignored your edits would be useless.
+ */
+function makeResolver(files: Record<string, string>, found: Dependency[]) {
+  const decoder = new TextDecoder();
   return async (path: string): Promise<string | undefined> => {
-    // Exact match first, then a basename match so `include <lib/util.scad>`
-    // finds an open tab named `util.scad`.
-    if (path in files) return files[path];
-    const base = path.split('/').pop() ?? path;
-    for (const [name, text] of Object.entries(files)) {
-      if (name === base || name.split('/').pop() === base) return text;
+    const tab = lookup(files, path);
+    if (tab) {
+      record(found, tab.key, 'tab');
+      return tab.value;
+    }
+    const stored = lookup(projectFiles, path);
+    if (stored) {
+      record(found, stored.key, 'project');
+      return decoder.decode(stored.value);
     }
     return undefined;
   };
 }
 
-function makeAssets(assets: Record<string, Uint8Array>): AssetProvider {
+function makeAssets(found: Dependency[]): AssetProvider {
   return {
     async read(path) {
-      if (path in assets) return assets[path];
-      const base = path.split('/').pop() ?? path;
-      for (const [name, data] of Object.entries(assets)) {
-        if (name === base || name.split('/').pop() === base) return data;
-      }
-      return undefined;
+      const stored = lookup(projectFiles, path);
+      if (!stored) return undefined;
+      record(found, stored.key, 'project');
+      return stored.value;
     },
     async decodeImage(data, path) {
       // OffscreenCanvas keeps image decoding in the worker; without it a
@@ -127,8 +170,14 @@ function makeAssets(assets: Record<string, Uint8Array>): AssetProvider {
   };
 }
 
+/** Dependencies are collected per render, so two in flight cannot mix. */
+function record(found: Dependency[], path: string, source: Dependency['source']): void {
+  if (!found.some((d) => d.path === path && d.source === source)) found.push({ path, source });
+}
+
 async function handleRender(request: RenderRequest): Promise<void> {
   const started = performance.now();
+  const dependencies: Dependency[] = [];
   const api = await engine();
   if (cancelled.has(request.id) || request.id !== latestRenderId) {
     // Another render was requested while the kernel was loading; drop this one.
@@ -141,8 +190,8 @@ async function handleRender(request: RenderRequest): Promise<void> {
     parameters: request.parameters as Record<string, Value>,
     time: request.time,
     preview: request.preview,
-    resolveInclude: makeResolver(request.files),
-    assets: makeAssets(request.assets),
+    resolveInclude: makeResolver(request.files, dependencies),
+    assets: makeAssets(dependencies),
   });
 
   if (cancelled.has(request.id) || request.id !== latestRenderId) {
@@ -184,6 +233,7 @@ async function handleRender(request: RenderRequest): Promise<void> {
       preview: request.preview,
       diagnostics: result.diagnostics,
       fontsUsed: fontsReferenced(result.scene),
+      dependencies,
       customizer: result.customizer,
       stats: {
         ...result.geometry.stats,
@@ -209,8 +259,8 @@ async function handleExport(request: ExportRequest): Promise<void> {
     parameters: request.parameters as Record<string, Value>,
     time: request.time,
     preview: false,
-    resolveInclude: makeResolver(request.files),
-    assets: makeAssets(request.assets),
+    resolveInclude: makeResolver(request.files, []),
+    assets: makeAssets([]),
   });
 
   const blocking = result.diagnostics.filter((d) => d.severity === 'error');

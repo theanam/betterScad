@@ -145,11 +145,14 @@ export interface ToolbarActions {
   saveAs(format?: DocumentFormat): void;
   /** Save as stock OpenSCAD, transpiling the extensions the file uses. */
   saveAsStockScad(): void;
+  /** The document plus every project file it uses, as one archive. */
+  saveAsZip(): void;
   preview(): void;
   render(): void;
   export(): void;
   toggleCustomizer(): void;
   toggleConsole(): void;
+  toggleFiles(): void;
   /** One setting changed in the gear menu. */
   changeSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void;
   openPalette(): void;
@@ -161,12 +164,15 @@ export class Toolbar {
   readonly element: HTMLElement;
   private readonly customizerButton: HTMLButtonElement;
   private readonly consoleButton: HTMLButtonElement;
+  private readonly filesButton: HTMLButtonElement;
   private readonly previewButton: HTMLButtonElement;
   private readonly renderButton: HTMLButtonElement;
   private readonly settingsButton: SettingsButton;
 
   /** Drives the Save menu; a `.scad` gets the extra "Save as .bscad" item. */
   private documentFormat: DocumentFormat = 'bscad';
+  /** Whether the model on screen resolved anything from the project directory. */
+  private usesProjectFiles = false;
   /** Buttons that act on the open document, and mean nothing without one. */
   private readonly documentActions: HTMLButtonElement[] = [];
 
@@ -180,6 +186,12 @@ export class Toolbar {
       label: 'Console',
       iconName: 'console',
       onClick: () => this.actions.toggleConsole(),
+    });
+    this.filesButton = button({
+      label: 'Files',
+      iconName: 'files',
+      title: 'Files every tab can use by name — images, drawings, meshes, fonts and libraries',
+      onClick: () => this.actions.toggleFiles(),
     });
     this.settingsButton = new SettingsButton((key, value) => actions.changeSetting(key, value));
     this.previewButton = button({
@@ -260,6 +272,7 @@ export class Toolbar {
         el('span', { class: 'btn__key', text: formatShortcut('Mod+K') }),
       ]),
       el('div', { class: 'toolbar__group' }, [
+        this.filesButton,
         this.customizerButton,
         this.consoleButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
@@ -313,19 +326,34 @@ export class Toolbar {
       onSelect: () => this.actions.saveAsStockScad(),
     });
 
+    // Listed only when there is something to package. A model that depends on
+    // nothing zips to one file in a folder, which is a worse way of saving it
+    // than Save — and an item that always appears would imply otherwise.
+    if (this.usesProjectFiles) {
+      items.push({
+        label: 'Save as .zip…',
+        description: 'This file and every file it uses, in one folder',
+        onSelect: () => this.actions.saveAsZip(),
+      });
+    }
+
     return items;
   }
 
   update(state: {
     customizerVisible: boolean;
     consoleVisible: boolean;
+    filesVisible: boolean;
     settings: AppSettings;
     showingFinalRender: boolean;
     documentFormat: DocumentFormat;
+    /** Drives the Save menu's zip item; see `saveMenuItems`. */
+    usesProjectFiles: boolean;
     /** False with no document open, which leaves half the toolbar inert. */
     hasDocument: boolean;
   }): void {
     this.documentFormat = state.documentFormat;
+    this.usesProjectFiles = state.usesProjectFiles;
 
     // Disabled rather than hidden: a toolbar that changes shape as tabs open
     // and close is harder to aim at than one whose buttons grey out.
@@ -333,6 +361,7 @@ export class Toolbar {
 
     this.customizerButton.classList.toggle('btn--active', state.customizerVisible);
     this.consoleButton.classList.toggle('btn--active', state.consoleVisible);
+    this.filesButton.classList.toggle('btn--active', state.filesVisible);
 
     // Auto-render already re-renders in preview mode on every edit, so the
     // Preview button would do exactly nothing. F5 still works — hiding a

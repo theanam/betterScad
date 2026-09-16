@@ -476,6 +476,62 @@ export function showFontDialog(
   return dialog;
 }
 
+/**
+ * Asks for one line of text.
+ *
+ * `window.prompt` would do the job and is one line, but it is blocked outright
+ * in some embedding contexts and looks like it belongs to the browser rather
+ * than to this app. Renaming a project file is the first thing here that needs
+ * one, and it needs to say what the rename will break.
+ */
+export function showPrompt(
+  title: string,
+  label: string,
+  initial: string,
+  options: { confirmLabel?: string; hint?: string } = {},
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const input = el('input', {
+      type: 'text',
+      value: initial,
+      'aria-label': label,
+      style: 'width: 100%; padding: 6px 8px;',
+    }) as HTMLInputElement;
+
+    let result: string | undefined;
+    const accept = (): void => {
+      const value = input.value.trim();
+      if (!value) return;
+      result = value;
+      dialog.close();
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        accept();
+      }
+    });
+
+    const body = el('div', {}, [
+      el('div', { class: 'param__hint', text: label }),
+      input,
+      ...(options.hint ? [el('p', { class: 'param__hint', text: options.hint })] : []),
+    ]);
+
+    const dialog = shell(title, body, [
+      button({ label: 'Cancel', variant: 'ghost', onClick: () => dialog.close() }),
+      button({ label: options.confirmLabel ?? 'Rename', variant: 'primary', onClick: accept }),
+    ]);
+    dialog.addEventListener('close', () => resolve(result));
+    dialog.showModal();
+    // Selecting the stem leaves the extension in place, which is what a rename
+    // almost always wants to keep.
+    input.focus();
+    const dot = initial.lastIndexOf('.');
+    input.setSelectionRange(0, dot > 0 ? dot : initial.length);
+  });
+}
+
 export function showConfirm(
   title: string,
   message: string,

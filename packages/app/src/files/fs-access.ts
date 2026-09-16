@@ -9,7 +9,10 @@
 
 export interface OpenedFile {
   name: string;
+  /** Decoded source. Empty for an archive, whose bytes are in `data` instead. */
   text: string;
+  /** Raw bytes, present only for a `.zip`. */
+  data?: Uint8Array;
   /** Present only when the browser supports writing back in place. */
   handle?: FileSystemFileHandle;
 }
@@ -26,16 +29,32 @@ const SCAD_TYPES: FilePickerAcceptType[] = [
   },
 ];
 
+/** What Open accepts: a model, or a whole project zipped up. */
+const OPEN_TYPES: FilePickerAcceptType[] = [
+  {
+    description: 'Models and projects',
+    accept: { 'text/plain': ['.bscad', '.scad'], 'application/zip': ['.zip'] },
+  },
+];
+
+/**
+ * What the Files panel accepts.
+ *
+ * Deliberately wide. The panel is a directory, and a directory that refuses a
+ * file because the app cannot think of a use for it is a directory you cannot
+ * put your `LICENSE` in. The accept-all option stays on for the same reason.
+ */
 const ASSET_TYPES: FilePickerAcceptType[] = [
   {
-    description: 'Models and drawings',
+    description: 'Meshes, drawings, images, fonts and libraries',
     accept: {
       'application/octet-stream': ['.stl', '.obj', '.off', '.3mf'],
       'image/svg+xml': ['.svg'],
       'image/vnd.dxf': ['.dxf'],
-      'text/plain': ['.dat'],
+      'text/plain': ['.dat', '.scad', '.bscad'],
       'image/png': ['.png'],
       'image/jpeg': ['.jpg', '.jpeg'],
+      'font/ttf': ['.ttf', '.otf', '.ttc'],
     },
   },
 ];
@@ -83,35 +102,50 @@ export function fileAccessMode(): string {
 // Opening
 // ---------------------------------------------------------------------------
 
+/** True for a file Open should unpack rather than read as source. */
+export function isArchive(name: string): boolean {
+  return /\.zip$/i.test(name);
+}
+
+async function readOpened(file: File, handle?: FileSystemFileHandle): Promise<OpenedFile> {
+  // An archive is never decoded: a zip read as UTF-8 is megabytes of mojibake,
+  // and nothing downstream would look at it.
+  if (isArchive(file.name)) {
+    return { name: file.name, text: '', data: new Uint8Array(await file.arrayBuffer()), handle };
+  }
+  return { name: file.name, text: await file.text(), handle };
+}
+
 export async function openScadFiles(): Promise<OpenedFile[]> {
   if (supportsFileSystemAccess) {
     try {
       const handles = await window.showOpenFilePicker!({
         multiple: true,
-        types: SCAD_TYPES,
+        types: OPEN_TYPES,
         // Let the user pick anything: plenty of `.scad` files carry no type.
         excludeAcceptAllOption: false,
       });
       return Promise.all(
-        handles.map(async (handle: FileSystemFileHandle) => {
-          const file = await handle.getFile();
-          return { name: file.name, text: await file.text(), handle };
-        }),
+        handles.map(async (handle: FileSystemFileHandle) => readOpened(await handle.getFile(), handle)),
       );
     } catch (err) {
       if (isAbort(err)) return [];
       throw err;
     }
   }
-  return pickWithInput('.bscad,.scad,text/plain', true).then((files) =>
-    Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() }))),
+  return pickWithInput('.bscad,.scad,.zip,text/plain', true).then((files) =>
+    Promise.all(files.map((file) => readOpened(file))),
   );
 }
 
 export async function openBinaryFiles(): Promise<OpenedBinary[]> {
   if (supportsFileSystemAccess) {
     try {
-      const handles = await window.showOpenFilePicker!({ multiple: true, types: ASSET_TYPES });
+      const handles = await window.showOpenFilePicker!({
+        multiple: true,
+        types: ASSET_TYPES,
+        excludeAcceptAllOption: false,
+      });
       return Promise.all(
         handles.map(async (handle: FileSystemFileHandle) => {
           const file = await handle.getFile();
@@ -123,7 +157,7 @@ export async function openBinaryFiles(): Promise<OpenedBinary[]> {
       throw err;
     }
   }
-  const files = await pickWithInput('.stl,.obj,.off,.dxf,.svg,.dat,.png,.jpg,.jpeg', true);
+  const files = await pickWithInput('', true);
   return Promise.all(
     files.map(async (file) => ({ name: file.name, data: new Uint8Array(await file.arrayBuffer()) })),
   );

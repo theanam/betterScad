@@ -95,6 +95,11 @@ const ICONS: Record<string, string> = {
   close: 'M3.5 3.5 12.5 12.5M12.5 3.5 3.5 12.5',
   plus: 'M8 3v10M3 8h10',
   font: 'M3 13 7 3h2l4 10M4.8 9.5h6.4',
+  // A sheet with its corner turned back, drawn as the outline plus the fold.
+  file: 'M9.2 1.5H4a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5V4.8zM9.2 1.5v3.3h3.3',
+  trash: 'M2.5 4.3h11M6.2 4.3V2.4h3.6v1.9M3.9 4.3l.7 9.3h6.8l.7-9.3M6.6 6.8v4.3M9.4 6.8v4.3',
+  // A stack of three sheets, for the panel that holds the project's files.
+  files: 'M5.5 1.5h5.2l2.8 2.8v7.2h-8zM10.4 1.5v3.1h3.1M2.5 4.5v10h7.5',
   // A question mark in a ring. The dot is a zero-length segment, which the
   // round line cap turns into a circle.
   help: 'M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM6.1 6.2a1.95 1.95 0 0 1 3.8.6c0 1.3-1.9 1.5-1.9 2.9M8 11.9v.01',

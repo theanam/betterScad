@@ -26,8 +26,6 @@ export interface RenderRequest {
   /** Other open documents, so `include <...>` can resolve against them. */
   files: Record<string, string>;
   parameters: Record<string, Value>;
-  /** Binary assets for `import()` / `surface()`, keyed by the path in the script. */
-  assets: Record<string, Uint8Array>;
   time: number;
   /** F5 preview vs F6 full render (spec feature 14). */
   preview: boolean;
@@ -41,8 +39,21 @@ export interface ExportRequest {
   source: string;
   files: Record<string, string>;
   parameters: Record<string, Value>;
-  assets: Record<string, Uint8Array>;
   time: number;
+}
+
+/**
+ * Replaces the worker's copy of the project directory.
+ *
+ * Sent when the directory changes rather than with every render. The files are
+ * the same on every keystroke and a directory holding a couple of STLs is
+ * megabytes; shipping it with each auto-render would structured-clone all of it
+ * several times a second to say nothing new.
+ */
+export interface SetFilesRequest {
+  type: 'set-files';
+  /** The whole directory, by path. Replaces whatever the worker held. */
+  files: Record<string, Uint8Array>;
 }
 
 export interface LoadFontRequest {
@@ -74,9 +85,16 @@ export interface CancelRequest {
 export type WorkerRequest =
   | RenderRequest
   | ExportRequest
+  | SetFilesRequest
   | LoadFontRequest
   | TranspileRequest
   | CancelRequest;
+
+/** One file a render resolved, and which of the two directories supplied it. */
+export interface Dependency {
+  path: string;
+  source: 'tab' | 'project';
+}
 
 /** One colour group of the rendered model. */
 export interface MeshPayload {
@@ -119,6 +137,16 @@ export interface RenderResponse {
    * source is all it takes to get it — there is nothing to load by hand.
    */
   fontsUsed: string[];
+  /**
+   * Every file the render actually pulled in.
+   *
+   * Recorded by the resolvers as they serve, not guessed from the source: an
+   * `include` inside an `if` that never runs is still in the text, and a
+   * library three levels down the include graph is not. This is what Save as
+   * zip packages, so "what does this model depend on" has to be the engine's
+   * answer rather than a regular expression's.
+   */
+  dependencies: Dependency[];
   customizer: CustomizerModel;
   stats: RenderStats;
   bounds: { min: [number, number, number]; max: [number, number, number] } | null;

@@ -603,6 +603,23 @@ textarea {
   background: var(--bs-surface);
 }
 
+/* A panel docked under the editor: the Customizer, the Files list.
+   Column direction, so the panel inside stretches across the column instead of
+   sizing to its own content — a list of short file names would otherwise make
+   the panel narrower than the one above it, and it would change width as rows
+   came and went. */
+.paneldock {
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-top: 1px solid var(--bs-border);
+}
+
+.paneldock > .panel {
+  flex: 1;
+  min-width: 0;
+}
+
 .panel__header {
   display: flex;
   align-items: center;
@@ -1568,6 +1585,91 @@ dialog::backdrop {
 
 .welcome__link:hover {
   color: var(--bs-accent-ink-hover);
+}
+
+/* --- files panel ---------------------------------------------------------- */
+
+.files {
+  padding: var(--bs-space-2) 0;
+}
+
+.files__folder {
+  padding: var(--bs-space-2) var(--bs-space-3) var(--bs-space-1);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-text-faint);
+}
+
+.files__row {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: 3px var(--bs-space-3);
+  color: var(--bs-text-muted);
+}
+
+.files__row:hover {
+  background: var(--bs-surface-raised);
+  color: var(--bs-text);
+}
+
+.files__row--nested {
+  padding-left: var(--bs-space-5);
+}
+
+/* The in-use mark. Amber because it is state — this file is in the model on
+   screen, and so in the zip — rather than decoration. A hollow ring for the
+   files that are not: absent would be quieter, but then the column would have
+   nothing to align against and the marks would look scattered. */
+.files__use {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bs-border);
+  border-radius: 50%;
+}
+
+.files__use--on {
+  border-color: var(--bs-solid-500);
+  background: var(--bs-solid-500);
+}
+
+.files__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files__meta {
+  flex: none;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-text-faint);
+  white-space: nowrap;
+}
+
+/* Revealed on hover, like the tab close. A row of dot-dot-dots down the panel
+   is noise; the row is the target and the button is where it has to be when
+   you get there. */
+.files__more {
+  flex: none;
+  padding: 0 4px;
+  opacity: 0;
+  line-height: 1;
+}
+
+.files__row:hover .files__more,
+.files__more:focus-visible {
+  opacity: 1;
+}
+
+/* Lit while a drag is over the panel, so it reads as somewhere to drop. */
+.panel--dropping {
+  outline: 2px dashed var(--bs-solid-500);
+  outline-offset: -2px;
 }
 
 /* --- font picker ---------------------------------------------------------- */

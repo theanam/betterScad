@@ -37,7 +37,7 @@ const CHROME = [
   '/usr/bin/chromium',
 ].find((path) => existsSync(path));
 
-const url = argValue('--url') ?? 'http://localhost:5173/';
+const url = argValue('--url') ?? 'http://localhost:5174/';
 /** Deliberately 2x: the README image is displayed at half this width. */
 const SCALE = 2;
 
@@ -125,6 +125,16 @@ async function main() {
       prepare: null,
     },
     {
+      file: 'docs/images/files-panel.png',
+      width: 1440,
+      height: 880,
+      session: projectSession(),
+      // The directory itself, which no `localStorage` session can carry: the
+      // app keeps it in IndexedDB, so the shot seeds the database the app
+      // would have written.
+      files: PROJECT_FILES,
+    },
+    {
       file: 'docs/images/reference-view.png',
       width: 1440,
       height: 880,
@@ -182,7 +192,9 @@ async function main() {
       // the page we were trying to replace and one shot came out showing the
       // sample model instead of the session we had just written.
       await page.send('Page.addScriptToEvaluateOnNewDocument', {
-        source: `localStorage.setItem('betterscad.workspace.v1', ${JSON.stringify(JSON.stringify(shot.session))});`,
+        source:
+          `localStorage.setItem('betterscad.workspace.v1', ${JSON.stringify(JSON.stringify(shot.session))});` +
+          (shot.files ? seedProjectFiles(shot.files) : ''),
       });
       await page.send('Page.navigate', { url });
 
@@ -239,6 +251,109 @@ async function devtoolsEndpoint(profile) {
     await new Promise((ok) => setTimeout(ok, 100));
   }
   throw new Error('Chrome did not start a DevTools endpoint.');
+}
+
+// ---------------------------------------------------------------------------
+// The project-files shot
+// ---------------------------------------------------------------------------
+
+/**
+ * A drawing, a library and an unused file, so the panel shows all three of the
+ * things it is for — and the in-use marks show the difference between them.
+ */
+const PROJECT_FILES = [
+  {
+    path: 'plate.svg',
+    text:
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">' +
+      '<rect x="0" y="0" width="120" height="60" rx="10"/>' +
+      '<circle cx="12" cy="12" r="4"/><circle cx="108" cy="12" r="4"/>' +
+      '<circle cx="12" cy="48" r="4"/><circle cx="108" cy="48" r="4"/>' +
+      '<rect x="34" y="18" width="52" height="24" rx="6"/>' +
+      '</svg>',
+  },
+  {
+    path: 'MCAD/knurl.scad',
+    text: [
+      '// A post with a knurled grip.',
+      'module knurled_post(h = 12, d = 10, teeth = 24) {',
+      '  cylinder(h = h, d = d, $fn = 64);',
+      '  for (i = [0 : teeth - 1])',
+      '    rotate([0, 0, i * 360 / teeth])',
+      '      translate([d / 2 - 0.4, -0.6, 0])',
+      '        cube([1.4, 1.2, h]);',
+      '}',
+      '',
+    ].join('\n'),
+  },
+  // Listed but unreferenced, which is what makes the in-use marks mean
+  // something: two files the model uses, one it does not.
+  { path: 'terrain.png', text: '\u0089PNG\r\n\u001a\n' },
+];
+
+const PROJECT_MODEL = [
+  '// Files added once in the Files panel are reachable from every tab, by the',
+  '// name they have there — as though they sat in this folder on disk.',
+  '',
+  'use <MCAD/knurl.scad>',
+  '',
+  '// The outline, the bolt holes and the window all come out of the drawing.',
+  'linear_extrude(5) import("plate.svg");',
+  '',
+  'translate([60, 30, 5]) knurled_post(h = 16, d = 14);',
+  '',
+].join('\n');
+
+/** Writes the directory the app keeps in IndexedDB, before the app opens it. */
+function seedProjectFiles(files) {
+  const records = files.map((f) => ({ path: f.path, text: f.text }));
+  return `
+    (() => {
+      const records = ${JSON.stringify(records)};
+      const request = indexedDB.open('betterscad-files', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('files', { keyPath: 'path' });
+      request.onsuccess = () => {
+        const store = request.result.transaction('files', 'readwrite').objectStore('files');
+        for (const record of records) {
+          store.put({
+            path: record.path,
+            data: new TextEncoder().encode(record.text).buffer,
+            addedAt: Date.now(),
+          });
+        }
+      };
+    })();
+  `;
+}
+
+function projectSession() {
+  return {
+    version: 1,
+    activeId: 'doc-1',
+    layout: {
+      editorFraction: 0.44,
+      consoleFraction: 0.24,
+      customizerVisible: false,
+      consoleVisible: true,
+      filesVisible: true,
+      theme: 'dark',
+      autoRender: true,
+      showGrid: true,
+      showAxes: false,
+    },
+    documents: [
+      {
+        id: 'doc-1',
+        name: 'plate.scad',
+        text: PROJECT_MODEL,
+        savedText: PROJECT_MODEL,
+        metadata: { version: 1 },
+        hadMetadata: false,
+        parameters: {},
+        hadHandle: false,
+      },
+    ],
+  };
 }
 
 /** The session the app would have saved with the example box open. */

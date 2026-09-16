@@ -40,6 +40,14 @@ export interface Document {
   /** Customizer values, overriding the script's own assignments. */
   parameters: Record<string, Value>;
   /**
+   * The project file this tab was opened from, if any.
+   *
+   * Recorded rather than matched on the name: a new tab called `gears.scad`
+   * beside a stored `gears.scad` is a coincidence, and Save treating it as the
+   * same file would overwrite a library with an unrelated document.
+   */
+  projectPath?: string;
+  /**
    * The viewport pose this tab was last left at.
    *
    * Absent until the document has been shown once, which is what tells the app
@@ -56,6 +64,8 @@ export interface LayoutState {
   consoleFraction: number;
   customizerVisible: boolean;
   consoleVisible: boolean;
+  /** The Files panel, which holds the project directory. */
+  filesVisible: boolean;
   theme: 'light' | 'dark';
   autoRender: boolean;
   showGrid: boolean;
@@ -83,6 +93,7 @@ export const DEFAULT_LAYOUT: LayoutState = {
   consoleFraction: 0.26,
   customizerVisible: false,
   consoleVisible: true,
+  filesVisible: false,
   theme: 'dark',
   autoRender: true,
   showGrid: true,
@@ -143,8 +154,6 @@ export class Workspace {
   documents: Document[] = [];
   activeId = '';
   layout: LayoutState = { ...DEFAULT_LAYOUT };
-  /** Binary assets for `import()` / `surface()`, by filename. */
-  assets = new Map<string, Uint8Array>();
 
   private nextId = 1;
 
@@ -228,10 +237,6 @@ export class Workspace {
     return files;
   }
 
-  assetMap(): Record<string, Uint8Array> {
-    return Object.fromEntries(this.assets);
-  }
-
   /**
    * The format a document saves back as.
    *
@@ -294,6 +299,7 @@ export class Workspace {
           metadata: d.metadata,
           hadMetadata: d.hadMetadata,
           parameters: d.parameters,
+          projectPath: d.projectPath,
           hadHandle: !!d.handle,
         })),
       };

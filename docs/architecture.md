@@ -184,6 +184,58 @@ The viewport renders **on demand** rather than in a continuous rAF loop. A CAD
 model is static between interactions, and spinning the GPU at 60fps to redraw an
 unchanged scene drains laptop batteries for nothing.
 
+## The project directory
+
+`packages/app/src/files/project-files.ts`
+
+A browser tab has no working directory, and `import("bracket.stl")` needs one.
+The Files panel supplies it: one directory shared by every open tab, kept in
+IndexedDB — localStorage cannot hold binaries, and its budget is already spent
+on the session.
+
+Resolution has one order, for text and binary alike:
+
+1. an open tab with that name,
+2. the exact path in the directory,
+3. a basename match in the directory.
+
+Tabs win so that editing a library in a tab is what the model renders against.
+The basename fallback is what lets `use <MCAD/gears.scad>` find a file added as
+a bare `gears.scad`, which is what someone opening an existing model needs: the
+includes are already written, and only the files are missing.
+
+The directory is **cached in the worker** rather than sent with each render.
+It is the same on every keystroke and the only part of a render request that
+can be measured in megabytes, so it is replaced on a `set-files` message and
+nothing else.
+
+**Dependencies are recorded as they are served.** The resolvers push every path
+they answer into a per-render list, which comes back on the render result. That
+list is what the Files panel marks as in use and what Save as zip packages, so
+"what does this model depend on" is the engine's answer rather than a regular
+expression's — an `include` inside an `if` that never ran is out, a library
+three levels down the graph is in.
+
+Fonts are the exception to all of it, because `text(font = …)` names a family
+rather than a path. A font file added to the directory is handed to the worker's
+`FontRegistry`, and the family it registers under is stored back on the record —
+the only way back from a font a model used to the file that supplied it.
+
+## Projects as archives
+
+`packages/app/src/files/project-zip.ts`, `packages/engine/src/io/import/zip.ts`
+
+Save as zip writes the document and everything the render resolved, at the paths
+the script uses, so unzipping produces a folder in which the model works
+unchanged. Opening a zip is the inverse: `.scad`/`.bscad` at the root become
+tabs, everything else joins the directory. The split is by depth rather than
+extension — a `.scad` at the root is the model, a `.scad` in a folder is a
+library — so zipping MCAD alongside a bracket does not open thirty tabs.
+
+The writer was already here for 3MF. The reader handles stored and deflated
+entries, and still has no dependency: `DecompressionStream('deflate-raw')` is in
+every browser the app targets, and in Node.
+
 ## Native file format
 
 `packages/engine/src/bscad.ts`

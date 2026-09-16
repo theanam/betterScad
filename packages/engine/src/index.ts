@@ -272,6 +272,10 @@ export * from './io/export/index.js';
 export { importMesh, importSTL, importOBJ, importOFF } from './io/import/mesh.js';
 export { importDXF } from './io/import/dxf.js';
 export { importSVG } from './io/import/svg.js';
+export { createZip, crc32 } from './io/export/zip.js';
+export type { ZipEntry } from './io/export/zip.js';
+export { readZip, safePath, ZipError } from './io/import/zip.js';
+export type { ZipFile } from './io/import/zip.js';
 export { buildGeometry } from './kernel/evaluate.js';
 export type { AssetProvider, BuildOptions, BuildResult } from './kernel/evaluate.js';
 export { loadKernel, kernelIfReady } from './kernel/wasm.js';
@@ -280,4 +284,4 @@ export { manifoldToMesh, meshToManifold } from './kernel/primitives.js';
 export type { Assembly, Piece, RGBA } from './kernel/geometry.js';
 
 /** Engine version, reported by `betterscad --version` and the about panel. */
-export const ENGINE_VERSION = '0.7.0';
+export const ENGINE_VERSION = '0.8.0';

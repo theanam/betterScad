@@ -36,6 +36,7 @@ import {
 } from './files/font-library.js';
 import {
   fileAccessMode,
+  isArchive,
   openBinaryFiles,
   openFontFiles,
   openScadFiles,
@@ -45,8 +46,15 @@ import {
   supportsFileOpen,
   writeToHandle,
 } from './files/fs-access.js';
+import {
+  ProjectFiles,
+  kindOf,
+  referenceFor,
+  type ProjectFile,
+} from './files/project-files.js';
+import { buildProjectZip, openProjectZip } from './files/project-zip.js';
 import { RenderClient } from './render/client.js';
-import type { RenderResponse, RenderStats } from './render/protocol.js';
+import type { Dependency, RenderResponse, RenderStats } from './render/protocol.js';
 import {
   BLANK_DOCUMENT,
   STARTER_DOCUMENT,
@@ -66,10 +74,12 @@ import {
 import { CommandPalette, CommandRegistry } from './ui/command-palette.js';
 import { ConsolePanel } from './ui/console-panel.js';
 import { CustomizerPanel } from './ui/customizer-panel.js';
+import { FilesPanel } from './ui/files-panel.js';
 import {
   showAboutDialog,
   showConfirm,
   showExportDialog,
+  showPrompt,
   showFontDialog,
   showDowngradePreviewDialog,
   showNonStandardSyntaxDialog,
@@ -89,6 +99,11 @@ import type { CameraState } from './viewport/controls.js';
 
 class App {
   private readonly workspace = new Workspace();
+  /**
+   * The project directory: files every tab can name, as though they sat beside
+   * the model on disk. See `files/project-files.ts`.
+   */
+  private readonly projectFiles = new ProjectFiles();
   private readonly registry = new CommandRegistry();
   private readonly toasts = new Toasts();
   /** Font bytes that never reach the download cache: bundled, disk and system faces. */
@@ -104,6 +119,7 @@ class App {
   private statusBar!: StatusBar;
   private consolePanel!: ConsolePanel;
   private customizerPanel!: CustomizerPanel;
+  private filesPanel!: FilesPanel;
   private editorHost!: HTMLElement;
   /** Shown in place of the editor and the viewport with no document open. */
   private editorEmpty!: HTMLElement;
@@ -113,6 +129,7 @@ class App {
   private mainSplit!: Split;
   private rightSplit!: Split;
   private customizerHost!: HTMLElement;
+  private filesHost!: HTMLElement;
   private animationHost!: HTMLElement;
   private busyBadge!: HTMLElement;
   private measureReadout!: HTMLElement;
@@ -137,6 +154,15 @@ class App {
    */
   private pendingCamera?: CameraState;
   private customizerModel: CustomizerModel = { parameters: [], groups: [] };
+  /**
+   * What the last render resolved, from the worker.
+   *
+   * Drives both the Files panel's in-use marks and what Save as zip packages —
+   * the same list, so the panel is a preview of the archive.
+   */
+  private dependencies: Dependency[] = [];
+  /** Font specs the last render asked for, for the fonts a zip carries. */
+  private fontsUsed: string[] = [];
   private fontFamilies: string[] = [];
   private fontFaces: { family: string; style: string }[] = [];
   /** Families already tried, so a font that cannot be found is asked for once. */
@@ -178,6 +204,9 @@ class App {
 
     await this.client.ready;
     await this.loadBundledFonts();
+    // After the bundled fonts, so a font the user added under a bundled
+    // family's name is the one that wins.
+    await this.loadProjectFiles();
 
     const first = this.workspace.active;
     if (first && !first.camera) this.awaitingInitialView.add(first.id);
@@ -232,11 +261,13 @@ class App {
       save: () => void this.save(),
       saveAs: (format) => void this.saveAs(format),
       saveAsStockScad: () => this.saveAsStockScad(),
+      saveAsZip: () => void this.saveAsZip(),
       preview: () => void this.render(true),
       render: () => void this.render(false),
       export: () => void this.exportModel(),
       toggleCustomizer: () => this.toggleCustomizer(),
       toggleConsole: () => this.toggleConsole(),
+      toggleFiles: () => this.toggleFiles(),
       changeSetting: (key, value) => this.changeSetting(key, value),
       openPalette: () => this.palette.open(),
       openFonts: () => void this.openFontManager(),
@@ -260,8 +291,23 @@ class App {
       // were ever driven while already hidden.
       onClose: () => this.setCustomizerVisible(false),
     });
-    this.customizerHost = el('div', { style: 'display:none; flex: 0 0 42%; min-height:0;' }, [
+    this.customizerHost = el('div', { class: 'paneldock', style: 'display:none; flex: 0 0 42%;' }, [
       this.customizerPanel.element,
+    ]);
+
+    this.filesPanel = new FilesPanel({
+      onAdd: () => void this.addProjectFiles(),
+      onInsert: (file) => {
+        this.editor.insertAtCursor(referenceFor(file));
+        this.editor.focus();
+      },
+      onOpen: (file) => this.openLibraryInTab(file),
+      onRename: (file) => void this.renameProjectFile(file),
+      onRemove: (file) => void this.removeProjectFile(file),
+      onClose: () => this.setFilesVisible(false),
+    });
+    this.filesHost = el('div', { class: 'paneldock', style: 'display:none; flex: 0 0 34%;' }, [
+      this.filesPanel.element,
     ]);
 
     // --- viewport column ---
@@ -323,7 +369,13 @@ class App {
     this.editorEmpty = editorEmptyState(this.startChoices());
 
     this.mainSplit.first.classList.add('pane--editor');
-    this.mainSplit.first.append(this.tabs.element, editorHost, this.editorEmpty, this.customizerHost);
+    this.mainSplit.first.append(
+      this.tabs.element,
+      editorHost,
+      this.editorEmpty,
+      this.customizerHost,
+      this.filesHost,
+    );
     this.mainSplit.second.append(this.rightSplit.element);
 
     this.statusBar = new StatusBar(() => {
@@ -476,11 +528,12 @@ class App {
 
     this.setBusy(true);
     try {
+      // A no-op unless the directory has changed since the last render.
+      this.client.setProjectFiles(this.projectFiles.payload(), this.projectFiles.revision);
       await this.client.render({
         source: doc.text,
         files: this.workspace.fileMap(doc.id),
         parameters: doc.parameters,
-        assets: this.workspace.assetMap(),
         time: this.animationTime,
         preview,
       });
@@ -498,6 +551,9 @@ class App {
     this.customizerModel = result.customizer;
     this.fontFamilies = result.fonts;
     this.fontFaces = result.fontFaces;
+    this.dependencies = result.dependencies;
+    this.fontsUsed = result.fontsUsed;
+    this.refreshFilesPanel();
 
     if (result.dimension === 2) {
       this.viewport.setContours(result.contours);
@@ -817,15 +873,23 @@ class App {
     try {
       const files = await openScadFiles();
       if (files.length === 0) return;
+
+      // A zip is a whole project rather than a document, so it reports itself.
+      const archives = files.filter((file) => file.data && isArchive(file.name));
+      for (const archive of archives) await this.openArchive(archive.name, archive.data!);
+
+      const documents = files.filter((file) => !archives.includes(file));
+      if (documents.length === 0) return;
+
       this.stashEditorState();
       const opened: Document[] = [];
       let last: Document | undefined;
-      for (const file of files) {
+      for (const file of documents) {
         last = this.workspace.createDocument(file.name, file.text, file.handle);
         opened.push(last);
       }
       if (last) this.activate(last);
-      this.toasts.show(`Opened ${files.length} file${files.length === 1 ? '' : 's'}.`, 'success');
+      this.toasts.show(`Opened ${documents.length} file${documents.length === 1 ? '' : 's'}.`, 'success');
       this.warnAboutExtensions(opened);
     } catch (err) {
       this.reportError(`Could not open: ${err instanceof Error ? err.message : String(err)}`);
@@ -850,6 +914,21 @@ class App {
       // Permission withdrawn or the file moved: fall through to Save As.
       this.toasts.show('Could not write to the original file. Choose a new location.', 'info');
     }
+
+    // A library opened out of the project directory goes back to the project
+    // directory. Without this the edit has nowhere to land: the stored copy is
+    // what every other tab renders against the moment this one closes.
+    const stored = doc.projectPath ? this.projectFiles.get(doc.projectPath) : undefined;
+    if (!doc.handle && stored) {
+      await this.projectFiles.add(stored.path, new TextEncoder().encode(doc.text), stored.family);
+      doc.savedText = doc.text;
+      this.refreshFilesPanel();
+      this.workspace.persist();
+      this.refreshChrome();
+      this.toasts.show(`Saved ${stored.path} back to the project files.`, 'success');
+      return;
+    }
+
     await this.saveAs();
   }
 
@@ -984,11 +1063,11 @@ class App {
 
     this.setBusy(true, 'Exporting…');
     try {
+      this.client.setProjectFiles(this.projectFiles.payload(), this.projectFiles.revision);
       const result = await this.client.exportModel(choice.format, {
         source: doc.text,
         files: this.workspace.fileMap(doc.id),
         parameters: doc.parameters,
-        assets: this.workspace.assetMap(),
         time: this.animationTime,
       });
       const outcome = await saveBinaryAs(choice.filename, result.data, result.mimeType);
@@ -1194,17 +1273,18 @@ class App {
         this.editor.insertAtCursor(text);
         this.toasts.show(`Inserted ${text}`, 'success');
       },
+      // Into the project directory, like any other file. A font loaded here
+      // used to live only in this session's memory, so it survived neither a
+      // reload nor a look in any list — it was the one file you could add to a
+      // model and then not find anywhere.
       loadFromDisk: async () => {
         const files = await openFontFiles();
-        for (const file of files) {
-          const response = await this.client.loadFont(file.data);
-          this.fontFamilies = response.families;
-          this.fontFaces = response.faces;
-          // Kept so the picker can preview a face the user supplied.
-          this.localFontBytes.set(response.family ?? file.name, file.data);
-        }
+        for (const file of files) await this.addProjectFile(file.name, file.data);
         if (files.length > 0) {
-          this.toasts.show(`Loaded ${files.length} font file${files.length === 1 ? '' : 's'}.`, 'success');
+          this.toasts.show(
+            `Loaded ${files.length} font file${files.length === 1 ? '' : 's'}. They are in the Files panel.`,
+            'success',
+          );
           void this.render(true);
         }
       },
@@ -1220,18 +1300,194 @@ class App {
     }, this.specimens);
   }
 
-  // -- assets ---------------------------------------------------------------
+  // -- the project directory ------------------------------------------------
 
-  private async addAssets(): Promise<void> {
-    const files = await openBinaryFiles();
-    for (const file of files) this.workspace.assets.set(file.name, file.data);
-    if (files.length > 0) {
-      this.toasts.show(
-        `Added ${files.map((f) => f.name).join(', ')}. Reference them by name, e.g. import("${files[0].name}").`,
-        'success',
-      );
-      void this.render(true);
+  /**
+   * Loads the directory and makes its fonts usable.
+   *
+   * Fonts have to be handed to the worker explicitly — the registry lives
+   * there, and a family nothing registered is a family `text()` cannot use. The
+   * rest of the directory needs nothing: the worker is given the bytes before
+   * the first render and resolves paths out of them.
+   */
+  private async loadProjectFiles(): Promise<void> {
+    await this.projectFiles.load();
+    for (const file of this.projectFiles.list) {
+      if (file.kind === 'font') await this.registerFont(file);
     }
+    this.refreshFilesPanel();
+  }
+
+  private async registerFont(file: ProjectFile): Promise<void> {
+    try {
+      const response = await this.client.loadFont(file.data);
+      this.fontFamilies = response.families;
+      this.fontFaces = response.faces;
+      if (response.family) {
+        await this.projectFiles.setFamily(file.path, response.family);
+        // Kept so the font picker can preview a face the user supplied.
+        this.localFontBytes.set(response.family, file.data);
+      }
+    } catch {
+      // Not a readable font. It stays in the directory as a file like any
+      // other; only `text(font = …)` will not find it.
+    }
+  }
+
+  private refreshFilesPanel(): void {
+    const used = new Set(
+      this.dependencies.filter((d) => d.source === 'project').map((d) => d.path),
+    );
+    this.filesPanel.update(this.projectFiles.list, used);
+  }
+
+  private async addProjectFiles(): Promise<void> {
+    const files = await openBinaryFiles();
+    if (files.length === 0) return;
+    for (const file of files) await this.addProjectFile(file.name, file.data);
+    this.toasts.show(
+      files.length === 1
+        ? `Added ${files[0].name}. Every tab can use it by name.`
+        : `Added ${files.length} files. Every tab can use them by name.`,
+      'success',
+    );
+    void this.render(true);
+  }
+
+  /** One file into the directory, registering it if it turns out to be a font. */
+  private async addProjectFile(path: string, data: Uint8Array): Promise<ProjectFile> {
+    const file = await this.projectFiles.add(path, data);
+    if (file.kind === 'font') await this.registerFont(file);
+    this.refreshFilesPanel();
+    return file;
+  }
+
+  /**
+   * Opens a stored library in a tab.
+   *
+   * The tab then wins over the stored copy for as long as it is open, which is
+   * what makes this an edit rather than a view — and Save puts it back, because
+   * a document with no file handle that came from the directory belongs to the
+   * directory.
+   */
+  private openLibraryInTab(file: ProjectFile): void {
+    const name = file.path.split('/').pop() ?? file.path;
+    const existing = this.workspace.documents.find((d) => d.name === name);
+    if (existing) {
+      this.activate(existing);
+      return;
+    }
+    this.stashEditorState();
+    const doc = this.workspace.createDocument(name, new TextDecoder().decode(file.data));
+    doc.projectPath = file.path;
+    this.activate(doc);
+    this.toasts.show(`${name} is open. Save puts it back in the project files.`, 'info');
+  }
+
+  private async renameProjectFile(file: ProjectFile): Promise<void> {
+    const name = await showPrompt('Rename file', 'New name', file.path, {
+      hint: 'Scripts name files exactly, so anything already referring to the old name will stop finding it. Folders are allowed: MCAD/gears.scad.',
+    });
+    if (!name || name === file.path) return;
+    if (!(await this.projectFiles.rename(file.path, name))) {
+      this.reportError(`There is already a file called ${name}.`);
+      return;
+    }
+    this.refreshFilesPanel();
+    this.toasts.show(`Renamed to ${name}.`, 'success');
+    void this.render(true);
+  }
+
+  private async removeProjectFile(file: ProjectFile): Promise<void> {
+    const inUse = this.dependencies.some((d) => d.source === 'project' && d.path === file.path);
+    const confirmed = await showConfirm(
+      `Remove ${file.path}?`,
+      inUse
+        ? 'The model on screen uses this file, so it will stop rendering until you add it back.'
+        : 'It leaves the project directory. Anything referring to it by name will stop finding it.',
+      'Remove',
+    );
+    if (!confirmed) return;
+    await this.projectFiles.remove(file.path);
+    this.refreshFilesPanel();
+    void this.render(true);
+  }
+
+  // -- projects as archives -------------------------------------------------
+
+  /**
+   * Saves the document and everything it uses as one zip.
+   *
+   * Rendered first, at full quality, for the reason Export re-renders: the
+   * dependency list is a fact about the last render, and packaging a stale one
+   * would put the wrong files in an archive somebody else is going to open.
+   */
+  private async saveAsZip(): Promise<void> {
+    const doc = this.workspace.active;
+    if (!doc) return;
+    doc.text = this.editor.source;
+
+    await this.render(false);
+    if (this.dependencies.length === 0) {
+      this.toasts.show('This model does not use any other files, so Save is enough.', 'info');
+      return;
+    }
+
+    const archive = buildProjectZip({
+      documentName: doc.name,
+      documentText: this.workspace.serialize(doc, this.cameraMetadata()),
+      dependencies: this.dependencies,
+      fontsUsed: this.fontsUsed,
+      tabText: (name) => this.workspace.documents.find((d) => d.name === name)?.text,
+      projectFile: (path) => this.projectFiles.get(path),
+      files: this.projectFiles.list,
+    });
+
+    const filename = `${doc.name.replace(/\.[^.]+$/, '')}.zip`;
+    const outcome = await saveBinaryAs(filename, archive.data, 'application/zip');
+    if (outcome.status === 'failed') this.reportError(outcome.reason);
+    else if (wroteAFile(outcome)) {
+      this.toasts.show(`Saved ${filename} — ${archive.paths.length} files.`, 'success');
+    }
+  }
+
+  /**
+   * Opens a zip as a project.
+   *
+   * Root-level `.scad`/`.bscad` become tabs and everything else joins the
+   * directory, which is the inverse of what `saveAsZip` writes — so a project
+   * that leaves this app can come back into it.
+   */
+  private async openArchive(name: string, data: Uint8Array): Promise<void> {
+    let project;
+    try {
+      project = await openProjectZip(data);
+    } catch (err) {
+      this.reportError(`Could not read ${name}: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    for (const file of project.files) await this.addProjectFile(file.path, file.data);
+
+    this.stashEditorState();
+    const opened: Document[] = [];
+    let last: Document | undefined;
+    for (const document of project.documents) {
+      last = this.workspace.createDocument(document.name, document.text);
+      opened.push(last);
+    }
+    if (last) this.activate(last);
+    else void this.render(true);
+
+    const counts = [
+      project.documents.length > 0 ? `${project.documents.length} model${project.documents.length === 1 ? '' : 's'}` : '',
+      project.files.length > 0 ? `${project.files.length} file${project.files.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean);
+    this.toasts.show(
+      counts.length > 0 ? `Opened ${name}: ${counts.join(' and ')}.` : `${name} held nothing to open.`,
+      counts.length > 0 ? 'success' : 'info',
+    );
+    this.warnAboutExtensions(opened);
   }
 
   // -- animation (spec feature 20) ------------------------------------------
@@ -1366,8 +1622,20 @@ class App {
     this.refreshChrome();
   }
 
+  private toggleFiles(): void {
+    this.setFilesVisible(!this.workspace.layout.filesVisible);
+  }
+
+  private setFilesVisible(visible: boolean): void {
+    this.workspace.layout.filesVisible = visible;
+    this.applyLayoutVisibility();
+    this.workspace.persist();
+    this.refreshChrome();
+  }
+
   private applyLayoutVisibility(): void {
     this.customizerHost.style.display = this.workspace.layout.customizerVisible ? 'flex' : 'none';
+    this.filesHost.style.display = this.workspace.layout.filesVisible ? 'flex' : 'none';
     this.rightSplit.setSecondVisible(this.workspace.layout.consoleVisible);
     this.viewport?.resize();
   }
@@ -1447,6 +1715,7 @@ class App {
       settings: this.workspace.layout,
       showingFinalRender: this.showingFinalRender,
       documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
+      usesProjectFiles: this.dependencies.length > 0,
       hasDocument: !!active,
     });
     this.statusBar.update({
@@ -1514,16 +1783,22 @@ class App {
         run: () => void this.saveAs('bscad'),
       },
       {
-        id: 'file.assets',
+        id: 'file.addFiles',
         category: 'File',
-        title: 'Add assets for import() / surface()…',
-        run: () => void this.addAssets(),
+        title: 'Add files to the project…',
+        run: () => void this.addProjectFiles(),
       },
       {
         id: 'file.saveAsScad',
         category: 'File',
         title: 'Save as OpenSCAD .scad…',
         run: () => this.saveAsStockScad(),
+      },
+      {
+        id: 'file.saveAsZip',
+        category: 'File',
+        title: 'Save as .zip — the model and every file it uses…',
+        run: () => void this.saveAsZip(),
       },
       { id: 'file.export', category: 'File', title: 'Export model…', shortcut: 'Mod+E', run: () => void this.exportModel() },
       {
@@ -1580,6 +1855,7 @@ class App {
         run: () => this.viewport.setMeasuring(!this.viewport.measuring),
       },
 
+      { id: 'panel.files', category: 'Panels', title: 'Toggle Files', run: () => this.toggleFiles() },
       { id: 'panel.customizer', category: 'Panels', title: 'Toggle Customizer', run: () => this.toggleCustomizer() },
       { id: 'panel.console', category: 'Panels', title: 'Toggle Console', run: () => this.toggleConsole() },
       { id: 'panel.theme', category: 'Panels', title: 'Toggle light / dark theme', run: () => this.toggleTheme() },
@@ -1681,7 +1957,8 @@ class App {
       }
     });
 
-    // Drag and drop: .scad/.bscad open as tabs, everything else becomes an asset.
+    // Drag and drop: a zip is a project, a .scad/.bscad is a model to work on,
+    // and everything else joins the project directory.
     const stop = (event: DragEvent): void => {
       event.preventDefault();
       event.stopPropagation();
@@ -1695,23 +1972,28 @@ class App {
       this.stashEditorState();
       const dropped: Document[] = [];
       let opened: Document | undefined;
+      let added = 0;
       for (const file of files) {
-        if (/\.(bscad|scad)$/i.test(file.name)) {
+        if (isArchive(file.name)) {
+          await this.openArchive(file.name, new Uint8Array(await file.arrayBuffer()));
+        } else if (kindOf(file.name) === 'library') {
+          // A `.scad` dropped on the app is a model to work on. Libraries reach
+          // the directory through the Files panel, where the intent is plain.
           opened = this.workspace.createDocument(file.name, await file.text());
           dropped.push(opened);
-        } else if (/\.(ttf|otf|ttc)$/i.test(file.name)) {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const response = await this.client.loadFont(bytes);
-          this.fontFamilies = response.families;
-          this.fontFaces = response.faces;
-          this.localFontBytes.set(response.family ?? file.name, bytes);
         } else {
-          this.workspace.assets.set(file.name, new Uint8Array(await file.arrayBuffer()));
+          await this.addProjectFile(file.name, new Uint8Array(await file.arrayBuffer()));
+          added++;
         }
       }
       if (opened) this.activate(opened);
-      else void this.render(true);
-      this.toasts.show(`Added ${files.length} file${files.length === 1 ? '' : 's'}.`, 'success');
+      else if (added > 0) void this.render(true);
+      if (added > 0) {
+        this.toasts.show(
+          `Added ${added} file${added === 1 ? '' : 's'} to the project.`,
+          'success',
+        );
+      }
       this.warnAboutExtensions(dropped);
     });
 
