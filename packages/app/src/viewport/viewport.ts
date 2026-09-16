@@ -109,6 +109,15 @@ export class Viewport {
 
   private readonly modelGroup = new Group();
   private readonly annotationGroup = new Group();
+  /**
+   * 2D outlines, kept apart from the model.
+   *
+   * A scene can hold both: `dimensionOf` calls a mixed one 3D because that is
+   * what can be exported, but the flat parts are still geometry the author
+   * wrote and still want looking at. Sharing `modelGroup` made the two setters
+   * clear each other, so whichever ran second won.
+   */
+  private readonly contourGroup = new Group();
   private readonly helperGroup = new Group();
   private readonly measureGroup = new Group();
 
@@ -144,6 +153,9 @@ export class Viewport {
   showEdges = false;
 
   private lastBounds: { min: Vector3; max: Vector3 } | null = null;
+  /** The two halves of `lastBounds`, kept apart because they arrive apart. */
+  private meshBounds: { min: Vector3; max: Vector3 } | null = null;
+  private contourBounds: { min: Vector3; max: Vector3 } | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -169,7 +181,13 @@ export class Viewport {
 
     this.gizmo = new ViewGizmo((view) => this.setView(view));
 
-    this.scene.add(this.modelGroup, this.annotationGroup, this.helperGroup, this.measureGroup);
+    this.scene.add(
+      this.modelGroup,
+      this.annotationGroup,
+      this.contourGroup,
+      this.helperGroup,
+      this.measureGroup,
+    );
     this.setupLights();
     this.rebuildHelpers();
     this.applyTheme();
@@ -256,6 +274,7 @@ export class Viewport {
     this.controls.dispose();
     this.clearGroup(this.modelGroup);
     this.clearGroup(this.annotationGroup);
+    this.clearGroup(this.contourGroup);
     this.clearGroup(this.measureGroup);
     this.clearGroup(this.helperGroup);
     this.renderer.dispose();
@@ -325,12 +344,10 @@ export class Viewport {
     for (const payload of meshes) this.modelGroup.add(this.buildMesh(payload));
     for (const payload of annotations) this.annotationGroup.add(this.buildMesh(payload));
 
-    this.lastBounds = bounds
+    this.meshBounds = bounds
       ? { min: new Vector3(...bounds.min), max: new Vector3(...bounds.max) }
       : null;
-
-    if (this.lastBounds) this.scaleHelpersTo(this.lastBounds);
-    this.invalidate();
+    this.updateBounds();
   }
 
   /**
@@ -342,13 +359,16 @@ export class Viewport {
   clearModel(): void {
     this.clearGroup(this.modelGroup);
     this.clearGroup(this.annotationGroup);
+    this.clearGroup(this.contourGroup);
+    this.meshBounds = null;
+    this.contourBounds = null;
+    this.lastBounds = null;
     this.invalidate();
   }
 
   /** Draws a 2D result as flat outlines on the XY plane. */
   setContours(contours: { points: Float32Array; color: [number, number, number, number] }[]): void {
-    this.clearGroup(this.modelGroup);
-    this.clearGroup(this.annotationGroup);
+    this.clearGroup(this.contourGroup);
 
     const min = new Vector3(Infinity, Infinity, 0);
     const max = new Vector3(-Infinity, -Infinity, 0);
@@ -375,11 +395,37 @@ export class Viewport {
       const material = new LineBasicMaterial({
         color: new Color(contour.color[0], contour.color[1], contour.color[2]),
       });
-      this.modelGroup.add(new Line(geometry, material));
+      this.contourGroup.add(new Line(geometry, material));
     }
 
-    this.lastBounds = Number.isFinite(min.x) ? { min, max } : null;
-    if (this.lastBounds) this.scaleHelpersTo(this.lastBounds);
+    this.contourBounds = Number.isFinite(min.x) ? { min, max } : null;
+    this.updateBounds();
+  }
+
+  /**
+   * The framed extent is whatever is on screen, meshes and outlines together.
+   *
+   * Each half reports its own, because they arrive in separate messages and
+   * either can be empty. Fitting to only one of them would leave the other
+   * hanging off the edge of a scene it is genuinely part of.
+   */
+  private updateBounds(): void {
+    const halves = [this.meshBounds, this.contourBounds].filter(
+      (b): b is { min: Vector3; max: Vector3 } => b !== null,
+    );
+    if (halves.length === 0) {
+      this.lastBounds = null;
+      this.invalidate();
+      return;
+    }
+    const min = halves[0].min.clone();
+    const max = halves[0].max.clone();
+    for (const half of halves.slice(1)) {
+      min.min(half.min);
+      max.max(half.max);
+    }
+    this.lastBounds = { min, max };
+    this.scaleHelpersTo(this.lastBounds);
     this.invalidate();
   }
 
@@ -692,7 +738,12 @@ export class Viewport {
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const hits = this.raycaster.intersectObjects(this.modelGroup.children, true);
+    // Outlines stay pickable: they used to live in `modelGroup`, and measuring
+    // against a flat part is the whole point of drawing it.
+    const hits = this.raycaster.intersectObjects(
+      [...this.modelGroup.children, ...this.contourGroup.children],
+      true,
+    );
     const snapped = hits.length > 0 ? this.snap(hits[0]) : this.snapToGroundGrid();
     if (!snapped) return;
 

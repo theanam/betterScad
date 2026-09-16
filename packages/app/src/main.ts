@@ -555,11 +555,13 @@ class App {
     this.fontsUsed = result.fontsUsed;
     this.refreshFilesPanel();
 
-    if (result.dimension === 2) {
-      this.viewport.setContours(result.contours);
-    } else {
-      this.viewport.setModel(result.meshes, result.annotations, result.bounds);
-    }
+    // Both, always. A scene can hold flat and solid geometry at once —
+    // `dimension` reports 3D for a mixed one because that is what exports, and
+    // taking it as a choice of what to *draw* meant the 2D half vanished the
+    // moment a solid appeared anywhere in the file. Each setter owns its own
+    // group and clears it, so an empty list is how a half says it has nothing.
+    this.viewport.setModel(result.meshes, result.annotations, result.bounds);
+    this.viewport.setContours(result.contours);
 
     const doc = this.workspace.active;
 
