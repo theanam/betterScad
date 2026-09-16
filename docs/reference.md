@@ -740,6 +740,10 @@ offset(delta = 6) square([40, 25], center = true);
 
 A negative value shrinks. Shrink a shape by more than its own narrowest half-width and parts of it simply vanish, which is a legitimate way to remove thin slivers.
 
+Which corners `r` rounds depends on the direction. Growing rounds the **outside** corners; shrinking rounds the **inside** ones. A convex shape has no inside corners, so `offset(r = -2) square(20)` is a smaller square with its corners still sharp — that is the right answer, not a missing round.
+
+Several children are offset as **one region**, not one at a time. Offsetting does not distribute over union, and the difference lands exactly on the edges the union makes: two overlapping squares form a cross, and shrinking it rounds the four inner corners that neither square had on its own.
+
 `offset(r = 2) offset(r = -2)` is the standard trick for rounding inside corners while leaving outside ones alone.
 
 See also: [`cube(r), square(r)`](#entry-shape-radius) · [`square()`](#entry-square) · [`minkowski()`](#entry-minkowski)

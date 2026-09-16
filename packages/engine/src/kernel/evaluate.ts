@@ -1116,25 +1116,42 @@ function buildOffset(node: SceneNode, ctx: Ctx): Assembly {
   const chamfer = node.params.chamfer as boolean;
   const res = node.params.resolution as Resolution;
 
-  const pieces: Piece[] = [];
-  for (const piece of inner.pieces) {
-    if (piece.dim !== 2) {
-      ctx.diagnostics.warn('offset() only applies to 2D geometry.', node.span, 'kernel.offset-3d');
-      continue;
-    }
-    const result = guardGeom(ctx, node.span, 'offset', () => {
-      // `r=` rounds corners, `delta=` keeps them sharp (miter), and
-      // `delta=` with `chamfer=true` cuts them flat (square).
-      const joinType = round ? 'Round' : chamfer ? 'Square' : 'Miter';
-      const segments = round ? fragments(Math.abs(amount), res) : 0;
-      return ctx.arena.track(
-        (piece.solid as CrossSection).offset(amount, joinType, 2, segments),
-      );
-    });
-    if (result) pieces.push({ dim: 2, solid: result, color: piece.color, display: piece.display });
+  if (inner.pieces.some((piece) => piece.dim !== 2)) {
+    ctx.diagnostics.warn('offset() only applies to 2D geometry.', node.span, 'kernel.offset-3d');
   }
 
-  return assembly(pieces, inner.annotations);
+  // Offsetting is done to the children as one region, not to each of them.
+  //
+  // It does not distribute over union — `offset(A ∪ B)` is not
+  // `offset(A) ∪ offset(B)` — and the difference is exactly at the edges the
+  // union creates. Two overlapping squares make a cross whose four inner
+  // corners are reflex; inset the cross and those corners round off, inset the
+  // squares separately and the corners never existed, so they stay sharp. The
+  // same goes the other way: a positive offset rounds each rectangle's own
+  // corners in the middle of what should be flat wall.
+  //
+  // `intersection`, `hull` and `minkowski` all merge their operands first for
+  // this reason, and collapse to a single piece as they do. This follows them,
+  // including in taking the first piece's colour: an offset region has one
+  // boundary, so it cannot keep a colour per child.
+  const merged = unionWithin(inner, 2, ctx, node.span) as CrossSection | undefined;
+  if (!merged) return assembly([], inner.annotations);
+
+  const first = inner.pieces.find((piece) => piece.dim === 2);
+  const result = guardGeom(ctx, node.span, 'offset', () => {
+    // `r=` rounds corners, `delta=` keeps them sharp (miter), and
+    // `delta=` with `chamfer=true` cuts them flat (square).
+    const joinType = round ? 'Round' : chamfer ? 'Square' : 'Miter';
+    const segments = round ? fragments(Math.abs(amount), res) : 0;
+    return ctx.arena.track(merged.offset(amount, joinType, 2, segments));
+  });
+
+  return result
+    ? assembly(
+        [{ dim: 2, solid: result, color: first?.color, display: first?.display ?? 'normal' }],
+        inner.annotations,
+      )
+    : assembly([], inner.annotations);
 }
 
 // ---------------------------------------------------------------------------
