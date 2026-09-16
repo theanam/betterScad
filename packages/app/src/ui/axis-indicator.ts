@@ -39,6 +39,33 @@ const ARM = 1;
 const LABEL = 1.12;
 
 /**
+ * The arrow head, in viewBox units, where one unit is the full arm.
+ *
+ * Deliberately small: this is a legend, not a manipulator, and at 74px a head
+ * big enough to be a handle turns three thin axes into three darts. These come
+ * out at roughly 6x4 CSS pixels.
+ *
+ * In viewBox units rather than pixels — unlike `STROKE` — because a head is
+ * geometry rather than weight. If the box is ever resized the arms and their
+ * heads should scale together; a head pinned to pixels would swell relative to
+ * the arm it sits on.
+ */
+const HEAD_LENGTH = 0.2;
+const HEAD_WIDTH = 0.14;
+
+/**
+ * Below this projected arm length, the head is dropped.
+ *
+ * An axis pointing at or away from the camera projects to nearly nothing, and
+ * its direction becomes noise — normalising a near-zero vector would spin the
+ * head randomly as the camera creeps past dead-on. Worse, a head is a fixed
+ * length, so on an arm shorter than one it would reach back past the origin and
+ * point the wrong way. Under this threshold the arm is a stub a few pixels long
+ * and the letter beside it is doing the work anyway.
+ */
+const MIN_ARM_FOR_HEAD = HEAD_LENGTH * 1.5;
+
+/**
  * One CSS pixel, the same weight the viewport draws its own axis lines at.
  *
  * In pixels rather than viewBox units, via `non-scaling-stroke`: a width in
@@ -46,6 +73,9 @@ const LABEL = 1.12;
  * re-weight it and it would stop matching the lines in the scene.
  */
 const STROKE = 1;
+
+/** How far the arm runs under its head, to hide the join. */
+const STROKE_OVERLAP = 0.02;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -85,12 +115,47 @@ export class AxisIndicator {
     for (const axis of [...axes].sort((a, b) => a.towards - b.towards)) {
       const color = `var(${COLORS[axis.label].token}, ${COLORS[axis.label].fallback})`;
 
+      // The projected arm. Shorter than `ARM` when the axis leans out of the
+      // screen, which is what makes the indicator read as three dimensions.
+      const tipX = axis.x * ARM;
+      const tipY = axis.y * ARM;
+      const armLength = Math.hypot(tipX, tipY);
+      const head = armLength >= MIN_ARM_FOR_HEAD;
+
+      // With a head, the line stops at its base rather than running to the tip:
+      // the round linecap would otherwise bulge past the apex and blunt the
+      // point. The overlap closes the anti-aliasing seam between the two.
+      let endX = tipX;
+      let endY = tipY;
+      if (head) {
+        const ux = tipX / armLength;
+        const uy = tipY / armLength;
+        const baseX = tipX - ux * HEAD_LENGTH;
+        const baseY = tipY - uy * HEAD_LENGTH;
+        endX = baseX + ux * STROKE_OVERLAP;
+        endY = baseY + uy * STROKE_OVERLAP;
+
+        // Perpendicular to the arm, so the head leans with the axis.
+        const px = -uy * (HEAD_WIDTH / 2);
+        const py = ux * (HEAD_WIDTH / 2);
+
+        parts.push(
+          svg('polygon', {
+            points:
+              `${round(tipX)},${round(tipY)} ` +
+              `${round(baseX + px)},${round(baseY + py)} ` +
+              `${round(baseX - px)},${round(baseY - py)}`,
+            fill: color,
+          }),
+        );
+      }
+
       parts.push(
         svg('line', {
           x1: 0,
           y1: 0,
-          x2: round(axis.x * ARM),
-          y2: round(axis.y * ARM),
+          x2: round(endX),
+          y2: round(endY),
           stroke: color,
           'stroke-width': STROKE,
           'vector-effect': 'non-scaling-stroke',

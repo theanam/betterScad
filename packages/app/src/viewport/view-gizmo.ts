@@ -36,28 +36,14 @@ const GIZMO_MARGIN = 12;
 /** Room kept beneath the cube for the reset/fit buttons that sit under it. */
 export const GIZMO_BOTTOM_RESERVE = 34;
 
-/** The axis a face looks down, tagged on it in that axis's own colour. */
-interface AxisTag {
-  /** `+X`, `-Z`, and so on. */
-  text: string;
-  /** Token for the colour, matching the axis lines drawn in the viewport. */
-  token: string;
-  fallback: string;
-}
-
 interface Face {
   view: StandardView;
   label: string;
-  axis: AxisTag;
   normal: Vector3;
   /** Which world direction should read as "up" when this face is seen head-on. */
   up: Vector3;
   mesh: Mesh;
 }
-
-const AXIS_X = { token: '--bs-viewport-axis-x', fallback: '#d2453f' };
-const AXIS_Y = { token: '--bs-viewport-axis-y', fallback: '#2f8f5b' };
-const AXIS_Z = { token: '--bs-viewport-axis-z', fallback: '#3b74df' };
 
 function token(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -70,7 +56,7 @@ function token(name: string, fallback: string): string {
  * The inset border is what makes the cube read as six distinct, clickable
  * faces rather than a textured block.
  */
-function faceTexture(label: string, axis: AxisTag, highlighted: boolean): CanvasTexture {
+function faceTexture(label: string, highlighted: boolean): CanvasTexture {
   const size = 160;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -94,16 +80,8 @@ function faceTexture(label: string, axis: AxisTag, highlighted: boolean): Canvas
 
   ctx.fillStyle = ink;
   ctx.font = `700 ${label.length > 5 ? 30 : 36}px "Inter", system-ui, sans-serif`;
-  // Lifted off centre to leave room for the axis tag beneath it.
-  ctx.fillText(label, size / 2, size / 2 - 14);
-
-  // The axis this face looks down, in the same colour the viewport draws that
-  // axis. Naming the face ("RIGHT") says where the camera goes; this says which
-  // of X, Y and Z you are looking along, which is the question you are actually
-  // asking when a model has been rotated.
-  ctx.fillStyle = token(axis.token, axis.fallback);
-  ctx.font = '700 30px "Inter", system-ui, sans-serif';
-  ctx.fillText(axis.text, size / 2, size / 2 + 26);
+  // Centred, now that it is the only thing on the face.
+  ctx.fillText(label, size / 2, size / 2);
 
   const texture = new CanvasTexture(canvas);
   texture.anisotropy = 4;
@@ -139,18 +117,17 @@ export class ViewGizmo {
     const definitions: {
       view: StandardView;
       label: string;
-      axis: AxisTag;
       normal: [number, number, number];
       up: [number, number, number];
     }[] = [
-      { view: 'right', label: 'RIGHT', axis: { text: '+X', ...AXIS_X }, normal: [1, 0, 0], up: [0, 0, 1] },
-      { view: 'left', label: 'LEFT', axis: { text: '\u2212X', ...AXIS_X }, normal: [-1, 0, 0], up: [0, 0, 1] },
-      { view: 'back', label: 'BACK', axis: { text: '+Y', ...AXIS_Y }, normal: [0, 1, 0], up: [0, 0, 1] },
-      { view: 'front', label: 'FRONT', axis: { text: '\u2212Y', ...AXIS_Y }, normal: [0, -1, 0], up: [0, 0, 1] },
+      { view: 'right', label: 'RIGHT', normal: [1, 0, 0], up: [0, 0, 1] },
+      { view: 'left', label: 'LEFT', normal: [-1, 0, 0], up: [0, 0, 1] },
+      { view: 'back', label: 'BACK', normal: [0, 1, 0], up: [0, 0, 1] },
+      { view: 'front', label: 'FRONT', normal: [0, -1, 0], up: [0, 0, 1] },
       // Seen from above or below there is no world "up", so +Y and -Y are used
       // to keep the label the right way round as you arrive from an orbit.
-      { view: 'top', label: 'TOP', axis: { text: '+Z', ...AXIS_Z }, normal: [0, 0, 1], up: [0, 1, 0] },
-      { view: 'bottom', label: 'BOTTOM', axis: { text: '\u2212Z', ...AXIS_Z }, normal: [0, 0, -1], up: [0, -1, 0] },
+      { view: 'top', label: 'TOP', normal: [0, 0, 1], up: [0, 1, 0] },
+      { view: 'bottom', label: 'BOTTOM', normal: [0, 0, -1], up: [0, -1, 0] },
     ];
 
     for (const def of definitions) {
@@ -162,7 +139,7 @@ export class ViewGizmo {
 
       const mesh = new Mesh(
         new PlaneGeometry(1, 1),
-        new MeshBasicMaterial({ map: faceTexture(def.label, def.axis, false), transparent: false }),
+        new MeshBasicMaterial({ map: faceTexture(def.label, false), transparent: false }),
       );
       mesh.matrixAutoUpdate = false;
       mesh.matrix.makeBasis(right, up, normal);
@@ -170,7 +147,7 @@ export class ViewGizmo {
       mesh.updateMatrixWorld(true);
 
       this.root.add(mesh);
-      this.faces.push({ view: def.view, label: def.label, axis: def.axis, normal, up, mesh });
+      this.faces.push({ view: def.view, label: def.label, normal, up, mesh });
     }
   }
 
@@ -181,7 +158,7 @@ export class ViewGizmo {
     for (const face of this.faces) {
       const material = face.mesh.material as MeshBasicMaterial;
       material.map?.dispose();
-      material.map = faceTexture(face.label, face.axis, face === this.hovered);
+      material.map = faceTexture(face.label, face === this.hovered);
       material.needsUpdate = true;
     }
   }
@@ -231,7 +208,7 @@ export class ViewGizmo {
       if (!face) continue;
       const material = face.mesh.material as MeshBasicMaterial;
       material.map?.dispose();
-      material.map = faceTexture(face.label, face.axis, face === next);
+      material.map = faceTexture(face.label, face === next);
       material.needsUpdate = true;
     }
     this.hovered = next;
