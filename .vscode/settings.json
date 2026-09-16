@@ -1,0 +1,36 @@
+{
+  // Peacock tints this window with the deep end of the BetterSCAD brand ramp
+  // (--bs-solid-900 in brand/tokens.css) so it is distinguishable at a glance.
+  // The workbench.colorCustomizations below are Peacock's own derived values —
+  // re-run "Peacock: Enter a Color" or edit peacock.color and apply, rather
+  // than hand-editing them.
+  "peacock.color": "#8a4526",
+  "workbench.colorCustomizations": {
+    "activityBar.activeBackground": "#b25931",
+    "activityBar.background": "#b25931",
+    "activityBar.foreground": "#e7e7e7",
+    "activityBar.inactiveForeground": "#e7e7e799",
+    "activityBarBadge.background": "#154b25",
+    "activityBarBadge.foreground": "#e7e7e7",
+    "commandCenter.border": "#e7e7e799",
+    "sash.hoverBorder": "#b25931",
+    "statusBar.background": "#8a4526",
+    "statusBar.foreground": "#e7e7e7",
+    "statusBarItem.hoverBackground": "#b25931",
+    "statusBarItem.remoteBackground": "#30af57",
+    "statusBarItem.remoteForeground": "#e7e7e7",
+    "titleBar.activeBackground": "#8a4526",
+    "titleBar.activeForeground": "#e7e7e7",
+    "titleBar.inactiveBackground": "#8a452699",
+    "titleBar.inactiveForeground": "#e7e7e799",
+    "activityBar.activeBorder": "#e7e7e7",
+    "activityBarTop.activeBackground": "#b25931",
+    "activityBarTop.activeBorder": "#e7e7e7",
+    "activityBarTop.background": "#b25931",
+    "activityBarTop.foreground": "#e7e7e7",
+    "activityBarTop.inactiveForeground": "#e7e7e799",
+    "commandCenter.foreground": "#e7e7e7",
+    "statusBar.debuggingBackground": "#8a4526",
+    "statusBar.debuggingForeground": "#e7e7e7"
+  }
+}
