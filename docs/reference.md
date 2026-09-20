@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 15 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 16 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -2846,7 +2846,93 @@ A pitch too coarse for the diameter, or a clearance so large the groove closes u
 
 **Saved as OpenSCAD `.scad`:** A generated module sweeping the same profile up the same twisted extrusion, defined once however many times it is used.
 
-See also: [`negative()`](#entry-negative) · [`cylinder()`](#entry-cylinder) · [`difference()`](#entry-difference) · [`regular_polygon()`](#entry-regular_polygon) · [`$fn`](#entry-fn)
+See also: [`negative()`](#entry-negative) · [`cylinder()`](#entry-cylinder) · [`difference()`](#entry-difference) · [`gear()`](#entry-gear) · [`regular_polygon()`](#entry-regular_polygon) · [`$fn`](#entry-fn)
+
+<a id="entry-gear"></a>
+
+### gear()
+
+```
+gear(m, teeth, h, internal, clearance, pressure_angle, helix, center, segments)
+```
+
+A gear. Give it a tooth size, a number of teeth, and a thickness. Any two gears made with the same tooth size mesh — they do not have to be made together, or even be in the same file.
+
+```scad
+gear(m = 2, teeth = 20, h = 6, $fn = 96);
+```
+
+<img src="images/reference/gear.png" alt="A 20-tooth gear of module 2: a pitch circle of 20, and a tip circle one module further out at 22." width="420">
+
+*A 20-tooth gear of module 2: a pitch circle of 20, and a tip circle one module further out at 22.*
+
+```scad
+$fn = 96;
+gear(m = 2, teeth = 20, h = 6);
+translate([42, 0, 0]) rotate([0, 0, 180 - 180 / 22])
+  gear(m = 2, teeth = 22, h = 6);
+```
+
+<img src="images/reference/gear-pair.png" alt="Two gears that share only a module, at the sum of their pitch radii: 20 + 22. Nothing pairs them but the arithmetic." width="420">
+
+*Two gears that share only a module, at the sum of their pitch radii: 20 + 22. Nothing pairs them but the arithmetic.*
+
+```scad
+$fn = 96;
+difference() {
+  cylinder(h = 6, r = 54);
+  gear(m = 2, teeth = 48, h = 6, internal = true);
+}
+translate([28, 0, 0]) gear(m = 2, teeth = 20, h = 6);
+```
+
+<img src="images/reference/gear-ring.png" alt="internal = true subtracted from a blank: a ring gear, with the same 20-tooth pinion running inside it." width="420">
+
+*`internal = true` subtracted from a blank: a ring gear, with the same 20-tooth pinion running inside it.*
+
+```scad
+gear(m = 2, teeth = 20, h = 12, helix = 25, $fn = 96);
+```
+
+<img src="images/reference/gear-helical.png" alt="The same gear with a 25 degree helix. Its mate takes helix = -25: an external pair turns opposite ways, so the hands have to oppose too." width="420">
+
+*The same gear with a 25 degree helix. Its mate takes `helix = -25`: an external pair turns opposite ways, so the hands have to oppose too.*
+
+| Argument | |
+| --- | --- |
+| `m` | Module: tooth size, in pitch diameter per tooth. |
+| `teeth` | Number of teeth. Three or more. |
+| `h` | Thickness of the gear. |
+| `internal` | `true` builds the solid to subtract for a ring gear. Default `false`. |
+| `clearance` | Backlash between a meshing pair, split between them. Default `0.2`. |
+| `pressure_angle` | Angle the teeth press at. Default `20`. |
+| `helix` | Helix angle for a helical gear; positive is right-handed. Default `0`. |
+| `center` | `true` centres it on the origin. Default `false`. |
+| `segments` | Facets per full turn. Defaults from `$fn`, floored at four per tooth. |
+
+`m` is the **module**: the tooth size, in millimetres of pitch diameter per tooth. It is the one number a pair has to agree on. `teeth` then sets how big this particular gear is — the pitch circle is `m * teeth / 2`, and the tip is one module further out.
+
+Two gears run at the sum of their pitch radii: `m * (teeth1 + teeth2) / 2` between the centres. That is the whole of the arithmetic, and it is why there is no pairing step here — the teeth are involutes, which roll against each other at a constant ratio wherever they touch, so nothing depends on the two being cut as a set.
+
+`internal = true` builds the **solid to subtract** for a ring gear, not the ring itself: put it under `negative()` or in a `difference()` and what is left is a rim with teeth pointing inward, which a pinion of the same module runs inside. The centres are `m * (teeth - teeth_pinion) / 2` apart, and the pair turns the same way rather than opposite ways.
+
+Internal and external are one construction with one number flipped. The tip and the root trade places, because a ring gear's teeth point inward, and the tooth takes the backlash the external one gives up — so the same involute at the same angles describes both, and neither can drift away from the other.
+
+`clearance` (default `0.2`) is the backlash: the play between a meshing pair, measured around the pitch circle. Unlike a bolt and its nut, neither gear is the male one, so each gives up half of it and any two gears open the whole of it between them. `0` gives an exact pair, which touches and will not turn in any real material.
+
+`helix` (default `0`) is the helix angle, in degrees, of a helical gear — quieter and stronger than a spur gear, because a tooth comes into contact gradually instead of all at once. Positive is right-handed. **An external pair takes opposite hands** (`20` and `-20`), because the two turn opposite ways; an internal pair takes the same hand, because it does not.
+
+`pressure_angle` (default `20`) is the angle the teeth press at. 20 is the modern standard, 14.5 the older one. A pair has to agree on it as well as on the module.
+
+`center` behaves as it does for `cylinder()`. `segments` is the facet count for a full turn; it follows `$fn`/`$fa`/`$fs` but never falls below four per tooth, because the feature a gear has to resolve is the tooth and not the circle it sits on.
+
+Below the base circle the flank runs radially in to the root rather than following the trochoid a real cutter sweeps. Nothing meshes that far down on an ordinary pair, but the difference is material a cutter would have taken away — so below about eight teeth a large mate can reach past the base circle and find it. Raise `clearance`, `teeth` or `pressure_angle` if a small pinion binds.
+
+Dimensions that cannot make a gear — fewer than three teeth, a clearance that eats the tooth, a tooth count so low at so wide a pressure angle that the tooth comes to a point before its tip — are errors rather than a shape that is quietly not a gear.
+
+**Saved as OpenSCAD `.scad`:** A generated module building the same involute profile and extruding it the same way, defined once however many times it is used.
+
+See also: [`thread()`](#entry-thread) · [`negative()`](#entry-negative) · [`difference()`](#entry-difference) · [`cylinder()`](#entry-cylinder) · [`linear_extrude()`](#entry-linear_extrude)
 
 ## Negative space
 

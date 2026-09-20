@@ -187,6 +187,7 @@ numbered suffix rather than shadowing it.
 | [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
 | [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
+| [`gear()`](#gear) | module: the same involute profile, extruded |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
 | [Single-axis transforms](#single-axis-transforms) | the stock call with zeros in the other slots |
 | [C-style statement `for`](#c-style-statement-for) | bounded range `for` with the condition as a guard |
@@ -493,6 +494,77 @@ groove up, are errors rather than a shape that is quietly not a thread.
 
 **Downgrade:** a generated module sweeping the same profile up the same twisted
 extrusion.
+
+### `gear()`
+
+`gear(m, teeth, h)` — an involute spur gear, described the way a gear is: a
+tooth size, a count, and a thickness.
+
+```scad
+gear(m = 2, teeth = 20, h = 6);   // pitch circle 20, tip circle 22
+```
+
+`m` is the **module** — millimetres of pitch diameter per tooth — and it is the
+only number a pair has to agree on, along with `pressure_angle`. The pitch
+circle is `m * teeth / 2`; two gears run at the sum of their pitch radii, and
+nothing else has to be arranged:
+
+```scad
+gear(m = 2, teeth = 20, h = 6);
+translate(2 * (20 + 22) / 2, 0) rotate([0, 0, 180 - 180 / 22])
+  gear(m = 2, teeth = 22, h = 6);
+```
+
+They mesh because the flanks are involutes of the base circle, which roll
+against each other at a constant ratio wherever they happen to touch. Nothing
+depends on the two being cut as a set, which is why there is no pairing step
+here and why a gear from one file meshes with a gear from another.
+
+`internal = true` builds **the solid to subtract** for a ring gear, so the ring
+can be written where the ring is:
+
+```scad
+union() {
+  cylinder(h = 6, r = 54);
+  negative() gear(m = 2, teeth = 48, h = 6, internal = true);
+}
+```
+
+A 20-tooth pinion runs inside that, at `2 * (48 - 20) / 2` from its centre, and
+turns the same way rather than the opposite way. Internal and external are one
+construction with one number flipped: the tip and the root trade places, because
+a ring gear's teeth point inward, and the tooth takes the backlash the external
+one gives up. The same involute at the same angles describes both.
+
+`clearance` (default `0.2`) is the backlash — the play between a meshing pair,
+measured around the pitch circle. Unlike a bolt and its nut neither gear is the
+male one, so each gives up half of it and any two open the whole of it between
+them. `0` gives an exact pair, which touches and will not turn.
+
+`helix` (default `0`) gives a helical gear, quieter and stronger because a tooth
+comes into contact gradually rather than all at once. Positive is right-handed,
+and **an external pair takes opposite hands** — `helix = 20` runs against
+`helix = -20` — because the two turn opposite ways. An internal pair takes the
+same hand, because it does not.
+
+`pressure_angle` (default `20`; 14.5 is the older standard) and `center`, which
+behaves as it does for `cylinder()`, round the shape out. `segments` is the
+facet count for a full turn: it follows `$fn`/`$fa`/`$fs` but never falls below
+four per tooth, because the feature a gear has to resolve is the tooth and not
+the circle the teeth sit on.
+
+Below the base circle the flank runs radially in to the root rather than
+following the trochoid a real cutter sweeps. Nothing meshes that far down on an
+ordinary pair, but the difference is material a cutter would have taken away, so
+below about eight teeth a large mate can reach past the base circle and find it.
+Raise `clearance`, `teeth` or `pressure_angle` if a small pinion binds.
+
+Fewer than three teeth, a clearance that eats the tooth, or a tooth count so low
+at so wide a pressure angle that the tooth comes to a point before its tip, are
+errors rather than a shape that is quietly not a gear.
+
+**Downgrade:** a generated module building the same involute profile and
+extruding it the same way.
 
 ### Loose-number transforms
 

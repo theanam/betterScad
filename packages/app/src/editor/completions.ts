@@ -292,6 +292,31 @@ const MODULES: BuiltinDoc[] = [
       },
     ],
   },
+  {
+    label: 'gear',
+    template: 'gear(m = ${1:2}, teeth = ${2:20}, h = ${3:6})',
+    detail: 'gear(m, teeth, h)  — BetterSCAD',
+    info: 'An involute spur gear. `m` is the module — the tooth size — and `teeth` the count. The pitch circle is `m * teeth / 2`, and two gears run at the sum of their pitch radii.\n\nAny two gears sharing `m` and `pressure_angle` mesh, whatever their tooth counts. `internal = true` makes the solid to subtract for a ring gear; `helix` gives a helical one, and a meshing pair takes opposite hands.\n\nExports to `.scad` as a generated module building the same profile.',
+    type: 'class',
+    forms: [
+      {
+        template: 'gear(m = ${1:2}, teeth = ${2:20}, h = ${3:6}, internal = true)',
+        detail: 'gear(m, teeth, h, internal)  — the ring gear it runs in',
+      },
+      {
+        template: 'gear(m = ${1:2}, teeth = ${2:20}, h = ${3:6}, helix = ${4:20})',
+        detail: 'gear(m, teeth, h, helix)  — helical',
+      },
+      {
+        template: 'gear(m = ${1:2}, teeth = ${2:20}, h = ${3:6}, clearance = ${4:0.3})',
+        detail: 'gear(m, teeth, h, clearance)',
+      },
+      {
+        template: 'gear(m = ${1:2}, teeth = ${2:20}, h = ${3:6}, center = true)',
+        detail: 'gear(m, teeth, h, center)',
+      },
+    ],
+  },
   { label: 'regular_polygon', template: 'regular_polygon(${1:6}, ${2:10})', detail: 'regular_polygon(sides, length)  — BetterSCAD', info: 'An equilateral polygon with `sides` sides, each `length` long. Fewer than 3 sides cannot close, and is an error.\n\nExports to `.scad` as a generated module wrapping circle($fn = sides).', type: 'class' },
 
   // Single-axis transforms (BetterSCAD extension). Grouped so the axis reads as

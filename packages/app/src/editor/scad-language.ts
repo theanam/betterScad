@@ -40,7 +40,7 @@ const PRIMITIVES = new Set([
   'cube', 'sphere', 'cylinder', 'polyhedron', 'square', 'circle', 'polygon',
   'text', 'import', 'surface', 'children', 'import_stl', 'import_dxf', 'import_off',
   // BetterSCAD additions.
-  'regular_polygon', 'thread',
+  'regular_polygon', 'thread', 'gear',
 ]);
 
 /**

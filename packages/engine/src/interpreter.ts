@@ -1605,6 +1605,98 @@ function threadMouthProfile(
 }
 
 /**
+ * Facets per turn never drops below this many *per tooth*, whatever `$fn` says.
+ *
+ * Every other round shape floors its fragment count at a number of its own, but
+ * the feature a gear has to resolve is the tooth, not the circle the teeth sit
+ * on — a 60-tooth gear drawn with 30 facets has half a facet per tooth and is
+ * not a gear. So the floor counts teeth. Four is the fewest that still leaves
+ * an arc across the tip and another across the root once the flanks have taken
+ * their share.
+ */
+const MIN_GEAR_SEGMENTS_PER_TOOTH = 4;
+
+/** Past this many profile points times slices a gear is worth a word. */
+const MAX_GEAR_VERTICES = 60000;
+
+/**
+ * The involute function, `inv a = tan a - a`, in degrees in and degrees out.
+ *
+ * Degrees rather than radians because every other angle in this file is in
+ * degrees, and because the legacy `.scad` export has no choice — OpenSCAD's
+ * trigonometry is in degrees — and the two have to be the same function.
+ */
+function involuteDegrees(degrees: number): number {
+  return (Math.tan((degrees * Math.PI) / 180) * 180) / Math.PI - degrees;
+}
+
+/**
+ * The 2D profile a `gear()` extrudes: `teeth` involute teeth around one closed
+ * loop.
+ *
+ * A tooth flank is the involute of the base circle, which is the curve traced
+ * by the end of a string unwound from it, and is the whole reason gears made
+ * separately mesh: two involutes of the right base circles roll against each
+ * other at a constant ratio wherever they happen to touch, so nothing depends
+ * on the two being positioned exactly. `flankAngle` is where that curve sits at
+ * a given radius, measured from the centre line of a tooth.
+ *
+ * Four pieces per tooth, in order: the flank up one side, an arc across the
+ * tip, the flank back down the other, and an arc along the root to the next
+ * tooth. The tip is sampled as an arc rather than closed with a chord for the
+ * same reason a thread's crest is — a chord planes the tip flat and quietly
+ * makes the gear smaller than the diameter it claims.
+ *
+ * Below the base circle there is no involute to draw: the string has run out.
+ * The flank runs radially in to the root there, rather than following the
+ * trochoid a hob's tip would sweep. Nothing meshes that far down on an ordinary
+ * pair — the contact has left the flank by then — so the difference is material
+ * a real cutter would have taken away and this one leaves. It only becomes
+ * visible at very low tooth counts, where a large mate's tip reaches past the
+ * base circle and finds it.
+ */
+function gearProfilePoints(
+  teeth: number,
+  rTip: number,
+  rRoot: number,
+  rBase: number,
+  flankAngle: (radius: number) => number,
+  flankSteps: number,
+  tipSteps: number,
+  rootSteps: number,
+): [number, number][] {
+  const polar = (r: number, degrees: number): [number, number] => {
+    const a = (degrees * Math.PI) / 180;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  };
+  const start = Math.max(rBase, rRoot);
+  const flank = (i: number): number => start + ((rTip - start) * i) / flankSteps;
+
+  const pitchAngle = 360 / teeth;
+  const tipAngle = flankAngle(rTip);
+  const rootAngle = flankAngle(start);
+  const rootSpan = pitchAngle - 2 * rootAngle;
+  const undercut = rRoot < rBase;
+
+  const points: [number, number][] = [];
+  for (let k = 0; k < teeth; k++) {
+    const centre = k * pitchAngle;
+    if (undercut) points.push(polar(rRoot, centre - rootAngle));
+    for (let i = 0; i <= flankSteps; i++) points.push(polar(flank(i), centre - flankAngle(flank(i))));
+    // The ends of the tip arc are the flank endpoints, already placed.
+    for (let i = 1; i < tipSteps; i++) {
+      points.push(polar(rTip, centre - tipAngle + (2 * tipAngle * i) / tipSteps));
+    }
+    for (let i = flankSteps; i >= 0; i--) points.push(polar(flank(i), centre + flankAngle(flank(i))));
+    if (undercut) points.push(polar(rRoot, centre + rootAngle));
+    for (let i = 1; i < rootSteps; i++) {
+      points.push(polar(rRoot, centre + rootAngle + (rootSpan * i) / rootSteps));
+    }
+  }
+  return points;
+}
+
+/**
  * Clamps a corner radius to what the shape can actually hold.
  *
  * A radius past half the shortest side has no geometry to round — the straight
@@ -2257,6 +2349,184 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         span,
       );
       return center ? transformNode(translation(0, 0, -h / 2), [solid], span) : solid;
+    },
+  },
+
+  /**
+   * `gear(m, teeth, h, …)` — an involute spur or helical gear (BetterSCAD
+   * extension).
+   *
+   * Built, like the other added shapes, as the scene subtree its legacy export
+   * prints: one polygon of `teeth` involute teeth, extruded — straight for a
+   * spur gear, twisted for a helical one.
+   *
+   * **Two gears mesh because they share a module and a pressure angle, not
+   * because they were made together.** That is the property involute teeth
+   * have and the reason this takes `m` and `teeth` rather than a diameter: the
+   * pitch circle is `m * teeth / 2`, two gears run at the sum of their pitch
+   * radii, and nothing else has to be agreed on. Change `teeth` and the gear
+   * grows; the mate still fits, at a centre distance the same arithmetic gives.
+   *
+   * **A ring gear is the same construction with one number flipped.** `grow` is
+   * −1 for an external gear and +1 for an internal one, and it moves three
+   * things together: the tip and the root trade places (a ring gear's teeth
+   * point inward, so its addendum is where the other's dedendum was), and the
+   * tooth takes the backlash the external one gives up. `internal = true`
+   * builds the solid to *subtract*, whose teeth are the ring's spaces — which
+   * is why the same involute, at the same angles, describes both.
+   *
+   * The clearance is split in half between the two gears rather than loaded
+   * onto one, because unlike a bolt and its nut neither of a meshing pair is
+   * the male one. Any two gears from these numbers therefore open exactly
+   * `clearance` of backlash between them, whichever kinds they are.
+   */
+  gear: {
+    params: [
+      'm',
+      'teeth',
+      'h',
+      'internal',
+      'clearance',
+      'pressure_angle',
+      'helix',
+      'center',
+      'segments',
+    ],
+    defaults: {
+      internal: 'false',
+      clearance: '0.2',
+      pressure_angle: '20',
+      helix: '0',
+      center: 'false',
+    },
+    build: (args, _children, scope, interp, span) => {
+      const m = asNumber(args.get('m'), 0);
+      const teeth = Math.round(asNumber(args.get('teeth'), 0));
+      const h = asNumber(args.get('h'), 0);
+      const alpha =
+        args.get('pressure_angle') === undefined ? 20 : asNumber(args.get('pressure_angle'), 20);
+
+      const reject = (message: string): undefined => {
+        interp.error(`gear(): ${message}`, span, 'eval.bad-gear');
+        return undefined;
+      };
+      if (!(m > 0)) return reject(`m must be greater than 0, got ${m}.`);
+      if (!Number.isFinite(teeth) || teeth < 3) {
+        return reject(`teeth must be at least 3 to close a gear, got ${teeth}.`);
+      }
+      if (!(h > 0)) return reject(`h must be greater than 0, got ${h}.`);
+      if (!(alpha > 0 && alpha < 45)) {
+        return reject(`pressure_angle must be between 0 and 45, got ${alpha}.`);
+      }
+
+      const internal = isTruthy(args.get('internal'));
+      const clearance =
+        args.get('clearance') === undefined ? 0.2 : asNumber(args.get('clearance'), 0.2);
+      const helix = args.get('helix') === undefined ? 0 : asNumber(args.get('helix'), 0);
+      const center = isTruthy(args.get('center'));
+      if (!(Math.abs(helix) < 90)) {
+        return reject(`helix must be between -90 and 90, got ${helix}.`);
+      }
+
+      const rPitch = (m * teeth) / 2;
+      const rBase = rPitch * Math.cos((alpha * Math.PI) / 180);
+      // ISO proportions: one module of addendum, a quarter more of dedendum,
+      // and that extra quarter is the clearance under a mating tooth's tip.
+      const grow = internal ? 1 : -1;
+      const rTip = internal ? rPitch + 1.25 * m : rPitch + m;
+      const rRoot = internal ? rPitch - m : rPitch - 1.25 * m;
+      // Half the tooth at the pitch circle. Nominally a quarter of the angular
+      // pitch; each gear then gives up half the backlash, so a pair opens all
+      // of it. In degrees, like every other angle here.
+      const half = 90 / teeth + (grow * 45 * clearance) / (Math.PI * rPitch);
+      if (!(half > 0)) {
+        return reject(`clearance ${clearance} is too large for a module of ${m}; the tooth vanishes.`);
+      }
+
+      const invAlpha = involuteDegrees(alpha);
+      const flankAngle = (radius: number): number =>
+        half +
+        invAlpha -
+        involuteDegrees((Math.acos(Math.min(1, rBase / radius)) * 180) / Math.PI);
+
+      const start = Math.max(rBase, rRoot);
+      const pitchAngle = 360 / teeth;
+      const tipAngle = flankAngle(rTip);
+      const rootAngle = flankAngle(start);
+      if (!(tipAngle > 0)) {
+        return reject(
+          `the tooth comes to a point before its tip at ${teeth} teeth; raise teeth or pressure_angle.`,
+        );
+      }
+      if (!(rootAngle < pitchAngle / 2)) {
+        return reject(`clearance ${clearance} closes the space between the teeth.`);
+      }
+
+      const res = resolutionFor(args, scope);
+      const segArg = args.get('segments');
+      const seg = Math.max(
+        MIN_GEAR_SEGMENTS_PER_TOOTH * teeth,
+        segArg !== undefined ? Math.floor(asNumber(segArg, 0)) : fragments(rTip, res),
+      );
+      // The flank is sampled so no chord of it is longer than a facet of the
+      // tip circle — the tooth is exactly as smooth as the blank it was cut
+      // from. Tip and root are arcs and take the fragment count's angular step,
+      // as the circles elsewhere in the shape do.
+      const flankSteps = Math.max(4, Math.ceil((seg * (rTip - start)) / (2 * Math.PI * rTip)));
+      const tipSteps = Math.max(1, Math.ceil((2 * tipAngle * seg) / 360));
+      const rootSteps = Math.max(1, Math.ceil(((pitchAngle - 2 * rootAngle) * seg) / 360));
+
+      // A helix of angle `helix` at the pitch cylinder turns the profile
+      // `h * tan(helix) / rPitch` as it rises. Negative is the right-hand one,
+      // for the reason the thread's twist is negative: OpenSCAD's positive
+      // twist turns clockwise looking down +Z.
+      const twist = -(180 * h * Math.tan((helix * Math.PI) / 180)) / (Math.PI * rPitch);
+      const slices = Math.max(1, Math.ceil((Math.abs(twist) * seg) / 360));
+
+      const perTooth =
+        2 * (flankSteps + 1) + (rRoot < rBase ? 2 : 0) + (tipSteps - 1) + rootSteps;
+      if (teeth * perTooth * slices > MAX_GEAR_VERTICES) {
+        interp.warn(
+          `gear(): this is ${teeth * perTooth * slices} points of geometry; pass a smaller segments= if it drags.`,
+          span,
+          'eval.gear-dense',
+        );
+      }
+      return node(
+        'linear_extrude',
+        {
+          height: h,
+          center,
+          twist,
+          slices,
+          scaleTop: [1, 1],
+          v: undefined,
+          resolution: { fn: seg, fa: res.fa, fs: res.fs } as Resolution,
+        },
+        [
+          node(
+            'polygon',
+            {
+              points: gearProfilePoints(
+                teeth,
+                rTip,
+                rRoot,
+                rBase,
+                flankAngle,
+                flankSteps,
+                tipSteps,
+                rootSteps,
+              ),
+              paths: undefined,
+            },
+            [],
+            [],
+            span,
+          ),
+        ],
+        [],
+        span,
+      );
     },
   },
 

@@ -1,0 +1,92 @@
+/* BetterSCAD
+{
+  "version": 1,
+  "presets": {
+    "default": { "size": 2, "thickness": 8, "backlash": 0.2, "twist": 0 },
+    "helical": { "size": 2, "thickness": 10, "backlash": 0.25, "twist": 20 }
+  },
+  "activePreset": "default"
+}
+*/
+// Demonstrates the `gear()` extension: a planetary gearset, which is the case
+// that needs every claim the shape makes to actually hold.
+//
+// Four gears here were built by four separate calls that share exactly one
+// number — the module — and they all have to run together. Nothing pairs them
+// up; the involute flank does that on its own. The centre distances are the
+// sums and differences of pitch radii, which is arithmetic you can do in your
+// head, and the ring is the same call with `internal = true`.
+//
+// Export this as legacy .scad (File -> Export as legacy .scad, or
+// `bscad gear.bscad --legacy-scad`) to see it become a generated module.
+
+/* [Gears] */
+// Module: tooth size, in pitch diameter per tooth. The one number a mesh needs.
+size = 2;        // [0.5:0.25:4]
+thickness = 8;   // [3:1:20]
+
+/* [Fit] */
+// Play between every meshing pair. Raise it for a printer that runs wide.
+backlash = 0.2;  // [0:0.05:0.6]
+
+/* [Helix] */
+// 0 is a spur gearset. Anything else makes it helical, and the hands below
+// stop being decoration.
+twist = 0;       // [-30:5:30]
+
+$fn = 120;
+
+// --- the tooth counts -------------------------------------------------------
+//
+// A ring is a sun plus two planets: 18 + 2 * 15 = 48. And with three planets
+// 120 degrees apart, both 18 and 48 divide by 3, so each planet sits a whole
+// number of teeth around the sun and around the ring alike. That is the whole
+// reason they drop straight in with no phasing — change these numbers and they
+// will not.
+
+sun_teeth = 18;
+planet_teeth = 15;
+ring_teeth = sun_teeth + 2 * planet_teeth;
+planets = 3;
+
+assert(ring_teeth % planets == 0 && sun_teeth % planets == 0,
+       "these tooth counts will not let the planets drop in unphased");
+
+// Pitch radii, and the centre distances they give. A gear's pitch circle is
+// m * teeth / 2; an external pair runs at the sum of two of them and an
+// internal pair at the difference.
+orbit = size * (sun_teeth + planet_teeth) / 2;
+rim = size * ring_teeth / 2 + 3 * size;
+
+// --- the sun ----------------------------------------------------------------
+
+gear(m = size, teeth = sun_teeth, h = thickness,
+     clearance = backlash, helix = twist);
+
+// --- the planets ------------------------------------------------------------
+//
+// Opposite hand to the sun. An external pair turns opposite ways, so the two
+// helices have to oppose as well or they walk out of step up the tooth.
+
+for (i = [0 : planets - 1]) {
+  rotatez(i * 360 / planets) translatex(orbit)
+    gear(m = size, teeth = planet_teeth, h = thickness,
+         clearance = backlash, helix = -twist);
+}
+
+// --- the ring ---------------------------------------------------------------
+//
+// The same hand as the planets, because an internal pair turns the *same* way.
+//
+// `internal = true` is the solid to subtract, not the ring, so it goes under
+// negative() and the ring is written where the ring is rather than hoisted into
+// a difference() at the top of the file.
+
+union() {
+  cylinder(h = thickness, r = rim);
+
+  negative() {
+    gear(m = size, teeth = ring_teeth, h = thickness,
+         clearance = backlash, helix = -twist);
+  }
+}
