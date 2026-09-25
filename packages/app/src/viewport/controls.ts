@@ -18,6 +18,11 @@ import { MathUtils, PerspectiveCamera, Vector2, Vector3 } from 'three';
 
 export interface ControlsOptions {
   onChange(): void;
+  /**
+   * The point on the model under the pointer, if there is one: what the wheel
+   * zooms towards.
+   */
+  pick?(clientX: number, clientY: number): Vector3 | undefined;
 }
 
 export type StandardView = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso';
@@ -361,9 +366,52 @@ export class OrbitCamera {
     event.preventDefault();
     // Line-mode deltas are ~1 per notch; normalise so both feel the same.
     const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-    this.radius *= Math.exp(delta * this.zoomSpeed);
-    this.apply();
+    this.zoomBy(Math.exp(delta * this.zoomSpeed), this.wheelAnchor(event));
   };
+
+  /** The last wheel anchor, reused while the pointer stays put. */
+  private anchor?: { x: number; y: number; at: number; point: Vector3 | undefined };
+
+  /**
+   * Picks once per wheel gesture, not once per event.
+   *
+   * A trackpad sends dozens of wheel events a second, and a raycast against a
+   * large mesh is not free. The anchor is a point in the world, so it stays
+   * right for as long as the pointer does not move.
+   */
+  private wheelAnchor(event: WheelEvent): Vector3 | undefined {
+    const now = performance.now();
+    const last = this.anchor;
+    if (last && last.x === event.clientX && last.y === event.clientY && now - last.at < 300) {
+      last.at = now;
+      return last.point;
+    }
+    const point = this.options.pick?.(event.clientX, event.clientY);
+    this.anchor = { x: event.clientX, y: event.clientY, at: now, point };
+    return point;
+  }
+
+  /**
+   * Zooms by `factor`, about `anchor` when there is one.
+   *
+   * Towards the point under the pointer rather than the orbit target, because
+   * the target is only wherever the view was last framed. When the model
+   * shrinks under the camera — a `!` on one part, a line commented out — the
+   * target is still the middle of the old, big model: zooming towards it
+   * slides the small part off the side, a notch at a time sized for the big
+   * one. Scaling the whole pose about the anchor keeps what is under the
+   * pointer under the pointer, and the steps shrink as it gets close.
+   */
+  private zoomBy(factor: number, anchor?: Vector3): void {
+    const before = this.radius;
+    this.radius = MathUtils.clamp(this.radius * factor, this.minDistance, this.maxDistance);
+    if (anchor) {
+      const applied = this.radius / before;
+      this.target.sub(anchor).multiplyScalar(applied).add(anchor);
+    }
+    this.updateClipPlanes();
+    this.apply();
+  }
 
   private pinchDistance(): number {
     const [a, b] = [...this.pointers.values()];

@@ -177,6 +177,7 @@ export class Viewport {
         this.invalidate();
         this.callbacks.onCamera?.();
       },
+      pick: (clientX, clientY) => this.hitModel(clientX, clientY)?.point,
     });
 
     this.gizmo = new ViewGizmo((view) => this.setView(view));
@@ -731,20 +732,8 @@ export class Viewport {
       return;
     }
 
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-
-    // Outlines stay pickable: they used to live in `modelGroup`, and measuring
-    // against a flat part is the whole point of drawing it.
-    const hits = this.raycaster.intersectObjects(
-      [...this.modelGroup.children, ...this.contourGroup.children],
-      true,
-    );
-    const snapped = hits.length > 0 ? this.snap(hits[0]) : this.snapToGroundGrid();
+    const hit = this.hitModel(event.clientX, event.clientY);
+    const snapped = hit ? this.snap(hit) : this.snapToGroundGrid();
     if (!snapped) return;
 
     this.measurePoints.push(snapped.point);
@@ -803,6 +792,27 @@ export class Viewport {
     if (edge) return { point: edge, kind: 'edge' };
 
     return { point: surface, kind: 'surface' };
+  }
+
+  /**
+   * The nearest point of the model under a screen position, leaving the ray
+   * in `raycaster` for whoever wants the miss.
+   *
+   * Outlines stay pickable: they used to live in `modelGroup`, and measuring
+   * against a flat part is the whole point of drawing it.
+   */
+  private hitModel(clientX: number, clientY: number): Intersection | undefined {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(
+      [...this.modelGroup.children, ...this.contourGroup.children],
+      true,
+    );
+    return hits[0];
   }
 
   /**
