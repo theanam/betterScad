@@ -192,6 +192,7 @@ async function handleRender(request: RenderRequest): Promise<void> {
     preview: request.preview,
     // Half-way through a line, the rest of the model stays on screen.
     partial: true,
+    varyColors: request.varyColors,
     resolveInclude: makeResolver(request.files, dependencies),
     assets: makeAssets(dependencies),
   });

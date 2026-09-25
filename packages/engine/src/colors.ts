@@ -51,6 +51,25 @@ export const CSS_COLORS: Record<string, string> = {
 export const DEFAULT_COLOR: RGBA = [0.98, 0.6, 0.16, 1];
 
 /**
+ * What "vary colours" paints items with, in order.
+ *
+ * Chosen to tell neighbours apart, so each is far from the one before it. Two
+ * hues are missing on purpose: amber, which is the model's own colour and the
+ * app's colour for state and action, and cyan, which is the `#` highlight and
+ * the measure tool — a varied item must never be mistaken for either.
+ */
+export const ITEM_COLORS: readonly RGBA[] = [
+  [0.79, 0.42, 0.24, 1], // terracotta
+  [0.42, 0.5, 0.76, 1], // slate blue
+  [0.5, 0.64, 0.42, 1], // sage
+  [0.78, 0.38, 0.5, 1], // rose
+  [0.54, 0.56, 0.6, 1], // steel
+  [0.58, 0.4, 0.66, 1], // plum
+  [0.85, 0.81, 0.75, 1], // sand
+  [0.25, 0.56, 0.42, 1], // pine
+];
+
+/**
  * Resolves a `color()` argument.
  *
  * Returns `undefined` when the value names no colour, so the caller can leave

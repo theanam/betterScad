@@ -70,6 +70,8 @@ export interface RenderOptions extends CompileOptions {
    * lines missing would be a different model presented as this one.
    */
   partial?: boolean;
+  /** Give every item its own colour; see `BuildOptions.varyColors`. */
+  varyColors?: boolean;
   /**
    * Really union the result rather than leaving overlapping pieces separate.
    *
@@ -282,6 +284,7 @@ export class Engine {
       fonts: this.fonts,
       assets: options.assets,
       merge: options.merge ?? options.preview !== true,
+      varyColors: options.varyColors,
     });
     const geometryMs = now() - geometryStart;
 
@@ -339,4 +342,4 @@ export { manifoldToMesh, meshToManifold } from './kernel/primitives.js';
 export type { Assembly, Piece, RGBA } from './kernel/geometry.js';
 
 /** Engine version, reported by `betterscad --version` and the about panel. */
-export const ENGINE_VERSION = '0.13.0';
+export const ENGINE_VERSION = '0.14.0';

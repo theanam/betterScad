@@ -23,6 +23,7 @@ export interface RenderInput {
   parameters: Record<string, Value>;
   time: number;
   preview: boolean;
+  varyColors: boolean;
 }
 
 type Pending = {
@@ -145,6 +146,7 @@ export class RenderClient {
       parameters: input.parameters,
       time: input.time,
       preview: input.preview,
+      varyColors: input.varyColors,
     });
   }
 
@@ -172,7 +174,7 @@ export class RenderClient {
 
   exportModel(
     format: string,
-    input: Omit<RenderInput, 'preview'>,
+    input: Omit<RenderInput, 'preview' | 'varyColors'>,
   ): Promise<ExportResponse> {
     return this.send<ExportResponse>({
       type: 'export',

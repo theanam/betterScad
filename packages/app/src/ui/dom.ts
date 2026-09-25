@@ -89,6 +89,9 @@ const ICONS: Record<string, string> = {
   grid: 'M2 2h12v12H2zm4 0v12M10 2v12M2 6h12M2 10h12',
   axes: 'M2 14V2M2 14h12M2 14 8 8',
   ruler: 'M1.5 5.5h13v5h-13zM4 5.5v2M6.5 5.5v3M9 5.5v2M11.5 5.5v3',
+  // Three overlapping discs: separate things, each told apart.
+  colors:
+    'M2.5 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0zM7.5 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0zM5 10.5a3 3 0 1 0 6 0a3 3 0 1 0-6 0z',
   frame: 'M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3',
   console: 'M2 3h12v10H2zm2.5 2.5 2 2-2 2M8 9.5h3.5',
   sliders: 'M2 4h8M12 4h2M2 8h2M6 8h8M2 12h6M10 12h4M10 2v4M4 6v4M8 10v4',

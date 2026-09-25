@@ -29,6 +29,8 @@ export interface RenderRequest {
   time: number;
   /** F5 preview vs F6 full render (spec feature 14). */
   preview: boolean;
+  /** Each item its own colour. Never on an export: the colours are not the model's. */
+  varyColors: boolean;
 }
 
 export interface ExportRequest {

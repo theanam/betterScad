@@ -488,9 +488,25 @@ class App {
     measureButton.classList.add('viewport__control', 'viewport__control--round');
     measureButton.setAttribute('aria-pressed', 'false');
 
+    const colorsButton = button({
+      iconName: 'colors',
+      title: 'Vary colours',
+      hint: 'Give every item its own colour',
+      onClick: () => this.toggleVaryColors(),
+    });
+    colorsButton.classList.add('viewport__control', 'viewport__control--round');
+    this.setVaryColorsState = (on: boolean): void => {
+      colorsButton.classList.toggle('btn--active', on);
+      colorsButton.setAttribute('aria-pressed', String(on));
+      setHint(colorsButton, on ? 'Show the model in its own colours' : 'Give every item its own colour');
+      colorsButton.setAttribute('aria-label', 'Vary colours');
+    };
+    this.setVaryColorsState(this.workspace.layout.varyColors);
+
     const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' }, [
       gridButton,
       measureButton,
+      colorsButton,
     ]);
 
     // --- camera, under the view cube ---
@@ -512,6 +528,24 @@ class App {
     ]);
 
     return [displayTools, cameraTools];
+  }
+
+  /** Set by `buildViewTools`, so the command palette can keep the button honest. */
+  private setVaryColorsState: (on: boolean) => void = () => {};
+
+  /**
+   * Paints every item its own colour, or goes back to the model's colours.
+   *
+   * The colours come from the engine, which is the only place that knows which
+   * shapes one `union()` made into one item, so this is a re-render. In the
+   * mode already on screen: a final render stays final.
+   */
+  private toggleVaryColors(): void {
+    const on = !this.workspace.layout.varyColors;
+    this.workspace.layout.varyColors = on;
+    this.setVaryColorsState(on);
+    this.workspace.persist();
+    void this.render(!this.showingFinalRender);
   }
 
   // -- rendering ------------------------------------------------------------
@@ -536,6 +570,7 @@ class App {
         parameters: doc.parameters,
         time: this.animationTime,
         preview,
+        varyColors: this.workspace.layout.varyColors,
       });
     } catch (err) {
       this.reportError(err instanceof Error ? err.message : String(err));
@@ -1839,6 +1874,12 @@ class App {
           this.viewport.setHelperVisibility({ grid: this.workspace.layout.showGrid });
           this.workspace.persist();
         },
+      },
+      {
+        id: 'view.colors',
+        category: 'View',
+        title: 'Toggle vary colours',
+        run: () => this.toggleVaryColors(),
       },
       {
         id: 'view.axes',

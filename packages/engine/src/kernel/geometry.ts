@@ -19,6 +19,11 @@ export interface Piece {
   solid: Manifold | CrossSection;
   color?: RGBA;
   display: Display;
+  /**
+   * The item this piece belongs to when colours are varied: every piece of
+   * one `union()` shares one. Absent, a piece is an item of its own.
+   */
+  item?: number;
 }
 
 export interface Assembly {

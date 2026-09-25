@@ -53,6 +53,7 @@ you.
 | **Fonts for `text()`** | Name a font and it loads itself — ~50 Google Fonts, the ones installed on your machine, or a file of your own. Every one previewed in its own typeface. |
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
 | **Measurement** | Click points in the viewport for coordinates and distances. |
+| **Vary colours** | One click paints every item its own colour, so touching parts are easy to tell apart. Everything in one `union()` stays one colour; colours set with `color()` are kept. |
 | **Animation** | `$t` playback in the app, frame export from the CLI. |
 | **Works offline** | Installable, and fully functional with no network. |
 | **Headless CLI** | `bscad model.scad -o model.stl`, for batch jobs and CI. |

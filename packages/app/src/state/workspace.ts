@@ -70,6 +70,8 @@ export interface LayoutState {
   autoRender: boolean;
   showGrid: boolean;
   showAxes: boolean;
+  /** Paint each item its own colour in the viewport, to tell touching ones apart. */
+  varyColors: boolean;
   /**
    * Which measurement of a circle the editor offers first.
    *
@@ -98,6 +100,7 @@ export const DEFAULT_LAYOUT: LayoutState = {
   autoRender: true,
   showGrid: true,
   showAxes: true,
+  varyColors: false,
   roundMeasure: 'diameter',
   inchEntry: true,
   indentWidth: 2,

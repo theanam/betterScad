@@ -8,7 +8,7 @@
 
 import type { CrossSection, Manifold, Mat3, Mat4 as ManifoldMat4, Vec2, Vec3 } from 'manifold-3d';
 
-import { DEFAULT_COLOR, parseColor } from '../colors.js';
+import { DEFAULT_COLOR, ITEM_COLORS, parseColor } from '../colors.js';
 import { DiagnosticBag, SourceSpan } from '../diagnostics.js';
 import { FontRegistry } from '../fonts.js';
 import { TriMesh, weldVertices } from '../geom/mesh.js';
@@ -62,6 +62,14 @@ export interface BuildOptions {
    * those as cavities.
    */
   merge?: boolean;
+  /**
+   * Give every item its own colour, so two that touch can be told apart.
+   *
+   * An item is a top-level shape, or everything inside one `union()`. A colour
+   * the source sets with `color()` is kept. A preview aid only: the colours are
+   * not the model's, so nothing that exports should ask for them.
+   */
+  varyColors?: boolean;
 }
 
 export interface BuildResult {
@@ -83,6 +91,8 @@ interface Ctx {
   /** Asset bytes preloaded before evaluation, so recursion stays synchronous. */
   files: Map<string, Uint8Array>;
   images: Map<string, { gray: Uint8Array; width: number; height: number }>;
+  /** Hands out `Piece.item` ids; each `union()` takes the next one. */
+  nextItem: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,13 +108,14 @@ export async function buildGeometry(root: SceneNode, options: BuildOptions): Pro
     fonts: options.fonts,
     files: new Map(),
     images: new Map(),
+    nextItem: 0,
   };
 
   await preloadAssets(root, options, ctx);
 
   try {
     const result = evaluateNode(root, ctx);
-    return extract(result, ctx, options.merge === true);
+    return extract(result, ctx, options.merge === true, options.varyColors === true);
   } finally {
     // Everything the caller needs has been copied into plain typed arrays by
     // `extract`, so the whole WASM-side working set can go at once.
@@ -440,6 +451,14 @@ function combine(node: SceneNode, ctx: Ctx, op: CombineOp): Assembly {
   const display = resolveDisplay(node.roles);
   if (display !== 'normal' && display !== 'highlight') {
     pieces = pieces.map((p) => ({ ...p, display }));
+  }
+
+  // Only a written `union()`, not the implicit one every group performs: the
+  // point is to say which shapes are one thing, and `union()` is how the
+  // source says so. The outermost one wins, so it claims its pieces last.
+  if (node.op === 'union' && pieces.length > 1) {
+    const item = ctx.nextItem++;
+    pieces = pieces.map((p) => ({ ...p, item }));
   }
 
   return {
@@ -927,7 +946,7 @@ function buildLinearExtrude(node: SceneNode, ctx: Ctx): Assembly {
       }
       return solid;
     });
-    if (result) pieces.push({ dim: 3, solid: result, color: piece.color, display: piece.display });
+    if (result) pieces.push({ dim: 3, solid: result, color: piece.color, display: piece.display, item: piece.item });
   }
 
   return assembly(pieces, inner.annotations);
@@ -1080,7 +1099,7 @@ function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {
       if (start !== 0) solid = ctx.arena.track(solid.rotate([0, 0, start] as Vec3));
       return solid;
     });
-    if (result) pieces.push({ dim: 3, solid: result, color: piece.color, display: piece.display });
+    if (result) pieces.push({ dim: 3, solid: result, color: piece.color, display: piece.display, item: piece.item });
   }
 
   return assembly(pieces, inner.annotations);
@@ -1102,7 +1121,7 @@ function buildProjection(node: SceneNode, ctx: Ctx): Assembly {
       // `cut = true` takes the slice through Z = 0; otherwise it is the shadow.
       ctx.arena.track(cut ? (piece.solid as Manifold).slice(0) : (piece.solid as Manifold).project()),
     );
-    if (result) pieces.push({ dim: 2, solid: result, color: piece.color, display: piece.display });
+    if (result) pieces.push({ dim: 2, solid: result, color: piece.color, display: piece.display, item: piece.item });
   }
 
   return assembly(pieces, inner.annotations);
@@ -1148,7 +1167,7 @@ function buildOffset(node: SceneNode, ctx: Ctx): Assembly {
 
   return result
     ? assembly(
-        [{ dim: 2, solid: result, color: first?.color, display: first?.display ?? 'normal' }],
+        [{ dim: 2, solid: result, color: first?.color, display: first?.display ?? 'normal', item: first?.item }],
         inner.annotations,
       )
     : assembly([], inner.annotations);
@@ -1461,8 +1480,32 @@ function mergePieces(pieces: readonly Piece[], ctx: Ctx): Piece[] {
   return out;
 }
 
-function extract(result: Assembly, ctx: Ctx, merge: boolean): BuildResult {
-  const pieces = merge ? mergePieces(result.pieces, ctx) : result.pieces;
+/**
+ * Paints each item without a colour of its own from `ITEM_COLORS`.
+ *
+ * Numbered in the order items first appear, so the first shape in the file is
+ * always the first colour. Before merging, so a final render keeps the items
+ * apart as well: `mergePieces` groups by colour.
+ */
+function varyItemColors(pieces: readonly Piece[]): Piece[] {
+  const slots = new Map<number, number>();
+  let next = 0;
+  return pieces.map((piece) => {
+    if (piece.color) return piece;
+    let slot: number;
+    if (piece.item === undefined) slot = next++;
+    else {
+      const seen = slots.get(piece.item);
+      slot = seen ?? next++;
+      if (seen === undefined) slots.set(piece.item, slot);
+    }
+    return { ...piece, color: ITEM_COLORS[slot % ITEM_COLORS.length] };
+  });
+}
+
+function extract(result: Assembly, ctx: Ctx, merge: boolean, vary: boolean): BuildResult {
+  const painted = vary ? varyItemColors(result.pieces) : result.pieces;
+  const pieces = merge ? mergePieces(painted, ctx) : painted;
   const parts: BuildResult['parts'] = [];
   const contours2d: BuildResult['contours2d'] = [];
   const annotations: BuildResult['annotations'] = [];
