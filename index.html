@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- The title and the description below are the single source for the
+         social tags too: `siteMetadata()` in vite.config.ts reads them out of
+         this file and writes og: and twitter: copies at build time, so the two
+         cannot drift the way duplicated metadata always eventually does. -->
+    <title>BetterSCAD — OpenSCAD-compatible CAD in your browser</title>
+    <meta
+      name="description"
+      content="Free parametric CAD in your browser, speaking the whole OpenSCAD language. Open and render .scad files, export STL, 3MF, SVG and DXF. Nothing is uploaded."
+    />
+
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0e0c0b" />
+
+    <!-- The rest of the social card, and everything needing an absolute URL —
+         canonical, og:url, the images, the structured data — is injected by the
+         same plugin. It cannot live here: this build is deliberately
+         relative-path so that one `dist/` works from a domain root, from a
+         GitHub Pages project path and from file:// in the desktop shell, which
+         means the HTML does not know what host it will be served from. Only the
+         build that has a CNAME does. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BetterSCAD" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <!-- Without scripts the kernel is never going to start, so the boot screen
+         must stop saying it is: the message goes, the mark stops pulsing, and
+         what is left is the fallback below rather than a progress indicator for
+         progress that cannot happen. `<noscript>` in the head is allowed to
+         carry a stylesheet, which is the only way CSS can know. -->
+    <noscript>
+      <style>
+        .boot__text {
+          display: none;
+        }
+        .boot__mark {
+          animation: none;
+        }
+      </style>
+    </noscript>
+    <script type="module" crossorigin src="./assets/index-C_zRKXjp.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/codemirror-C559gS8M.js">
+    <link rel="modulepreload" crossorigin href="./assets/three-QhK6HPne.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-uzVSXy9k.css">
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EM1KP504VK"></script>
+    <script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-EM1KP504VK');</script>
+    <meta property="og:title" content="BetterSCAD — OpenSCAD-compatible CAD in your browser">
+    <meta property="og:description" content="Free parametric CAD in your browser, speaking the whole OpenSCAD language. Open and render .scad files, export STL, 3MF, SVG and DXF. Nothing is uploaded.">
+    <meta name="twitter:title" content="BetterSCAD — OpenSCAD-compatible CAD in your browser">
+    <meta name="twitter:description" content="Free parametric CAD in your browser, speaking the whole OpenSCAD language. Open and render .scad files, export STL, 3MF, SVG and DXF. Nothing is uploaded.">
+    <link rel="canonical" href="https://betterscad.org/">
+    <meta property="og:url" content="https://betterscad.org/">
+    <meta property="og:image" content="https://betterscad.org/betterscad-social.png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="640">
+    <meta property="og:image:alt" content="The BetterSCAD mark beside the words BetterSCAD and the tagline CODE IT. SEE IT. PRINT IT.">
+    <meta name="twitter:image" content="https://betterscad.org/betterscad-social.png">
+    <meta name="twitter:image:alt" content="The BetterSCAD mark beside the words BetterSCAD and the tagline CODE IT. SEE IT. PRINT IT.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"BetterSCAD","alternateName":"BetterSCAD — OpenSCAD-compatible CAD in your browser","url":"https://betterscad.org/","image":"https://betterscad.org/betterscad-social.png","description":"Free parametric CAD in your browser, speaking the whole OpenSCAD language. Open and render .scad files, export STL, 3MF, SVG and DXF. Nothing is uploaded.","applicationCategory":"DesignApplication","applicationSubCategory":"Computer-aided design","operatingSystem":"Any modern web browser","browserRequirements":"Requires JavaScript, WebAssembly and WebGL2","softwareVersion":"0.14.0","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/theanam/betterScad","featureList":["Full OpenSCAD language compatibility","Runs entirely in the browser — no server and no account","Live customizer generated from parameter comments","Export to STL, 3MF, OFF, AMF, SVG and DXF","Import STL, OBJ, OFF, DXF, SVG and heightmaps","Project files shared across tabs, and saved as a zip","Works offline"]}</script>
+  </head>
+  <body>
+    <!-- Replaced by the app on boot; visible while the WASM kernel loads. -->
+    <div id="boot" class="boot">
+      <img src="./betterscad-mark.svg" alt="" width="72" height="72" class="boot__mark" />
+      <p class="boot__text">Starting the geometry kernel…</p>
+      <!-- A real page for a real visitor without JavaScript, not a keyword
+           dump: everything here is true of the app and said the way the app
+           says it. It doubles as the only text a crawler that does not run
+           scripts will ever see, since the editor itself is built at runtime. -->
+      <noscript>
+        <div class="noscript">
+          <h1>BetterSCAD</h1>
+          <p>
+            A parametric CAD editor that runs entirely in your browser and speaks the whole
+            OpenSCAD language. Existing <code>.scad</code> files open and render unchanged, and
+            models export to STL, 3MF, OFF, AMF, SVG and DXF.
+          </p>
+          <p>
+            It needs JavaScript, because the geometry kernel, the editor and the renderer all run
+            on your own machine. There is no server to do it instead — which is also why nothing
+            you write here is ever uploaded.
+          </p>
+          <p>
+            <a href="https://github.com/theanam/betterScad">Source on GitHub</a>
+            ·
+            <a href="https://github.com/theanam/betterScad/blob/main/docs/reference.md"
+              >Language reference</a
+            >
+          </p>
+        </div>
+      </noscript>
+    </div>
+    <div id="app" class="app" hidden></div>
+  </body>
+</html>
