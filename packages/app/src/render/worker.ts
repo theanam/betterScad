@@ -190,6 +190,8 @@ async function handleRender(request: RenderRequest): Promise<void> {
     parameters: request.parameters as Record<string, Value>,
     time: request.time,
     preview: request.preview,
+    // Half-way through a line, the rest of the model stays on screen.
+    partial: true,
     resolveInclude: makeResolver(request.files, dependencies),
     assets: makeAssets(dependencies),
   });

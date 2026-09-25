@@ -34,6 +34,14 @@ export interface ParseResult {
   /** Forwarded from the lexer for the Customizer to mine. */
   lineComments: { text: string; span: SourceSpan }[];
   blockComments: { text: string; span: SourceSpan }[];
+  /**
+   * The lines a broken statement starts on, one-based and ascending.
+   *
+   * Not the lines the errors are reported on: an unfinished `sphere(` is only
+   * noticed at the first token of the line after it, and it is the `sphere(`
+   * line that has to go for the rest of the file to parse.
+   */
+  brokenLines: number[];
 }
 
 class ParseAbort extends Error {}
@@ -61,6 +69,7 @@ const BINARY_PRECEDENCE: Record<string, number> = {
 class Parser {
   private pos = 0;
   readonly diagnostics: Diagnostic[] = [];
+  readonly brokenLines = new Set<number>();
 
   constructor(
     private readonly tokens: Token[],
@@ -148,10 +157,12 @@ class Parser {
         if (stmt) body.push(stmt);
       } catch (err) {
         if (!(err instanceof ParseAbort)) throw err;
+        this.brokenLines.add(this.tokens[before].span.start.line);
         this.recover();
       }
       if (this.pos === before) {
         // Guarantee progress even if a sub-parser consumed nothing.
+        this.brokenLines.add(this.current.span.start.line);
         this.error(
           `Unexpected \`${this.current.text}\` at top level.`,
           this.current.span,
@@ -302,9 +313,11 @@ class Parser {
         if (stmt) body.push(stmt);
       } catch (err) {
         if (!(err instanceof ParseAbort)) throw err;
+        this.brokenLines.add(this.tokens[before].span.start.line);
         this.recover();
       }
       if (this.pos === before) {
+        this.brokenLines.add(this.current.span.start.line);
         this.error(`Unexpected \`${this.current.text}\` in block.`, this.current.span, 'parse.unexpected-token');
         this.next();
       }
@@ -809,5 +822,11 @@ export function parse(source: string, file = '<input>'): ParseResult {
     diagnostics: [...lexed.diagnostics, ...parser.diagnostics],
     lineComments: lexed.lineComments,
     blockComments: lexed.blockComments,
+    brokenLines: [
+      ...new Set([
+        ...parser.brokenLines,
+        ...lexed.diagnostics.filter((d) => d.severity === 'error' && d.span).map((d) => d.span!.start.line),
+      ]),
+    ].sort((a, b) => a - b),
   };
 }

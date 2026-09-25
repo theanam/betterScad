@@ -49,6 +49,11 @@ export interface CompileResult {
   variables: Map<string, Value>;
   /** Files pulled in via `include`/`use`, keyed by the path as written. */
   includes: Map<string, ScadFile>;
+  /**
+   * Lines of the root file that did not parse and were left out of `scene`.
+   * Empty when the file parses; `diagnostics` still says what was wrong.
+   */
+  omittedLines: number[];
   timings: { parseMs: number; evaluateMs: number };
 }
 
@@ -56,6 +61,15 @@ export interface RenderOptions extends CompileOptions {
   assets?: AssetProvider;
   /** Skip geometry when the source failed to compile. Defaults to true. */
   skipGeometryOnError?: boolean;
+  /**
+   * Draw what still parses when some lines do not.
+   *
+   * The lines `compile` left out stay reported as errors, but they no longer
+   * blank the model: half-way through typing a line, the rest of the file is
+   * still on screen. For live preview only — an export or a CLI render with
+   * lines missing would be a different model presented as this one.
+   */
+  partial?: boolean;
   /**
    * Really union the result rather than leaving overlapping pieces separate.
    *
@@ -86,24 +100,62 @@ export async function compile(source: string, options: CompileOptions = {}): Pro
 
   const parseStart = now();
   const parsed = parse(source, file);
-  const includes = await resolveIncludes(parsed, options, file);
+  const { usable, omittedLines } = withoutBrokenLines(source, parsed, file);
+  const includes = await resolveIncludes(usable, options, file);
   const parseMs = now() - parseStart;
 
   const evaluateStart = now();
-  const evaluated = evaluate(parsed.file, { ...options, includes: includes.files });
+  const evaluated = evaluate(usable.file, { ...options, includes: includes.files });
   const evaluateMs = now() - evaluateStart;
 
+  // The errors are the file's, as written: the parse of what was left over
+  // would only say that the lines it never saw are fine.
   const diagnostics = [...parsed.diagnostics, ...includes.diagnostics, ...evaluated.diagnostics.items];
 
   return {
     parsed,
     scene: evaluated.root,
     diagnostics,
-    customizer: buildCustomizerModel(parsed),
+    customizer: buildCustomizerModel(usable),
     variables: evaluated.topLevelVars,
     includes: includes.files,
+    omittedLines,
     timings: { parseMs, evaluateMs },
   };
+}
+
+/** Enough passes for a handful of broken lines; each pass removes at least one. */
+const MAX_OMIT_PASSES = 16;
+
+/**
+ * Parses the file again with its broken lines blanked out, until it parses.
+ *
+ * Recovery alone is not enough: it skips to the next `;` at the same depth,
+ * so an unfinished `sphere(` swallows the whole line after it as well. Blanking
+ * the line the broken statement starts on, and parsing again, leaves out that
+ * line and only that line. Blanked with spaces, so every position after it —
+ * and every diagnostic the evaluator reports there — still points at the text
+ * on screen. A blanked line can break another (the `{` of a block, say), which
+ * is what the next pass is for.
+ */
+function withoutBrokenLines(
+  source: string,
+  parsed: ParseResult,
+  file: string,
+): { usable: ParseResult; omittedLines: number[] } {
+  const omitted = new Set<number>();
+  const lines = source.split('\n');
+  let usable = parsed;
+  for (let pass = 0; pass < MAX_OMIT_PASSES; pass++) {
+    const fresh = usable.brokenLines.filter((line) => !omitted.has(line));
+    if (fresh.length === 0) break;
+    for (const line of fresh) omitted.add(line);
+    usable = parse(
+      lines.map((text, i) => (omitted.has(i + 1) ? text.replace(/[^\r]/g, ' ') : text)).join('\n'),
+      file,
+    );
+  }
+  return { usable, omittedLines: [...omitted].sort((a, b) => a - b) };
 }
 
 /**
@@ -204,7 +256,10 @@ export class Engine {
     const compiled = await compile(source, options);
 
     const skipOnError = options.skipGeometryOnError ?? true;
-    const hasError = compiled.diagnostics.some((d) => d.severity === 'error');
+    // A partial render forgives the root file's parse errors, and nothing
+    // else: those are the lines it left out.
+    const forgiven = options.partial ? new Set(compiled.parsed.diagnostics) : new Set<Diagnostic>();
+    const hasError = compiled.diagnostics.some((d) => d.severity === 'error' && !forgiven.has(d));
     if (skipOnError && hasError) {
       return {
         ...compiled,
@@ -284,4 +339,4 @@ export { manifoldToMesh, meshToManifold } from './kernel/primitives.js';
 export type { Assembly, Piece, RGBA } from './kernel/geometry.js';
 
 /** Engine version, reported by `betterscad --version` and the about panel. */
-export const ENGINE_VERSION = '0.12.0';
+export const ENGINE_VERSION = '0.13.0';
