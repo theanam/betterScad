@@ -81,6 +81,25 @@ a = 2;
 echo(b, a); // 1, 2
 ```
 
+### A bare block is not a scope
+
+Braces that belong to something — a module call's children, `if`, `for`, `let`,
+a module body — are a scope, and keep their names to themselves. A bare `{ … }`
+written as a statement on its own is not: what it assigns belongs to the scope
+around it.
+
+```scad
+{ size = 4; }
+cube(size, center = true);   // a 4 mm cube
+
+translate([10, 0, 0]) { t = 3; }
+echo(t);                     // undef — translate's braces are a scope
+```
+
+A block disabled with `*` lends nothing, as though it were commented out. The
+one thing a bare block does bound is [`negative()`](#negative) — its reach, not
+its names.
+
 ### `$`-variables are dynamically scoped
 
 ```scad
@@ -211,6 +230,11 @@ union() {
 **Scope is the enclosing braces.** A negative reaches exactly as far as the
 `{ … }` block, module body, or top level it is written in — never further. It is
 global only when written at the top level.
+
+That boundary is about what a negative cuts, not about names. A bare block still
+lets its variables out, as OpenSCAD does, so a cutter outside the block can use a
+size set inside it — and the export keeps that true, lifting such assignments
+out of the `difference()` it writes.
 
 Wrappers that are *not* scopes are transparent to it: `translate`, `rotate`,
 `color`, `if`, `for` and `let` pass the negative through to the enclosing scope,

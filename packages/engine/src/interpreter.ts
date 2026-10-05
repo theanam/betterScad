@@ -313,11 +313,46 @@ class Interpreter {
     out: SceneNode[],
     file: string,
     isTopLevel = false,
+    /**
+     * Set for a bare block's body: its declarations and assignments were
+     * already gathered into `scope` by the scope it sits in.
+     */
+    hoisted = false,
   ): void {
     const flattened = this.spliceIncludes(statements, scope, file);
+    if (!hoisted) this.declareScope(flattened, scope, isTopLevel);
+
+    // Pass 3: everything that produces geometry or output.
+    for (const stmt of flattened) {
+      if (stmt.kind === 'assign' || stmt.kind === 'module-decl' || stmt.kind === 'function-decl') {
+        continue;
+      }
+      if (isBareBlock(stmt)) {
+        // Not a scope for names, as in OpenSCAD — its assignments are already
+        // in `scope` — but still a group, and so still the boundary a
+        // negative() inside it cuts within.
+        const kids: SceneNode[] = [];
+        this.executeScope(stmt.body, scope, kids, file, false, true);
+        this.emit(out, scopeGroup(kids, stmt.roles, stmt.span));
+        continue;
+      }
+      this.executeStatement(stmt, scope, out, file);
+    }
+  }
+
+  /**
+   * Passes 1 and 2 of a scope: its declarations, then its assignments.
+   *
+   * Both reach into bare `{ … }` blocks, because OpenSCAD does not treat an
+   * anonymous block as a scope: `{ size = 4; } cube(size);` is a 4 mm cube.
+   * They stop at everything else with braces — a module call's children, `if`,
+   * `for`, `let`, a module body — which are scopes, and own their names.
+   */
+  private declareScope(statements: Statement[], scope: Scope, isTopLevel: boolean): void {
+    const declared = hoistable(statements);
 
     // Pass 1: hoist declarations, so a module may be called before it is defined.
-    for (const stmt of flattened) {
+    for (const { stmt } of declared) {
       if (stmt.kind === 'module-decl') {
         scope.modules.set(stmt.name, { decl: stmt, scope });
       } else if (stmt.kind === 'function-decl') {
@@ -332,9 +367,11 @@ class Interpreter {
 
     // Pass 2: assignments, in source order; the last write to a name wins for
     // the whole scope.
-    for (const stmt of flattened) {
+    for (const { stmt, nested } of declared) {
       if (stmt.kind !== 'assign') continue;
-      const override = isTopLevel ? this.options.parameters?.[stmt.name] : undefined;
+      // The Customizer only ever offers the file's own top-level assignments,
+      // so only those take its values.
+      const override = isTopLevel && !nested ? this.options.parameters?.[stmt.name] : undefined;
       if (override !== undefined) {
         scope.setVar(stmt.name, override);
         continue;
@@ -350,13 +387,6 @@ class Interpreter {
       }
     }
 
-    // Pass 3: everything that produces geometry or output.
-    for (const stmt of flattened) {
-      if (stmt.kind === 'assign' || stmt.kind === 'module-decl' || stmt.kind === 'function-decl') {
-        continue;
-      }
-      this.executeStatement(stmt, scope, out, file);
-    }
   }
 
   /**
@@ -1594,6 +1624,32 @@ function looseVector(
   const z = args.get('z');
   if (y === undefined && z === undefined) return undefined;
   return [asNumber(args.get(first), fallback), asNumber(y, fallback), asNumber(z, fallback)];
+}
+
+/**
+ * A `{ … }` written as a statement in its own right, rather than as the body
+ * of a module call, `if`, `for` or module — the anonymous block OpenSCAD does
+ * not count as a scope. One disabled with `*` is left out entirely, as though
+ * it were commented out: its assignments do not leak either.
+ */
+function isBareBlock(stmt: Statement): stmt is Extract<Statement, { kind: 'block' }> {
+  return stmt.kind === 'block' && !stmt.roles.includes('disabled');
+}
+
+/**
+ * A scope's declarations and assignments in source order, including those
+ * inside bare blocks, which belong to the scope around them. `nested` marks the
+ * ones that came from inside a block.
+ */
+function hoistable(statements: Statement[], nested = false): { stmt: Statement; nested: boolean }[] {
+  const out: { stmt: Statement; nested: boolean }[] = [];
+  for (const stmt of statements) {
+    if (isBareBlock(stmt)) out.push(...hoistable(stmt.body, true));
+    else if (stmt.kind === 'assign' || stmt.kind === 'module-decl' || stmt.kind === 'function-decl') {
+      out.push({ stmt, nested });
+    }
+  }
+  return out;
 }
 
 /**

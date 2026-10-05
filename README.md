@@ -115,7 +115,9 @@ union() {
 ```
 
 "The same scope" means the enclosing `{ … }`, module body, or top level — a
-negative never reaches further than the braces it was written in.
+negative never reaches further than the braces it was written in. That limits
+what it cuts, not what names it sees: a bare `{ … }` still lets its variables
+out, exactly as in OpenSCAD.
 
 ### Everything else
 

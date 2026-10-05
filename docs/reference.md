@@ -1103,11 +1103,27 @@ ECHO: 2
 
 *The last assignment wins for the whole scope, even above itself.*
 
+```scad
+{ size = 4; }
+echo(size);
+translate([10, 0, 0]) { t = 3; }
+echo(t);
+```
+
+```
+ECHO: 4
+ECHO: undef
+```
+
+*A bare block lends its variables to the scope around it; a module call’s braces do not.*
+
 **A variable is not a box you keep putting new things in.** Within one scope, the *last* assignment to a name wins everywhere in that scope, including on lines above it. Assignments are all evaluated before any shape is drawn.
 
 So `a = 1; echo(a); a = 2;` prints `2`. This surprises everyone once; it is how OpenSCAD has always worked, and BetterSCAD matches it exactly.
 
 Assignments still evaluate in source order, so a *read* on an earlier line sees the earlier value: `a = 1; b = a; a = 2;` leaves `b` at `1`.
+
+**A bare `{ … }` is not a scope.** Braces that belong to something — a module call, `if`, `for`, `let`, a module body — keep their variables to themselves, but a block written on its own does not: `{ size = 4; } cube(size);` is a 4 mm cube.
 
 Values are numbers, booleans, strings, ranges, lists, functions, or `undef`. Lists are written `[1, 2, 3]` and indexed from zero: `v[0]`. A list can hold anything, including other lists.
 
@@ -3169,6 +3185,8 @@ translate([20, 20, -1]) negative() cylinder(h = 12, r = 8, $fn = 40);
 With `difference()`, the material has to come first and every hole has to be collected after it. In a model of any size that means the hole ends up a long way from the part it belongs to. `negative()` lets you write it in place.
 
 **Its reach is the enclosing braces** — the `{ … }` block, module body, or top level it is written in. Never further. It is global only when written at the top level.
+
+That boundary is about what a negative cuts, not about names: a bare block still lets its variables out, as in OpenSCAD, so something outside the block can use a size set inside it.
 
 Wrappers that are not scopes are transparent to it: `translate`, `rotate`, `color`, `if`, `for` and `let` pass a negative through to the enclosing scope, carrying their transforms with it. So `translate([5, 0, 0]) negative() cube(10)` and `negative() translate([5, 0, 0]) cube(10)` cut identically.
 

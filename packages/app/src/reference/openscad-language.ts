@@ -24,6 +24,9 @@ export const SYNTAX: ReferenceGroup = {
           'has always worked, and BetterSCAD matches it exactly.',
         'Assignments still evaluate in source order, so a *read* on an earlier line sees the ' +
           'earlier value: `a = 1; b = a; a = 2;` leaves `b` at `1`.',
+        '**A bare `{ … }` is not a scope.** Braces that belong to something — a module call, ' +
+          '`if`, `for`, `let`, a module body — keep their variables to themselves, but a block ' +
+          'written on its own does not: `{ size = 4; } cube(size);` is a 4 mm cube.',
         'Values are numbers, booleans, strings, ranges, lists, functions, or `undef`. Lists are ' +
           'written `[1, 2, 3]` and indexed from zero: `v[0]`. A list can hold anything, including ' +
           'other lists.',
@@ -39,6 +42,11 @@ export const SYNTAX: ReferenceGroup = {
           code: 'a = 1;\necho(a);\na = 2;',
           output: 'ECHO: 2',
           caption: 'The last assignment wins for the whole scope, even above itself.',
+        },
+        {
+          code: '{ size = 4; }\necho(size);\ntranslate([10, 0, 0]) { t = 3; }\necho(t);',
+          output: 'ECHO: 4\nECHO: undef',
+          caption: 'A bare block lends its variables to the scope around it; a module call’s braces do not.',
         },
       ],
       see: ['module', 'function', 'let'],

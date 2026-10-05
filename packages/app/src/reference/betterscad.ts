@@ -844,6 +844,9 @@ export const NEGATIVE_SPACE: ReferenceGroup = {
           'it belongs to. `negative()` lets you write it in place.',
         '**Its reach is the enclosing braces** — the `{ … }` block, module body, or top level it ' +
           'is written in. Never further. It is global only when written at the top level.',
+        'That boundary is about what a negative cuts, not about names: a bare block still lets ' +
+          'its variables out, as in OpenSCAD, so something outside the block can use a size set ' +
+          'inside it.',
         'Wrappers that are not scopes are transparent to it: `translate`, `rotate`, `color`, ' +
           '`if`, `for` and `let` pass a negative through to the enclosing scope, carrying their ' +
           'transforms with it. So `translate([5, 0, 0]) negative() cube(10)` and ' +

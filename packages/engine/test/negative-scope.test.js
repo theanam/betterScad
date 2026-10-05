@@ -195,9 +195,9 @@ test('negative() matches the difference() it transpiles to', async () => {
 
 // --- declarations are not geometry ------------------------------------------
 //
-// The downgrade wraps a scope's geometry in `difference()`. A block is a scope
-// in OpenSCAD too, so anything swept into that wrapper stops being visible to
-// the cutters standing beside it. Every case above is pure geometry, which is
+// The downgrade wraps a scope's geometry in `difference()`, and `difference()`
+// is a scope in OpenSCAD, so anything swept into that wrapper stops being
+// visible to the cutters standing beside it. Every case above is pure geometry, which is
 // exactly why this went unnoticed: it only bites when a cutter refers to
 // something the scope declared.
 
@@ -270,4 +270,29 @@ test('declarations are printed outside the generated difference', async () => {
     assert.ok(at >= 0, `${declaration} is missing from:\n${legacy}`);
     assert.ok(at < cut, `${declaration} was swept inside the difference:\n${legacy}`);
   }
+});
+
+// --- a block bounds negative(), not names ----------------------------------
+//
+// A bare `{ … }` is not a scope for variables in OpenSCAD — its assignments
+// belong to the scope around it — but it is still where a negative() inside it
+// stops reaching. The two are independent, and the export has to keep both.
+
+test('a block contains its negative but lets its variables out', async () => {
+  await check(
+    `{ size = 10; hole = 4; cube(size); negative() translate([3, 3, -1]) cube([hole, hole, 12]); }
+     translate([20, 0, 0]) cube(size);`,
+    // The block: a 10 cube less a 4 x 4 bore. Beside it, an uncut 10 cube
+    // whose size came out of the block.
+    1000 - 160 + 1000,
+  );
+});
+
+test('a variable from a block reaches a cutter outside it', async () => {
+  await check(
+    `{ bore = 6; }
+     cube([20, 20, 10], center = true);
+     negative() cube([bore, bore, 40], center = true);`,
+    3640,
+  );
 });

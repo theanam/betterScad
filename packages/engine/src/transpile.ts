@@ -750,14 +750,21 @@ class Printer {
     this.rewrites.add('negative() rewritten as difference()');
 
     // Only geometry goes inside the difference. Declarations stay in the scope
-    // they were written in, because a block is a scope in OpenSCAD too: an
-    // assignment or a `function` swept into the `union()` would be invisible to
-    // the cutters standing beside it, so `negative() cylinder(r = bore())`
-    // would lose `bore()` and quietly stop cutting. Hoisting them is safe in
-    // the other direction — assignments are scope-wide, so a declaration that
-    // moves outward is visible to everything that could already see it.
-    const declarations = kept.filter(isDeclaration);
-    const solids = kept.filter((stmt) => !isDeclaration(stmt));
+    // they were written in, because `difference()` is a scope in OpenSCAD: an
+    // assignment or a `function` swept into it would be invisible to the
+    // cutters standing beside it, so `negative() cylinder(r = bore())` would
+    // lose `bore()` and quietly stop cutting. That includes declarations inside
+    // bare blocks, which belong to this scope too — a bare block is not a
+    // scope. Hoisting is safe in the other direction: assignments are
+    // scope-wide, so a declaration that moves outward is visible to everything
+    // that could already see it.
+    const declarations: Statement[] = [];
+    const solids: Statement[] = [];
+    for (const stmt of kept) {
+      const lifted = liftDeclarations(stmt);
+      declarations.push(...lifted.declarations);
+      if (lifted.rest) solids.push(lifted.rest);
+    }
 
     for (const stmt of declarations) this.printStatement(stmt, depth);
 
@@ -1265,6 +1272,25 @@ interface NegativeSplit {
  * not here: they run where they are written, and moving them would reorder the
  * console against the geometry they are describing.
  */
+/**
+ * Separates a statement's declarations from its geometry, reaching into bare
+ * `{ … }` blocks — whose declarations belong to the enclosing scope — but no
+ * further. A block disabled with `*` is left whole, as the evaluator leaves it.
+ * `rest` is what remains, or nothing when only declarations were there.
+ */
+function liftDeclarations(stmt: Statement): { declarations: Statement[]; rest?: Statement } {
+  if (isDeclaration(stmt)) return { declarations: [stmt] };
+  if (stmt.kind !== 'block' || stmt.roles.includes('disabled')) return { declarations: [], rest: stmt };
+  const declarations: Statement[] = [];
+  const body: Statement[] = [];
+  for (const child of stmt.body) {
+    const lifted = liftDeclarations(child);
+    declarations.push(...lifted.declarations);
+    if (lifted.rest) body.push(lifted.rest);
+  }
+  return { declarations, rest: body.length > 0 ? { ...stmt, body } : undefined };
+}
+
 function isDeclaration(stmt: Statement): boolean {
   return (
     stmt.kind === 'assign' ||
