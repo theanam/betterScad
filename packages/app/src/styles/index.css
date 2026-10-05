@@ -1586,6 +1586,56 @@ dialog::backdrop {
   padding-right: 2px;
 }
 
+.export__group {
+  margin: var(--bs-space-3) 0 var(--bs-space-1);
+}
+
+/* The PNG settings, under the PNG option while it is chosen. */
+.imageopts {
+  display: grid;
+  gap: var(--bs-space-2);
+  margin: var(--bs-space-2) 0 var(--bs-space-1) 24px;
+  padding: var(--bs-space-3);
+  background: var(--bs-surface-sunken);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-sm);
+}
+
+.imageopts[hidden] {
+  display: none;
+}
+
+.imageopts__row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: var(--bs-space-2);
+  font-size: var(--bs-font-size-sm);
+}
+
+.imageopts__row select {
+  min-width: 0;
+  padding: 4px 6px;
+  background: var(--bs-surface);
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-sm);
+}
+
+.imageopts__check {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  font-size: var(--bs-font-size-sm);
+}
+
+.imageopts__check input {
+  accent-color: var(--bs-solid-500);
+}
+
+.imageopts .param__hint {
+  margin: 0;
+}
+
 .export__filename {
   display: block;
   flex: none;

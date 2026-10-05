@@ -95,7 +95,7 @@ import { PANEL_IDS, PANEL_NAMES, PRESETS, fromPreset, type PanelId } from './sta
 import type { StartChoices } from './ui/choices.js';
 import { editorEmptyState, viewportEmptyState } from './ui/empty-state.js';
 import { showWelcome } from './ui/welcome.js';
-import { Viewport } from './viewport/viewport.js';
+import { Viewport, type ImageOptions } from './viewport/viewport.js';
 import type { CameraState } from './viewport/controls.js';
 
 /**
@@ -1195,8 +1195,16 @@ class App {
     const doc = this.workspace.active;
     if (!doc) return;
 
-    const choice = await showExportDialog(doc.name.replace(/\.[^.]+$/, ''), this.lastDimension);
+    const canvas = this.viewport.canvas;
+    const choice = await showExportDialog(doc.name.replace(/\.[^.]+$/, ''), this.lastDimension, {
+      width: canvas.width,
+      height: canvas.height,
+    });
     if (!choice) return;
+    if (choice.format === 'png') {
+      await this.exportImage(choice.filename, choice.image!);
+      return;
+    }
 
     this.setBusy(true, 'Exporting…');
     try {
@@ -1281,6 +1289,22 @@ class App {
       );
     } catch (err) {
       this.reportError(`Could not save: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** Saves a picture of the model, rendered at the size and from the view chosen. */
+  private async exportImage(filename: string, options: ImageOptions): Promise<void> {
+    try {
+      const blob = await this.viewport.renderImage(options);
+      if (!blob) {
+        this.reportError('Could not render the image.');
+        return;
+      }
+      const outcome = await saveBinaryAs(filename, new Uint8Array(await blob.arrayBuffer()), 'image/png');
+      if (outcome.status === 'failed') this.reportError(outcome.reason);
+      else if (wroteAFile(outcome)) this.toasts.show(`Exported ${filename}.`, 'success');
+    } catch (err) {
+      this.reportError(`Could not export the image: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

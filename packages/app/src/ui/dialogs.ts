@@ -6,6 +6,7 @@ import { EXPORT_FORMATS, formatFontSpec, type ExportFormat, type ExtensionUse } 
 import { button, clear, el } from './dom.js';
 import { extensionList } from './extension-list.js';
 import type { CatalogEntry, SpecimenSheet } from '../files/font-library.js';
+import type { ImageOptions } from '../viewport/viewport.js';
 
 function shell(
   title: string,
@@ -30,14 +31,42 @@ function shell(
 // ---------------------------------------------------------------------------
 
 export interface ExportChoice {
-  format: ExportFormat;
+  /** A model format, or `png` for a picture of it. */
+  format: ExportFormat | 'png';
   filename: string;
+  /** Set when `format` is `png`. */
+  image?: ImageOptions;
 }
+
+/** Image choices offered in the dialog. `viewport` is the canvas as it is on screen. */
+type ImageSize = 'viewport' | '1920x1080' | '1080x1080' | '2048x2048' | '3840x2160';
+
+interface ImageChoices {
+  view: ImageOptions['view'];
+  size: ImageSize;
+  projection: ImageOptions['projection'];
+  background: ImageOptions['background'];
+  helpers: boolean;
+}
+
+/**
+ * The last image settings, for the rest of the session: exporting the same
+ * picture again after a change to the model is the usual reason to come back.
+ */
+let lastImage: ImageChoices = {
+  view: 'current',
+  size: 'viewport',
+  projection: 'match',
+  background: 'theme',
+  helpers: true,
+};
 
 /** Export dialog (spec feature 10). Resolves to `undefined` when cancelled. */
 export function showExportDialog(
   baseName: string,
   dimension: 2 | 3 | 0,
+  /** The viewport's drawing size, in device pixels, for the "as on screen" size. */
+  viewportSize: { width: number; height: number },
 ): Promise<ExportChoice | undefined> {
   return new Promise((resolve) => {
     // Offer the formats that match what was actually rendered first, but keep
@@ -45,10 +74,10 @@ export function showExportDialog(
     const matching = EXPORT_FORMATS.filter((f) => dimension === 0 || f.dimension === dimension);
     const other = EXPORT_FORMATS.filter((f) => !matching.includes(f));
 
-    let selected: ExportFormat = matching[0]?.format ?? 'stl';
+    let selected: ExportFormat | 'png' = matching[0]?.format ?? 'stl';
 
-    const extensionFor = (format: ExportFormat): string =>
-      EXPORT_FORMATS.find((f) => f.format === format)?.extension ?? 'stl';
+    const extensionFor = (format: ExportFormat | 'png'): string =>
+      format === 'png' ? 'png' : (EXPORT_FORMATS.find((f) => f.format === format)?.extension ?? 'stl');
 
     const filenameInput = el('input', {
       type: 'text',
@@ -57,9 +86,16 @@ export function showExportDialog(
       style: 'width: 100%; padding: 6px 8px;',
     });
 
-    const setFormat = (format: ExportFormat): void => {
+    const image = { ...lastImage };
+    const imageOptions = buildImageOptions(image, viewportSize);
+
+    const setFormat = (format: ExportFormat | 'png'): void => {
       selected = format;
       filenameInput.value = `${filenameInput.value.replace(/\.[^.]*$/, '')}.${extensionFor(format)}`;
+      imageOptions.hidden = format !== 'png';
+      // The settings open under the last option in a scrolling list; bring
+      // them up rather than leave half of them below the fold.
+      if (format === 'png') imageOptions.scrollIntoView({ block: 'nearest' });
     };
 
     const list = el('div', { class: 'fontlist' });
@@ -93,6 +129,25 @@ export function showExportDialog(
       for (const descriptor of other) addOption(descriptor, true);
     }
 
+    // A picture of the model, not the model: a heading of its own, so it does
+    // not read as one more mesh format.
+    list.appendChild(el('p', { class: 'param__hint export__group', text: 'Image' }));
+    list.appendChild(
+      el('label', { class: 'fontlist__item' }, [
+        el('span', {}, [
+          el('input', {
+            type: 'radio',
+            name: 'export-format',
+            value: 'png',
+            onchange: () => setFormat('png'),
+          }),
+          document.createTextNode(' PNG image'),
+        ]),
+        el('span', { class: 'fontlist__meta', text: '.png · picture of the view' }),
+      ]),
+    );
+    list.appendChild(imageOptions);
+
     // The formats scroll; the file name stays put. Nesting the scroller rather
     // than letting the dialog body scroll is what keeps the one editable field
     // on screen however many formats are listed.
@@ -113,7 +168,14 @@ export function showExportDialog(
           label: 'Export',
           variant: 'primary',
           onClick: () => {
-            resolved = { format: selected, filename: filenameInput.value.trim() || `${baseName}.stl` };
+            resolved = {
+              format: selected,
+              filename: filenameInput.value.trim() || `${baseName}.${extensionFor(selected)}`,
+            };
+            if (selected === 'png') {
+              lastImage = { ...image };
+              resolved.image = imageFor(image, viewportSize);
+            }
             dialog.close();
           },
         }),
@@ -125,6 +187,92 @@ export function showExportDialog(
     dialog.addEventListener('close', () => resolve(resolved));
     dialog.showModal();
   });
+}
+
+const SIZES: { value: ImageSize; label: string }[] = [
+  { value: 'viewport', label: 'As on screen' },
+  { value: '1920x1080', label: '1920 × 1080' },
+  { value: '1080x1080', label: '1080 × 1080 square' },
+  { value: '2048x2048', label: '2048 × 2048 square' },
+  { value: '3840x2160', label: '3840 × 2160 (4K)' },
+];
+
+function imageFor(choices: ImageChoices, viewport: { width: number; height: number }): ImageOptions {
+  const [width, height] =
+    choices.size === 'viewport'
+      ? [Math.max(1, Math.round(viewport.width)), Math.max(1, Math.round(viewport.height))]
+      : choices.size.split('x').map(Number);
+  return {
+    view: choices.view,
+    width,
+    height,
+    projection: choices.projection,
+    background: choices.background,
+    helpers: choices.helpers,
+  };
+}
+
+/** The PNG settings: which view, how big, and what goes behind it. */
+function buildImageOptions(
+  choices: ImageChoices,
+  viewport: { width: number; height: number },
+): HTMLElement {
+  const select = <K extends 'view' | 'size' | 'projection' | 'background'>(
+    key: K,
+    label: string,
+    options: { value: ImageChoices[K]; label: string }[],
+  ): HTMLElement => {
+    const node = el(
+      'select',
+      { onchange: (event: Event) => (choices[key] = (event.target as HTMLSelectElement).value as ImageChoices[K]) },
+      options.map((o) => el('option', { value: o.value, text: o.label, selected: o.value === choices[key] })),
+    );
+    return el('label', { class: 'imageopts__row' }, [el('span', { text: label }), node]);
+  };
+
+  const helpers = el('input', {
+    type: 'checkbox',
+    checked: choices.helpers,
+    onchange: (event: Event) => (choices.helpers = (event.target as HTMLInputElement).checked),
+  });
+
+  const sizes = SIZES.map((s) =>
+    s.value === 'viewport'
+      ? { ...s, label: `As on screen (${Math.round(viewport.width)} × ${Math.round(viewport.height)})` }
+      : s,
+  );
+
+  return el('div', { class: 'imageopts', hidden: true }, [
+    select('view', 'View', [
+      { value: 'current', label: 'Current view' },
+      { value: 'iso', label: 'Isometric' },
+      { value: 'front', label: 'Front' },
+      { value: 'back', label: 'Back' },
+      { value: 'left', label: 'Left' },
+      { value: 'right', label: 'Right' },
+      { value: 'top', label: 'Top' },
+      { value: 'bottom', label: 'Bottom' },
+      { value: 'sheet', label: 'Sheet — front, right, top, isometric' },
+    ]),
+    select('size', 'Size', sizes),
+    select('projection', 'Projection', [
+      { value: 'match', label: 'As in the viewport' },
+      { value: 'perspective', label: 'Perspective' },
+      { value: 'orthographic', label: 'Orthographic' },
+    ]),
+    select('background', 'Background', [
+      { value: 'theme', label: 'As in the viewport' },
+      { value: 'transparent', label: 'Transparent' },
+      { value: 'white', label: 'White' },
+    ]),
+    el('label', { class: 'imageopts__check' }, [helpers, el('span', { text: 'Include the grid and axes' })]),
+    el('p', {
+      class: 'param__hint',
+      text:
+        'Named views are fitted to the model. On a sheet the front, right and top views are ' +
+        'drawn flat at one scale, as on a drawing.',
+    }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------

@@ -83,6 +83,19 @@ const STANDARD_VIEWS: Record<StandardView, [number, number]> = {
   iso: [-Math.PI / 4, Math.PI / 3],
 };
 
+/**
+ * Unit vector from the target towards the camera for a named view: the
+ * direction a camera framing that view looks back along.
+ */
+export function viewDirection(view: StandardView): Vector3 {
+  const [azimuth, polar] = STANDARD_VIEWS[view];
+  return new Vector3(
+    Math.sin(polar) * Math.cos(azimuth),
+    Math.sin(polar) * Math.sin(azimuth),
+    Math.cos(polar),
+  );
+}
+
 export class OrbitCamera {
   readonly target = new Vector3();
 

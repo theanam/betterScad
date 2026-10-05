@@ -47,7 +47,7 @@ you.
 | **Type in inches** | `5in` becomes `127` as you type. The file stays in millimetres — see below. |
 | **Built-in reference** | Every element of the language explained plainly, with a rendered example of each. `F1`, or the Help button. |
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
-| **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; and plain `.scad`. |
+| **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; plain `.scad`; and PNG pictures — the current view or any named view at up to 4K, or a sheet of front, right, top and isometric views at one scale, on a transparent, white or themed background. |
 | **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
 | **Project files** | Add images, drawings, meshes, fonts and libraries once; every tab reaches them by name, as though they sat in the same folder. |
 | **Fonts for `text()`** | Name a font and it loads itself — ~50 Google Fonts, the ones installed on your machine, or a file of your own. Every one previewed in its own typeface. |
@@ -123,6 +123,8 @@ negative never reaches further than the braces it was written in.
 | --- | --- | --- |
 | `negative() { … }` | Turns anything inside it into negative space | `difference()` around the scope |
 | `cube(size, center, r)`<br>`square(size, center, r)` | The same box and rectangle, with a radius on the edges. `r = 0` is the stock shape | A hull of corner spheres or circles |
+| `cube(size, center, r, centerxy, chamfer)`<br>`square(size, center, r, chamfer)` | `chamfer` cuts every edge flat at 45° instead of rounding it — the same word as on `cylinder()`. `chamfer = 0` is the stock shape | A hull of three boxes or two rectangles |
+| `cube(…, centerxy = true)` | Centres a box on X and Y but keeps it standing on Z = 0, instead of half below the grid as `center = true` does | The box moved by half its width and depth |
 | `cylinder(…, chamfer)`<br>`chamfer1`, `chamfer2`, `edge_style` | Takes the rim off either end — cut flat by default, or `edge_style = "round"`. `1` is the bottom and `2` the top, as with `r1`/`r2` | A revolve of the same profile |
 | `linear_extrude(…, scale, ease)` | Curves a tapered extrusion into its ends instead of running dead straight. `ease = 0` is the stock shape; `[bottom, top]` eases each end on its own | A generated module stacking the same short extrusions |
 | `text(…, radius)`<br>`start`, `facing` | Runs the writing around a circle instead of a straight line, spaced by real letter widths | Per-glyph `text()` calls, with the widths measured into the file |

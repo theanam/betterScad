@@ -8,6 +8,7 @@
 
 import {
   AmbientLight,
+  Box3,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
@@ -22,6 +23,7 @@ import {
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  OrthographicCamera,
   PerspectiveCamera,
   Plane,
   Raycaster,
@@ -34,7 +36,13 @@ import {
 } from 'three';
 
 import type { MeshPayload } from '../render/protocol.js';
-import { OrbitCamera, type CameraState, type Projection, type StandardView } from './controls.js';
+import {
+  OrbitCamera,
+  viewDirection,
+  type CameraState,
+  type Projection,
+  type StandardView,
+} from './controls.js';
 import { ViewGizmo } from './view-gizmo.js';
 
 /**
@@ -82,6 +90,34 @@ export interface Measurement {
   distance?: number;
   delta?: Vector3;
 }
+
+/** What an exported image shows, and how. */
+export interface ImageOptions {
+  /** The view on screen, one of the named views, or front/right/top/iso on one sheet. */
+  view: 'current' | StandardView | 'sheet';
+  width: number;
+  height: number;
+  /**
+   * `match` follows the viewport. On a sheet it draws the front, right and top
+   * views flat — they are elevations, and perspective would only distort them —
+   * and the isometric one as the viewport does.
+   */
+  projection: 'match' | Projection;
+  background: 'theme' | 'transparent' | 'white';
+  /** The ground grid and axes, as the viewport has them set. */
+  helpers: boolean;
+}
+
+/** The views on a sheet, in reading order: the elevations, then the pictorial. */
+const SHEET: { view: StandardView; label: string }[] = [
+  { view: 'front', label: 'Front' },
+  { view: 'right', label: 'Right' },
+  { view: 'top', label: 'Top' },
+  { view: 'iso', label: 'Isometric' },
+];
+
+/** Space left around the model in a fitted view, as a fraction of the frame. */
+const IMAGE_MARGIN = 0.08;
 
 export interface ViewportCallbacks {
   onMeasure(measurement: Measurement | null): void;
@@ -166,6 +202,9 @@ export class Viewport {
       // `preserveDrawingBuffer` is what makes screenshots and GIF export
       // possible (spec feature 20); without it the canvas reads back blank.
       preserveDrawingBuffer: true,
+      // So an exported image can have a transparent background. On screen the
+      // backdrop texture covers every pixel, so nothing shows through.
+      alpha: true,
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1014,6 +1053,227 @@ export class Viewport {
     return new Promise((resolve) => {
       this.renderer.domElement.toBlob((blob) => resolve(blob), 'image/png');
     });
+  }
+
+  /**
+   * Renders the model to a PNG at any size, from any view.
+   *
+   * Drawn off to one side of what is on screen: the canvas is resized, drawn
+   * and copied within one task, then put back, so the browser never presents
+   * a frame of it. The view cube, the HUD and the measurement markers are not
+   * part of the picture — they are tools for looking, not the model.
+   */
+  async renderImage(options: ImageOptions): Promise<Blob | null> {
+    const out =
+      options.view === 'sheet'
+        ? this.renderSheet(options)
+        : this.renderView(options, options.view, options.width, options.height);
+    return new Promise((resolve) => out.toBlob((blob) => resolve(blob), 'image/png'));
+  }
+
+  private renderSheet(options: ImageOptions): HTMLCanvasElement {
+    const sheet = document.createElement('canvas');
+    sheet.width = options.width;
+    sheet.height = options.height;
+    const ctx = sheet.getContext('2d')!;
+    const cellW = Math.floor(options.width / 2);
+    const cellH = Math.floor(options.height / 2);
+
+    // The three elevations share one scale, as they do on a drawing: a part
+    // twice as deep as it is wide should look it in the right view.
+    const flat = options.projection !== 'perspective';
+    const scale = flat
+      ? Math.max(...SHEET.filter((s) => s.view !== 'iso').map((s) => this.orthoFit(s.view, cellW / cellH).halfHeight))
+      : undefined;
+
+    SHEET.forEach(({ view, label }, i) => {
+      const projection: ImageOptions['projection'] =
+        options.projection === 'match' && view !== 'iso' ? 'orthographic' : options.projection;
+      const cell = this.renderView({ ...options, projection }, view, cellW, cellH, view === 'iso' ? undefined : scale);
+      const x = (i % 2) * cellW;
+      const y = Math.floor(i / 2) * cellH;
+      ctx.drawImage(cell, x, y);
+
+      ctx.font = `${Math.max(12, Math.round(cellH / 28))}px system-ui, sans-serif`;
+      ctx.fillStyle = options.background === 'white' ? '#5f554d' : '#9a8f86';
+      ctx.fillText(label, x + cellH / 30, y + cellH / 30 + Math.max(12, cellH / 28));
+    });
+
+    // Hairlines between the cells.
+    ctx.strokeStyle = options.background === 'white' ? '#d8d0c8' : 'rgba(154, 143, 134, 0.35)';
+    ctx.lineWidth = Math.max(1, Math.round(options.width / 1200));
+    ctx.beginPath();
+    ctx.moveTo(cellW, 0);
+    ctx.lineTo(cellW, options.height);
+    ctx.moveTo(0, cellH);
+    ctx.lineTo(options.width, cellH);
+    ctx.stroke();
+    return sheet;
+  }
+
+  private renderView(
+    options: ImageOptions,
+    view: 'current' | StandardView,
+    width: number,
+    height: number,
+    orthoHalfHeight?: number,
+  ): HTMLCanvasElement {
+    const camera = this.imageCamera(view, options.projection, width / height, orthoHalfHeight);
+
+    const renderer = this.renderer;
+    const size = renderer.getSize(new Vector2());
+    const pixelRatio = renderer.getPixelRatio();
+    const background = this.scene.background;
+    const clearColor = renderer.getClearColor(new Color());
+    const clearAlpha = renderer.getClearAlpha();
+    const helpers = this.helperGroup.visible;
+    const measure = this.measureGroup.visible;
+
+    try {
+      renderer.setPixelRatio(1);
+      renderer.setSize(width, height, false);
+      if (options.background === 'transparent') {
+        this.scene.background = null;
+        renderer.setClearColor(0x000000, 0);
+      } else if (options.background === 'white') {
+        this.scene.background = new Color(0xffffff);
+      }
+      this.helperGroup.visible = helpers && options.helpers;
+      this.measureGroup.visible = false;
+      renderer.render(this.scene, camera);
+
+      // Copied out before anything else draws: the WebGL canvas is about to be
+      // put back to the viewport's size.
+      const out = document.createElement('canvas');
+      out.width = width;
+      out.height = height;
+      out.getContext('2d')!.drawImage(renderer.domElement, 0, 0);
+      return out;
+    } finally {
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(size.x, size.y, false);
+      this.scene.background = background;
+      renderer.setClearColor(clearColor, clearAlpha);
+      this.helperGroup.visible = helpers;
+      this.measureGroup.visible = measure;
+      this.invalidate();
+    }
+  }
+
+  /**
+   * Everything the picture shows: the model, its `%` reference shapes and any
+   * 2D outlines — framing the model alone crops a reference plate that is
+   * wider than it. The default stage when there is nothing at all.
+   */
+  private imageBounds(): { min: Vector3; max: Vector3 } {
+    const box = new Box3();
+    for (const group of [this.modelGroup, this.annotationGroup, this.contourGroup]) {
+      if (group.visible) box.expandByObject(group);
+    }
+    if (box.isEmpty()) {
+      return this.lastBounds ?? { min: new Vector3(-25, -25, -25), max: new Vector3(25, 25, 25) };
+    }
+    return { min: box.min, max: box.max };
+  }
+
+  /**
+   * A flat camera looking along a named view, fitted to the model.
+   *
+   * Fitted to the box's corners as they land on screen, not to a sphere round
+   * it: a flat view shows the box at its true proportions, so a sphere would
+   * leave a long thin part floating in empty space.
+   */
+  private orthoFit(view: StandardView, aspect: number): {
+    camera: OrthographicCamera;
+    halfHeight: number;
+    centre: Vector2;
+  } {
+    const { min, max } = this.imageBounds();
+    const centre3 = new Vector3().addVectors(min, max).multiplyScalar(0.5);
+    const reach = Math.max(new Vector3().subVectors(max, min).length(), 1);
+
+    const camera = new OrthographicCamera(-1, 1, 1, -1, -reach * 10, reach * 10);
+    camera.up.set(0, 0, 1);
+    camera.position.copy(centre3).addScaledVector(viewDirection(view), reach * 2);
+    camera.lookAt(centre3);
+    camera.updateMatrixWorld();
+
+    const lo = new Vector2(Infinity, Infinity);
+    const hi = new Vector2(-Infinity, -Infinity);
+    for (const x of [min.x, max.x]) {
+      for (const y of [min.y, max.y]) {
+        for (const z of [min.z, max.z]) {
+          const p = new Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse);
+          lo.min(new Vector2(p.x, p.y));
+          hi.max(new Vector2(p.x, p.y));
+        }
+      }
+    }
+    const halfW = Math.max((hi.x - lo.x) / 2, 0.5);
+    const halfH = Math.max((hi.y - lo.y) / 2, 0.5);
+    return {
+      camera,
+      halfHeight: Math.max(halfH, halfW / aspect) / (1 - 2 * IMAGE_MARGIN),
+      centre: new Vector2().addVectors(lo, hi).multiplyScalar(0.5),
+    };
+  }
+
+  private imageCamera(
+    view: 'current' | StandardView,
+    projection: ImageOptions['projection'],
+    aspect: number,
+    orthoHalfHeight?: number,
+  ): PerspectiveCamera | OrthographicCamera {
+    const flat = projection === 'match' ? this.controls.projection === 'orthographic' : projection === 'orthographic';
+    const fov = this.camera.fov;
+    const tanHalf = Math.tan(((fov / 2) * Math.PI) / 180);
+
+    if (view === 'current') {
+      // The pose on screen, reshaped to the image: the same eye, the same
+      // zoom, with the sides of the frame wherever the new shape puts them.
+      const pose = this.camera;
+      const distance = this.controls.distance;
+      if (flat) {
+        const half = distance * tanHalf;
+        const reach = Math.max(distance * 100, 10_000);
+        const camera = new OrthographicCamera(-half * aspect, half * aspect, half, -half, -reach, reach);
+        camera.position.copy(pose.position);
+        camera.quaternion.copy(pose.quaternion);
+        camera.updateMatrixWorld();
+        return camera;
+      }
+      const camera = new PerspectiveCamera(fov, aspect, pose.near, pose.far);
+      camera.position.copy(pose.position);
+      camera.quaternion.copy(pose.quaternion);
+      camera.updateMatrixWorld();
+      return camera;
+    }
+
+    if (flat) {
+      const { camera, halfHeight, centre } = this.orthoFit(view, aspect);
+      const half = orthoHalfHeight ?? halfHeight;
+      camera.left = centre.x - half * aspect;
+      camera.right = centre.x + half * aspect;
+      camera.top = centre.y + half;
+      camera.bottom = centre.y - half;
+      camera.updateProjectionMatrix();
+      return camera;
+    }
+
+    // Perspective: back off until the bounding sphere fits the narrower of the
+    // two fields of view, as Fit does on screen.
+    const { min, max } = this.imageBounds();
+    const centre = new Vector3().addVectors(min, max).multiplyScalar(0.5);
+    const radius = Math.max(new Vector3().subVectors(max, min).length() / 2, 1);
+    const vertical = (fov * Math.PI) / 180;
+    const horizontal = 2 * Math.atan(tanHalf * aspect);
+    const distance = (radius / Math.sin(Math.min(vertical, horizontal) / 2)) * (1 + IMAGE_MARGIN);
+    const camera = new PerspectiveCamera(fov, aspect, Math.max(distance / 5000, 0.01), distance * 100);
+    camera.up.set(0, 0, 1);
+    camera.position.copy(centre).addScaledVector(viewDirection(view), distance);
+    camera.lookAt(centre);
+    camera.updateMatrixWorld();
+    return camera;
   }
 
   get canvas(): HTMLCanvasElement {
