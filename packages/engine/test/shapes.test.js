@@ -137,21 +137,25 @@ test('a radius past half the shortest side is clamped, with a warning', async ()
 
 // --- cube(r) ----------------------------------------------------------------
 
-test('cube(r) is a hull of corner spheres', async () => {
+test('cube(r) is a hull of corner spheres, with its faces pinned to its size', async () => {
   await equivalent(
     '$fn = 24;\ncube([20, 14, 8], center = true, r = 3);',
     `$fn = 24;
-     hull() for (x = [-1, 1], y = [-1, 1], z = [-1, 1])
-       translate([x * 7, y * 4, z * 1]) sphere(r = 3);`,
+     hull() {
+       for (x = [-1, 1], y = [-1, 1], z = [-1, 1])
+         translate([x * 7, y * 4, z * 1]) sphere(r = 3);
+       cube([20, 8, 2], center = true);
+       cube([14, 14, 2], center = true);
+       cube([14, 8, 8], center = true);
+     }`,
   );
 });
 
 test('cube(r) sits in the positive octant unless centred', async () => {
   const { bounds } = await measure('$fn = 24;\ncube([20, 14, 8], r = 3);');
-  // Loose, because a tessellated sphere's vertices sit just inside its radius,
-  // so the hull comes out a hair under the nominal size — as it does in stock
-  // OpenSCAD too. The point here is the corner's position, not the rounding.
-  const slack = 0.05;
+  // Exact: the faces are pinned to the size, not left wherever a tessellated
+  // sphere's vertices happen to reach.
+  const slack = 1e-9;
   assert.ok(
     bounds.slice(0, 3).every((v) => near(v, 0, slack)),
     `expected a corner at the origin, got ${bounds}`,
@@ -160,6 +164,42 @@ test('cube(r) sits in the positive octant unless centred', async () => {
     near(bounds[3], 20, slack) && near(bounds[4], 14, slack) && near(bounds[5], 8, slack),
     `expected 20 x 14 x 8, got ${bounds}`,
   );
+});
+
+test('a rounded cube is its full size at any resolution, so a flush cut goes through', async () => {
+  // At the default $fa/$fs an r = 2 sphere has three rings and reaches only
+  // 0.87 r up. Built from spheres alone this 5-thick cube was 4.46 thick and
+  // floated clear of both faces, so as a negative() it cut a sealed pocket
+  // inside the plate instead of a slot through it.
+  for (const source of ['cube([10, 12, 5], r = 2);', 'cube([40, 30, 5], r = 1);', 'cube(10, r = 5);']) {
+    const { bounds } = await measure(source);
+    const size = source.match(/cube\((\[[^\]]+\]|\d+)/)[1];
+    const want = size.startsWith('[') ? JSON.parse(size) : [10, 10, 10];
+    assert.ok(bounds.slice(0, 3).every((v) => near(v, 0, 1e-9)), `${source}: ${bounds}`);
+    assert.ok(want.every((w, i) => near(bounds[3 + i], w, 1e-9)), `${source}: ${bounds}`);
+  }
+
+  const plate = await measure('cube([40, 30, 5]);');
+  const slot = await measure('cube([10, 12, 5], r = 2);');
+  const cut = await measure(`union() {
+    cube([40, 30, 5]);
+    translate([5, 9, 0]) negative() cube([10, 12, 5], r = 2);
+  }`);
+  // Through both faces: the plate loses the whole slot, and its surface grows
+  // by the slot's walls minus the two openings it punches.
+  assert.ok(near(cut.volume, plate.volume - slot.volume, 1e-6));
+  assert.ok(cut.area < plate.area + slot.area - 1, 'expected openings in both faces');
+});
+
+test('square(r) is its full size at any resolution', async () => {
+  for (const [source, w, h] of [
+    ['linear_extrude(1) square([10, 7], r = 2);', 10, 7],
+    ['linear_extrude(1) square([10, 6], r = 3);', 10, 6],
+  ]) {
+    const { bounds } = await measure(source);
+    assert.ok(near(bounds[0], 0, 1e-9) && near(bounds[1], 0, 1e-9), `${source}: ${bounds}`);
+    assert.ok(near(bounds[3], w, 1e-9) && near(bounds[4], h, 1e-9), `${source}: ${bounds}`);
+  }
 });
 
 test('a scalar size is a cube, and r = 0 is a plain one', async () => {

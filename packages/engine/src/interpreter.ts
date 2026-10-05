@@ -2172,6 +2172,40 @@ function cornerRadius(
   return r;
 }
 
+/**
+ * The boxes that put a rounded `cube(r)` or `square(r)`'s flat faces where its
+ * size says they are.
+ *
+ * The rounding is a hull of corner spheres (or circles), and a faceted sphere
+ * is inscribed in the true one: its top ring sits below the pole, and with few
+ * fragments its sides fall short too. At the default `$fs` an `r = 2` sphere
+ * reaches only 0.87 r up, so a 5-thick cube came out 4.46 thick, floating clear
+ * of both of its faces — and as a `negative()` it cut a sealed pocket inside the
+ * part rather than a slot through it.
+ *
+ * One slab per axis, full length along it and inset by `r` across the others,
+ * is exactly the flat face a true rounded box has there. In the hull it pins
+ * each face to the size while the corners still come from the spheres, and
+ * every point stays inside the true shape, so nothing gets larger than asked.
+ * Where `r` is half a side there is no flat face, only a line; the slab is then
+ * a sliver along that line, which is where the true shape touches the face.
+ */
+function faceSlabs(size: number[], r: number, span: SourceSpan): SceneNode[] {
+  const kind = size.length === 3 ? 'cube' : 'square';
+  return size.map((_, axis) =>
+    node(
+      kind,
+      {
+        size: size.map((s, i) => (i === axis ? s : Math.max(s - 2 * r, 1e-6))),
+        center: true,
+      },
+      [],
+      [],
+      span,
+    ),
+  );
+}
+
 /** OpenSCAD's cylinder parameter juggling: r/d, r1/r2, d1/d2. */
 /**
  * Reads the `ease` argument into `[bottom, top]`.
@@ -2285,7 +2319,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         }
       }
 
-      const hull = node('hull', {}, corners, [], span);
+      const hull = node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span);
       if (center) return hull;
       return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
     },
@@ -2442,7 +2476,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         }
       }
 
-      const hull = node('hull', {}, corners, [], span);
+      const hull = node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span);
       if (center) return hull;
       return transformNode(translation(size[0] / 2, size[1] / 2, 0), [hull], span);
     },
