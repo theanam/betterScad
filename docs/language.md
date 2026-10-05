@@ -182,6 +182,8 @@ numbered suffix rather than shadowing it.
 | --- | --- |
 | [`negative()`](#negative) | `difference()` around the scope |
 | [`cube(r)` / `square(r)`](#cuber-and-squarer) | module: a hull of corner spheres or circles |
+| [`cube(chamfer)` / `square(chamfer)`](#cubechamfer-and-squarechamfer) | module: a hull of three boxes or two rectangles |
+| [`cube(centerxy)`](#cubecenterxy) | module: the box moved by half its width and depth |
 | [`cylinder(chamfer)`](#cylinderchamfer) | module: a revolve of the same profile |
 | [`linear_extrude(ease)`](#linear_extrudeease) | module: a stack of short straight extrusions |
 | [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
@@ -294,6 +296,53 @@ resolution of the rounding follows `$fn`/`$fa`/`$fs` as usual.
 
 **Replaces `rounded_square()` and `rounded_cube()`**, which are gone. Calling
 either reports an error naming the argument to use instead.
+
+### `cube(chamfer)` and `square(chamfer)`
+
+`chamfer` cuts every edge flat at 45 degrees, where `r` rounds it — the same word,
+meaning the same thing, as on `cylinder()`:
+
+```scad
+cube([44, 30, 16], chamfer = 3);      // every edge cut back by 3
+square([44, 28], chamfer = 6);        // every corner cut off
+```
+
+It is how far the cut reaches back from the edge along each face. Give `r` or
+`chamfer`, not both: a call with both gets a warning and uses `r`. `chamfer = 0`
+is the stock primitive, exported byte for byte. It is clamped to half the
+shortest side, with a warning.
+
+For printing the flat cut is often the better edge: a 45° chamfer needs no
+support where a round on a bottom edge does, and one along the base takes up the
+first layer squashing out.
+
+It is exact — three boxes (or two rectangles), each full size along one axis and
+inset by the chamfer across the others, hulled — so it is the size you gave and
+nothing about it depends on `$fn`. A negative `r` has never rounded anything; it
+now warns, and suggests `chamfer`.
+
+**Downgrade:** the same hull, in the generated module `cube(r)` uses.
+
+### `cube(centerxy)`
+
+`center = true` centres a cube on every axis, which sinks half of it below the
+grid. `centerxy = true` centres it on X and Y only and leaves its base on Z = 0,
+the way a part sits on a print bed:
+
+```scad
+cube(20, centerxy = true);                       // -10..10 across, 0..20 up
+cube([40, 30, 6], r = 2, centerxy = true);       // with r, too
+translatez(6) cube([20, 14, 10], centerxy = true); // stacks on the one below
+```
+
+`center` keeps its stock meaning, and wins when both are given — it already
+centres X and Y. `centerxy` is the fourth argument, after `size`, `center` and
+`r`, so older calls keep their meaning; write it by name. It is for `cube()`
+only: spheres, cylinders, threads and gears are already centred on their axis,
+and their own `center` moves only Z.
+
+**Downgrade:** a generated module that moves the box by half its width and
+depth — the same one `cube(r)` uses.
 
 ### `cylinder(chamfer)`
 

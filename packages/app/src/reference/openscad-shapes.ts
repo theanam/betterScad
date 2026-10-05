@@ -27,6 +27,9 @@ export const SOLIDS: ReferenceGroup = {
         'A size of zero or less on any axis produces nothing, and reports a warning.',
         'BetterSCAD adds a third argument, `r`, which rounds every edge. It sits after `center` ' +
           'so that `cube(10, true)` keeps its meaning. See its own entry for the detail.',
+        'BetterSCAD also adds `chamfer`, which cuts every edge flat at 45° instead of rounding it.',
+        'BetterSCAD also adds `centerxy = true`, which centres the box on X and Y but leaves it ' +
+          'standing on Z = 0 rather than half below the grid.',
       ],
       params: [
         { name: 'size', description: 'Number, or `[x, y, z]`. Default `1`.' },
@@ -34,6 +37,14 @@ export const SOLIDS: ReferenceGroup = {
         {
           name: 'r',
           description: 'BetterSCAD: radius on every edge. Default `0`, which is the stock cube.',
+        },
+        {
+          name: 'centerxy',
+          description: 'BetterSCAD: centre on X and Y only, base on Z = 0. Default `false`.',
+        },
+        {
+          name: 'chamfer',
+          description: 'BetterSCAD: flat 45° cut on every edge. Default `0`.',
         },
       ],
       examples: [
@@ -54,7 +65,7 @@ export const SOLIDS: ReferenceGroup = {
             'The ghost is the default position; the solid is the same cube with `center = true`.',
         },
       ],
-      see: ['shape-radius', 'sphere', 'cylinder'],
+      see: ['shape-radius', 'shape-chamfer', 'cube-centerxy', 'sphere', 'cylinder'],
       keywords: ['box', 'block', 'rectangle', 'brick'],
     },
     {
@@ -266,6 +277,7 @@ export const FLAT_SHAPES: ReferenceGroup = {
           'boolean — `union()` of a square and a cube is an error, not a shape.',
         'BetterSCAD adds a third argument, `r`, which rounds the corners. It sits after ' +
           '`center`, matching `cube()`. See its own entry for the detail.',
+        'BetterSCAD also adds `chamfer`, which cuts the corners flat at 45° instead.',
       ],
       params: [
         { name: 'size', description: 'Number, or `[x, y]`. Default `1`.' },
@@ -274,6 +286,7 @@ export const FLAT_SHAPES: ReferenceGroup = {
           name: 'r',
           description: 'BetterSCAD: corner radius. Default `0`, which is the stock square.',
         },
+        { name: 'chamfer', description: 'BetterSCAD: flat 45° cut on every corner. Default `0`.' },
       ],
       examples: [
         { code: 'square([40, 25]);', image: 'square', caption: 'A 40 x 25 rectangle.' },
@@ -283,7 +296,7 @@ export const FLAT_SHAPES: ReferenceGroup = {
           caption: 'The same rectangle, extruded into a solid.',
         },
       ],
-      see: ['shape-radius', 'circle', 'linear_extrude'],
+      see: ['shape-radius', 'shape-chamfer', 'circle', 'linear_extrude'],
       keywords: ['rectangle', '2d', 'flat'],
     },
     {

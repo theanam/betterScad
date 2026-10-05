@@ -68,11 +68,118 @@ export const NEW_SHAPES: ReferenceGroup = {
           caption: 'At exactly half the shortest side the corners meet: a stadium.',
         },
       ],
-      see: ['cube', 'square', 'cylinder-chamfer', 'offset', 'hull', 'minkowski'],
+      see: ['cube', 'square', 'shape-chamfer', 'cylinder-chamfer', 'offset', 'hull', 'minkowski'],
       keywords: [
         'rounded', 'corners', 'radius', 'chamfer', 'rounded_cube', 'rounded_square', 'box',
         'enclosure', 'edges',
       ],
+    },
+    {
+      id: 'shape-chamfer',
+      name: 'cube(chamfer), square(chamfer)',
+      signature: 'cube(size, center, r, centerxy, chamfer) | square(size, center, r, chamfer)',
+      extension: true,
+      plain:
+        'A box or a rectangle with its edges cut off flat at 45 degrees, instead of rounded. ' +
+        'Same `cube()` and `square()`, with `chamfer` for how much to cut.',
+      details: [
+        '`chamfer` is how far the cut reaches back from each edge along both faces. ' +
+          '`chamfer = 0`, or leaving it out, is the stock primitive: it exports byte for ' +
+          'byte and is not reported as an extension.',
+        'It is the same word, meaning the same thing, as on `cylinder()`: a flat cut. `r` ' +
+          'is the round. They answer one question two ways, so give one or the other — a ' +
+          'call with both gets a warning and uses `r`.',
+        'For printing, the flat cut is often the better edge. A 45° chamfer prints without ' +
+          'support where a round on a bottom edge does not, and a chamfer along the base takes ' +
+          'up the first layer squashing out — the "elephant foot".',
+        'It is exact: three boxes, each the full size along one axis and inset by the ' +
+          'chamfer across the other two, hulled. There is no curve, so nothing depends on ' +
+          '`$fn` and the part is exactly the size you gave.',
+        'Clamped to half the shortest side, with a warning. At exactly half, the faces meet ' +
+          'in a ridge or a point.',
+        'A negative `r` has never rounded anything and still does not, but now it says so, and ' +
+          'suggests `chamfer` — in case a flat cut was what was meant.',
+      ],
+      params: [
+        { name: 'size', description: 'As always: a number, or `[x, y]` / `[x, y, z]`.' },
+        { name: 'center', description: '`true` centres it on the origin. Default `false`.' },
+        { name: 'chamfer', description: 'How far the 45° cut reaches back from each edge. Default `0`.' },
+      ],
+      downgrade:
+        'With no chamfer, nothing — the call is already stock. With one, `hull()` of three boxes ' +
+        '(two rectangles in 2D), in the generated module `cube(r)` also uses.',
+      examples: [
+        {
+          code: 'cube([44, 30, 16], chamfer = 3);',
+          image: 'cube-chamfer',
+          caption: 'Every edge cut flat by 3, and each corner by a small triangle.',
+        },
+        {
+          code: `cube([30, 30, 12], r = 3, $fn = 32);
+translatex(40) cube([30, 30, 12], chamfer = 3);`,
+          image: 'cube-chamfer-vs-round',
+          caption: 'The same 3, rounded with `r` on the left and cut flat with `chamfer` on the right.',
+        },
+        {
+          code: 'square([44, 28], chamfer = 6);',
+          image: 'square-chamfer',
+          caption: 'The 2D form: each corner cut off flat.',
+        },
+      ],
+      see: ['shape-radius', 'cube', 'square', 'cylinder-chamfer', 'offset'],
+      keywords: ['chamfer', 'bevel', 'mitre', 'miter', 'flat edge', 'cut edge', 'elephant foot', '45'],
+    },
+    {
+      id: 'cube-centerxy',
+      name: 'cube(centerxy)',
+      signature: 'cube(size, center, r, centerxy)',
+      extension: true,
+      plain:
+        'A box centred over the origin but still standing on the ground. `center = true` ' +
+        'centres it on every axis, which sinks half of it below the grid; `centerxy = true` ' +
+        'centres it across and leaves its base on Z = 0.',
+      details: [
+        '`centerxy` centres the box on X and Y only. Its bottom face stays on Z = 0, so it sits ' +
+          'on the grid the way a part on a print bed does, and anything stacked on it with ' +
+          '`translatez(height)` lands on top.',
+        '`center` keeps its stock meaning. Given both, `center = true` wins: it already centres ' +
+          'X and Y, and it is the one OpenSCAD knows.',
+        'It works with `r` too: `cube([40, 30, 10], r = 2, centerxy = true)` is a rounded box ' +
+          'centred over the origin, standing on the grid.',
+        'It is the fourth argument, after `size`, `center` and `r`, so every older call keeps ' +
+          'its meaning. Write it by name.',
+        'It is for `cube()` only. A sphere, a cylinder, a thread and a gear are already centred ' +
+          'on their axis — their own `center` moves only Z — and a 2D shape has no Z to keep.',
+      ],
+      params: [
+        { name: 'size', description: 'A number, or `[x, y, z]`.' },
+        { name: 'center', description: '`true` centres on every axis, and wins. Default `false`.' },
+        { name: 'r', description: 'Edge radius, as on `cube(r)`. Default `0`.' },
+        {
+          name: 'centerxy',
+          description: '`true` centres on X and Y, leaving the base on Z = 0. Default `false`.',
+        },
+      ],
+      downgrade:
+        'A generated module that moves the box by half its width and depth, defined once ' +
+        'however many times it is used.',
+      examples: [
+        {
+          code: '%cube(20, center = true);\ncube(20, centerxy = true);',
+          image: 'cube-centerxy',
+          caption:
+            'The ghost is `center = true`, half of it below the ground; the solid is ' +
+            '`centerxy = true`, centred the same way across but standing on Z = 0.',
+        },
+        {
+          code: `cube([40, 30, 6], r = 2, centerxy = true, $fn = 24);
+translatez(6) cube([20, 14, 10], centerxy = true);`,
+          image: 'cube-centerxy-stack',
+          caption: 'Stacked: each box centred on the same axis, each one standing on the last.',
+        },
+      ],
+      see: ['cube', 'shape-radius', 'translate'],
+      keywords: ['center', 'centre', 'centerxy', 'centered', 'ground', 'bed', 'base', 'origin', 'xy'],
     },
     {
       id: 'text-radius',

@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 18 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 20 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -64,6 +64,8 @@ cube(20, center = true);
 | `size` | Number, or `[x, y, z]`. Default `1`. |
 | `center` | `true` centres the box on the origin. Default `false`. |
 | `r` | BetterSCAD: radius on every edge. Default `0`, which is the stock cube. |
+| `centerxy` | BetterSCAD: centre on X and Y only, base on Z = 0. Default `false`. |
+| `chamfer` | BetterSCAD: flat 45° cut on every edge. Default `0`. |
 
 `size` is a number, or `[x, y, z]`. It defaults to `1`.
 
@@ -73,7 +75,11 @@ A size of zero or less on any axis produces nothing, and reports a warning.
 
 BetterSCAD adds a third argument, `r`, which rounds every edge. It sits after `center` so that `cube(10, true)` keeps its meaning. See its own entry for the detail.
 
-See also: [`cube(r), square(r)`](#entry-shape-radius) · [`sphere()`](#entry-sphere) · [`cylinder()`](#entry-cylinder)
+BetterSCAD also adds `chamfer`, which cuts every edge flat at 45° instead of rounding it.
+
+BetterSCAD also adds `centerxy = true`, which centres the box on X and Y but leaves it standing on Z = 0 rather than half below the grid.
+
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`cube(chamfer), square(chamfer)`](#entry-shape-chamfer) · [`cube(centerxy)`](#entry-cube-centerxy) · [`sphere()`](#entry-sphere) · [`cylinder()`](#entry-cylinder)
 
 <a id="entry-sphere"></a>
 
@@ -310,6 +316,7 @@ linear_extrude(height = 12) square([40, 25]);
 | `size` | Number, or `[x, y]`. Default `1`. |
 | `center` | `true` centres it on the origin. Default `false`. |
 | `r` | BetterSCAD: corner radius. Default `0`, which is the stock square. |
+| `chamfer` | BetterSCAD: flat 45° cut on every corner. Default `0`. |
 
 `size` is a number or `[x, y]`, and defaults to `1`. `center = true` puts the origin in the middle instead of at the bottom-left corner.
 
@@ -317,7 +324,9 @@ A 2D shape has no thickness at all. You cannot mix it with 3D shapes in the same
 
 BetterSCAD adds a third argument, `r`, which rounds the corners. It sits after `center`, matching `cube()`. See its own entry for the detail.
 
-See also: [`cube(r), square(r)`](#entry-shape-radius) · [`circle()`](#entry-circle) · [`linear_extrude()`](#entry-linear_extrude)
+BetterSCAD also adds `chamfer`, which cuts the corners flat at 45° instead.
+
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`cube(chamfer), square(chamfer)`](#entry-shape-chamfer) · [`circle()`](#entry-circle) · [`linear_extrude()`](#entry-linear_extrude)
 
 <a id="entry-circle"></a>
 
@@ -2515,7 +2524,113 @@ Both are built as the hull of their corner primitives, which **is** the Minkowsk
 
 **Saved as OpenSCAD `.scad`:** With no `r`, nothing — the call is already stock. With one, a generated module using the same hull of corner circles or spheres, defined once however many times it is used.
 
-See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
+See also: [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cube(chamfer), square(chamfer)`](#entry-shape-chamfer) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`offset()`](#entry-offset) · [`hull()`](#entry-hull) · [`minkowski()`](#entry-minkowski)
+
+<a id="entry-shape-chamfer"></a>
+
+### cube(chamfer), square(chamfer)
+
+```
+cube(size, center, r, centerxy, chamfer) | square(size, center, r, chamfer)
+```
+
+A box or a rectangle with its edges cut off flat at 45 degrees, instead of rounded. Same `cube()` and `square()`, with `chamfer` for how much to cut.
+
+```scad
+cube([44, 30, 16], chamfer = 3);
+```
+
+<img src="images/reference/cube-chamfer.png" alt="Every edge cut flat by 3, and each corner by a small triangle." width="420">
+
+*Every edge cut flat by 3, and each corner by a small triangle.*
+
+```scad
+cube([30, 30, 12], r = 3, $fn = 32);
+translatex(40) cube([30, 30, 12], chamfer = 3);
+```
+
+<img src="images/reference/cube-chamfer-vs-round.png" alt="The same 3, rounded with r on the left and cut flat with chamfer on the right." width="420">
+
+*The same 3, rounded with `r` on the left and cut flat with `chamfer` on the right.*
+
+```scad
+square([44, 28], chamfer = 6);
+```
+
+<img src="images/reference/square-chamfer.png" alt="The 2D form: each corner cut off flat." width="420">
+
+*The 2D form: each corner cut off flat.*
+
+| Argument | |
+| --- | --- |
+| `size` | As always: a number, or `[x, y]` / `[x, y, z]`. |
+| `center` | `true` centres it on the origin. Default `false`. |
+| `chamfer` | How far the 45° cut reaches back from each edge. Default `0`. |
+
+`chamfer` is how far the cut reaches back from each edge along both faces. `chamfer = 0`, or leaving it out, is the stock primitive: it exports byte for byte and is not reported as an extension.
+
+It is the same word, meaning the same thing, as on `cylinder()`: a flat cut. `r` is the round. They answer one question two ways, so give one or the other — a call with both gets a warning and uses `r`.
+
+For printing, the flat cut is often the better edge. A 45° chamfer prints without support where a round on a bottom edge does not, and a chamfer along the base takes up the first layer squashing out — the "elephant foot".
+
+It is exact: three boxes, each the full size along one axis and inset by the chamfer across the other two, hulled. There is no curve, so nothing depends on `$fn` and the part is exactly the size you gave.
+
+Clamped to half the shortest side, with a warning. At exactly half, the faces meet in a ridge or a point.
+
+A negative `r` has never rounded anything and still does not, but now it says so, and suggests `chamfer` — in case a flat cut was what was meant.
+
+**Saved as OpenSCAD `.scad`:** With no chamfer, nothing — the call is already stock. With one, `hull()` of three boxes (two rectangles in 2D), in the generated module `cube(r)` also uses.
+
+See also: [`cube(r), square(r)`](#entry-shape-radius) · [`cube()`](#entry-cube) · [`square()`](#entry-square) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`offset()`](#entry-offset)
+
+<a id="entry-cube-centerxy"></a>
+
+### cube(centerxy)
+
+```
+cube(size, center, r, centerxy)
+```
+
+A box centred over the origin but still standing on the ground. `center = true` centres it on every axis, which sinks half of it below the grid; `centerxy = true` centres it across and leaves its base on Z = 0.
+
+```scad
+%cube(20, center = true);
+cube(20, centerxy = true);
+```
+
+<img src="images/reference/cube-centerxy.png" alt="The ghost is center = true, half of it below the ground; the solid is centerxy = true, centred the same way across but standing on Z = 0." width="420">
+
+*The ghost is `center = true`, half of it below the ground; the solid is `centerxy = true`, centred the same way across but standing on Z = 0.*
+
+```scad
+cube([40, 30, 6], r = 2, centerxy = true, $fn = 24);
+translatez(6) cube([20, 14, 10], centerxy = true);
+```
+
+<img src="images/reference/cube-centerxy-stack.png" alt="Stacked: each box centred on the same axis, each one standing on the last." width="420">
+
+*Stacked: each box centred on the same axis, each one standing on the last.*
+
+| Argument | |
+| --- | --- |
+| `size` | A number, or `[x, y, z]`. |
+| `center` | `true` centres on every axis, and wins. Default `false`. |
+| `r` | Edge radius, as on `cube(r)`. Default `0`. |
+| `centerxy` | `true` centres on X and Y, leaving the base on Z = 0. Default `false`. |
+
+`centerxy` centres the box on X and Y only. Its bottom face stays on Z = 0, so it sits on the grid the way a part on a print bed does, and anything stacked on it with `translatez(height)` lands on top.
+
+`center` keeps its stock meaning. Given both, `center = true` wins: it already centres X and Y, and it is the one OpenSCAD knows.
+
+It works with `r` too: `cube([40, 30, 10], r = 2, centerxy = true)` is a rounded box centred over the origin, standing on the grid.
+
+It is the fourth argument, after `size`, `center` and `r`, so every older call keeps its meaning. Write it by name.
+
+It is for `cube()` only. A sphere, a cylinder, a thread and a gear are already centred on their axis — their own `center` moves only Z — and a 2D shape has no Z to keep.
+
+**Saved as OpenSCAD `.scad`:** A generated module that moves the box by half its width and depth, defined once however many times it is used.
+
+See also: [`cube()`](#entry-cube) · [`cube(r), square(r)`](#entry-shape-radius) · [`translate()`](#entry-translate)
 
 <a id="entry-text-radius"></a>
 

@@ -23,6 +23,12 @@ before(async () => {
   engine = await Engine.create();
 });
 
+/** The warnings a source produces, for the checks that are about what it says. */
+async function render(source) {
+  const result = await engine.render(source);
+  return { warnings: result.diagnostics.filter((d) => d.severity === 'warning').map((d) => d.message) };
+}
+
 async function measure(source) {
   const result = await engine.render(source);
   const errors = result.diagnostics.filter((d) => d.severity === 'error');
@@ -200,6 +206,100 @@ test('square(r) is its full size at any resolution', async () => {
     assert.ok(near(bounds[0], 0, 1e-9) && near(bounds[1], 0, 1e-9), `${source}: ${bounds}`);
     assert.ok(near(bounds[3], w, 1e-9) && near(bounds[4], h, 1e-9), `${source}: ${bounds}`);
   }
+});
+
+test('centerxy centres a cube on X and Y and leaves it standing on Z = 0', async () => {
+  await equivalent('cube([20, 14, 8], centerxy = true);', 'translate([-10, -7, 0]) cube([20, 14, 8]);');
+  await equivalent('cube(10, centerxy = true);', 'translate([-5, -5, 0]) cube(10);');
+  await equivalent(
+    '$fn = 24;\ncube([20, 14, 8], r = 3, centerxy = true);',
+    '$fn = 24;\ntranslate([0, 0, 4]) cube([20, 14, 8], center = true, r = 3);',
+  );
+  const { bounds } = await measure('cube([20, 14, 8], r = 2, centerxy = true);');
+  assert.deepEqual(bounds.map((v) => +v.toFixed(9)), [-10, -7, 0, 10, 7, 8]);
+});
+
+test('center keeps its stock meaning, and wins over centerxy', async () => {
+  await equivalent('cube(10, center = true, centerxy = true);', 'cube(10, center = true);');
+  await equivalent('cube(10, centerxy = false);', 'cube(10);');
+  // Fourth by position, after the three cube already had.
+  await equivalent('cube(10, false, 0, true);', 'cube(10, centerxy = true);');
+});
+
+test('the export names centerxy for what it is', () => {
+  const names = (source) => describeExtensions(parse(source).file).map((e) => e.name);
+  assert.deepEqual(names('cube(10, centerxy = true);'), ['cube(centerxy = …)']);
+  assert.deepEqual(names('cube(10, r = 1, centerxy = true);'), ['cube(r = …, centerxy = …)']);
+  assert.deepEqual(names('cube(10, r = 1);'), ['cube(r = …)']);
+});
+
+// --- cube(chamfer), square(chamfer) -----------------------------------------
+
+test('cube(chamfer) is the hull of the three face slabs: every edge cut flat', async () => {
+  await equivalent(
+    'cube([20, 14, 8], center = true, chamfer = 2);',
+    `hull() {
+       cube([20, 10, 4], center = true);
+       cube([16, 14, 4], center = true);
+       cube([16, 10, 8], center = true);
+     }`,
+  );
+  // Positioned exactly as the stock cube is, with and without centring.
+  await equivalent('cube([20, 14, 8], chamfer = 2);', 'translate([10, 7, 4]) cube([20, 14, 8], center = true, chamfer = 2);');
+  await equivalent(
+    'cube([20, 14, 8], centerxy = true, chamfer = 2);',
+    'translate([0, 0, 4]) cube([20, 14, 8], center = true, chamfer = 2);',
+  );
+});
+
+test('a chamfered cube is its full size, and its cut is exactly 45 degrees', async () => {
+  const { bounds, volume } = await measure('cube(10, chamfer = 1);');
+  assert.deepEqual(bounds.map((v) => +v.toFixed(9)), [0, 0, 0, 10, 10, 10]);
+  // Twelve edge prisms of cross-section c²/2 along (L - 2c), and eight corner
+  // pyramids, each a third of c³ less than the cube it would otherwise fill.
+  const L = 10;
+  const c = 1;
+  const expected = L ** 3 - 12 * (c * c / 2) * (L - 2 * c) - 8 * (c ** 3 - c ** 3 / 6);
+  assert.ok(near(volume, expected, 1e-6), `volume ${volume}, expected ${expected}`);
+});
+
+test('square(chamfer) cuts every corner flat', async () => {
+  await equivalent(
+    'square([20, 10], chamfer = 3);',
+    `translate([10, 5]) hull() {
+       square([20, 4], center = true);
+       square([14, 10], center = true);
+     }`,
+  );
+  // A rectangle less four right triangles with legs c.
+  const { area } = await measure('linear_extrude(1) square([20, 10], chamfer = 3);');
+  const sides = 2 * 20 + 2 * 10 - 8 * 3 + 4 * 3 * Math.SQRT2;
+  assert.ok(near(area, 2 * (200 - 2 * 9) + sides, 1e-6), `area ${area}`);
+});
+
+test('r and chamfer are one or the other, and r wins', async () => {
+  const both = await render('cube(10, r = 2, chamfer = 1);');
+  assert.ok(both.warnings.some((w) => /give one or the other/.test(w)), both.warnings.join('; '));
+  await equivalent('$fn = 16;\ncube(10, r = 2, chamfer = 1);', '$fn = 16;\ncube(10, r = 2);');
+});
+
+test('chamfer = 0 is the stock cube, and is not an extension', async () => {
+  await equivalent('cube(10, chamfer = 0);', 'cube(10);');
+  const names = (source) => describeExtensions(parse(source).file).map((e) => e.name);
+  assert.deepEqual(names('cube(10, chamfer = 2);'), ['cube(chamfer = …)']);
+  assert.deepEqual(names('square(10, chamfer = 2);'), ['square(chamfer = …)']);
+});
+
+test('a chamfer past half the shortest side is clamped, with a warning', async () => {
+  const { warnings } = await render('cube([10, 10, 4], chamfer = 3);');
+  assert.ok(warnings.some((w) => /chamfer = 3 is larger than half the shortest side/.test(w)), warnings.join('; '));
+  await equivalent('cube([10, 10, 4], chamfer = 3);', 'cube([10, 10, 4], chamfer = 2);');
+});
+
+test('a negative r says what it is not, and points at chamfer', async () => {
+  const { warnings } = await render('cube(10, r = -2);');
+  assert.ok(warnings.some((w) => /use chamfer = 2/.test(w)), warnings.join('; '));
+  await equivalent('cube(10, r = -2);', 'cube(10);');
 });
 
 test('a scalar size is a cube, and r = 0 is a plain one', async () => {

@@ -68,13 +68,21 @@ const MODULES: BuiltinDoc[] = [
       'Axis-aligned box. `size` is a number or [x, y, z].\n\n' +
       'BetterSCAD adds `r`, a radius on every edge. It follows `center`, so ' +
       '`cube(10, true)` still means what it always has. At r = 0 this is the ' +
-      'stock primitive and exports untouched.',
+      'stock primitive and exports untouched.\n\n' +
+      '`chamfer` (BetterSCAD) cuts every edge flat at 45° instead of rounding it.\n\n' +
+      '`centerxy = true` (BetterSCAD) centres it on X and Y but leaves it standing ' +
+      'on Z = 0; `center = true` centres every axis and wins if both are given.',
     type: 'class',
     forms: [
       { template: 'cube([${1:10}, ${2:10}, ${3:10}])', detail: 'cube([x, y, z])' },
       { template: 'cube(${1:10}, center = true)', detail: 'cube(size, center)' },
       { template: 'cube([${1:10}, ${2:10}, ${3:10}], center = true)', detail: 'cube([x, y, z], center)' },
       { template: 'cube(${1:10}, r = ${2:2})', detail: 'cube(size, r)  — BetterSCAD' },
+      { template: 'cube(${1:10}, chamfer = ${2:1})', detail: 'cube(size, chamfer)  — BetterSCAD, flat 45° edges' },
+      {
+        template: 'cube([${1:10}, ${2:10}, ${3:10}], centerxy = true)',
+        detail: 'cube([x, y, z], centerxy)  — BetterSCAD, standing on Z = 0',
+      },
       {
         template: 'cube([${1:10}, ${2:10}, ${3:10}], center = true, r = ${4:2})',
         detail: 'cube([x, y, z], center, r)  — BetterSCAD',
@@ -146,13 +154,14 @@ const MODULES: BuiltinDoc[] = [
     detail: 'square(size)',
     info:
       '2D rectangle.\n\n' +
-      'BetterSCAD adds `r`, a corner radius, after `center`. At r = 0 this is ' +
-      'the stock primitive and exports untouched.',
+      'BetterSCAD adds `r`, a corner radius, after `center`, and `chamfer`, which ' +
+      'cuts the corners flat instead. At 0 this is the stock primitive and exports untouched.',
     type: 'class',
     forms: [
       { template: 'square([${1:10}, ${2:10}])', detail: 'square([x, y])' },
       { template: 'square([${1:10}, ${2:10}], center = true)', detail: 'square([x, y], center)' },
       { template: 'square(${1:10}, r = ${2:2})', detail: 'square(size, r)  — BetterSCAD' },
+      { template: 'square(${1:10}, chamfer = ${2:2})', detail: 'square(size, chamfer)  — BetterSCAD, cut corners' },
       {
         template: 'square([${1:10}, ${2:10}], center = true, r = ${3:2})',
         detail: 'square([x, y], center, r)  — BetterSCAD',

@@ -139,20 +139,27 @@ interface SugaredShape {
   positional?: number;
   /** How the export describes the rewrite. */
   describe: string;
+  /** A description that depends on which of the triggers the call used. */
+  describeFor?: (args: Argument[]) => string;
 }
 
 const SUGARED_SHAPES: Record<string, SugaredShape> = {
   cube: {
+    // Named for where it started; it cuts edges flat with `chamfer` too.
     helper: 'rounded_cube',
-    triggers: ['r'],
+    triggers: ['r', 'centerxy', 'chamfer'],
     positional: 2,
     describe: 'cube(r = …)',
+    // Named for what the call actually uses: a `centerxy` cube with no
+    // radius has nothing to do with rounding.
+    describeFor: (args) => describeUsed('cube', ['r', 'centerxy', 'chamfer'], 2, args),
   },
   square: {
     helper: 'rounded_square',
-    triggers: ['r'],
+    triggers: ['r', 'chamfer'],
     positional: 2,
     describe: 'square(r = …)',
+    describeFor: (args) => describeUsed('square', ['r', 'chamfer'], 2, args),
   },
   text: {
     helper: 'text_arc',
@@ -179,6 +186,18 @@ const SUGARED_SHAPES: Record<string, SugaredShape> = {
     describe: 'cylinder(chamfer = …)',
   },
 };
+
+/**
+ * `name(a = …, b = …)` for the added arguments a call actually uses, whether
+ * named or counted out by position after the `stock` ones it always had.
+ */
+function describeUsed(name: string, added: string[], stock: number, args: Argument[]): string {
+  const positional = args.filter((a) => a.name === undefined).length;
+  const used = added.filter(
+    (param, i) => args.some((a) => a.name === param) || positional > stock + i,
+  );
+  return `${name}(${used.map((n) => `${n} = …`).join(', ')})`;
+}
 
 /** Whether this call actually uses the sugar, rather than merely being able to. */
 function usesSugar(shape: SugaredShape, args: Argument[]): boolean {
@@ -233,10 +252,12 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
     ],
   },
   rounded_square: {
-    params: 'size, center = false, r = 0',
+    params: 'size, center = false, r = 0, chamfer = 0',
     body: [
       's = is_list(size) ? size : [size, size];',
       'rr = min(r, min(s[0], s[1]) / 2);',
+      '// A flat cut instead of a round; r wins if both are given.',
+      'cc = rr > 0 ? 0 : min(chamfer, min(s[0], s[1]) / 2);',
       '// A hull of four corner circles is the Minkowski sum of the rectangle',
       '// and a disc. offset(r) of an inset square says the same thing until rr',
       '// reaches half the shortest side, where that square collapses to a line.',
@@ -251,19 +272,28 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '      square([s[0], max(s[1] - 2 * rr, 1e-6)], center = true);',
       '      square([max(s[0] - 2 * rr, 1e-6), s[1]], center = true);',
       '    }',
+      '  else if (cc > 0)',
+      '    // Two crossed rectangles, hulled: every corner cut at 45 degrees.',
+      '    hull() {',
+      '      square([s[0], max(s[1] - 2 * cc, 1e-6)], center = true);',
+      '      square([max(s[0] - 2 * cc, 1e-6), s[1]], center = true);',
+      '    }',
       '  else',
       '    square(s, center = true);',
     ],
   },
   rounded_cube: {
-    params: 'size, center = false, r = 0',
+    params: 'size, center = false, r = 0, centerxy = false, chamfer = 0',
     body: [
       's = is_list(size) ? size : [size, size, size];',
       'rr = min(r, min(s[0], min(s[1], s[2])) / 2);',
+      '// A flat cut instead of a round; r wins if both are given.',
+      'cc = rr > 0 ? 0 : min(chamfer, min(s[0], min(s[1], s[2])) / 2);',
       '// A hull of eight corner spheres is minkowski() of the box and a sphere,',
       '// without the cost of running one. At r = 0 the spheres would be empty,',
       '// so the box is emitted directly.',
-      'translate(center ? [0, 0, 0] : [s[0] / 2, s[1] / 2, s[2] / 2])',
+      '// centerxy centres X and Y and keeps the base on Z = 0; center wins.',
+      'translate(center ? [0, 0, 0] : centerxy ? [0, 0, s[2] / 2] : [s[0] / 2, s[1] / 2, s[2] / 2])',
       '  if (rr > 0)',
       '    hull() {',
       '      for (x = [-1, 1], y = [-1, 1], z = [-1, 1])',
@@ -275,6 +305,13 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
       '      cube([s[0], max(s[1] - 2 * rr, 1e-6), max(s[2] - 2 * rr, 1e-6)], center = true);',
       '      cube([max(s[0] - 2 * rr, 1e-6), s[1], max(s[2] - 2 * rr, 1e-6)], center = true);',
       '      cube([max(s[0] - 2 * rr, 1e-6), max(s[1] - 2 * rr, 1e-6), s[2]], center = true);',
+      '    }',
+      '  else if (cc > 0)',
+      '    // Three crossed boxes, hulled: every edge cut flat at 45 degrees.',
+      '    hull() {',
+      '      cube([s[0], max(s[1] - 2 * cc, 1e-6), max(s[2] - 2 * cc, 1e-6)], center = true);',
+      '      cube([max(s[0] - 2 * cc, 1e-6), s[1], max(s[2] - 2 * cc, 1e-6)], center = true);',
+      '      cube([max(s[0] - 2 * cc, 1e-6), max(s[1] - 2 * cc, 1e-6), s[2]], center = true);',
       '    }',
       '  else',
       '    cube(s, center = true);',
@@ -1524,12 +1561,9 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
       // Reported against the argument, not the module: a plain `cube()` is
       // stock, and saying otherwise would make the export warn about a file it
       // is about to copy byte for byte.
-      record(
-        SUGARED_SHAPES[stmt.name].describe,
-        SUGARED_SHAPES[stmt.name].describe,
-        'Rewritten as a generated module, defined once and reused.',
-        stmt.span.start.line,
-      );
+      const shape = SUGARED_SHAPES[stmt.name];
+      const name = shape.describeFor?.(stmt.args) ?? shape.describe;
+      record(name, name, 'Rewritten as a generated module, defined once and reused.', stmt.span.start.line);
     }
     if (stmt.kind === 'module-call' && AXIS_SUGAR[stmt.name]) {
       const { stock } = AXIS_SUGAR[stmt.name];

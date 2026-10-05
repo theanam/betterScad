@@ -2158,18 +2158,60 @@ function cornerRadius(
   what: string,
   interp: Interpreter,
   span: SourceSpan,
+  param: 'r' | 'chamfer' = 'r',
 ): number {
   const limit = Math.min(...size) / 2;
-  if (!Number.isFinite(r) || r <= 0) return 0;
+  if (!Number.isFinite(r) || r === 0) return 0;
+  // Negative has never done anything here, and it reads as though it might —
+  // offset(r = -2) shrinks, so a negative radius looks like a request for
+  // something rather than a slip. Said, then treated as 0, as it always was.
+  if (r < 0) {
+    interp.warn(
+      param === 'r'
+        ? `${what}(): r = ${r} is negative, so nothing is rounded. For a flat cut on the edges, use chamfer = ${-r}.`
+        : `${what}(): chamfer = ${r} is negative, so nothing is cut.`,
+      span,
+      'eval.radius-negative',
+    );
+    return 0;
+  }
   if (r > limit + 1e-9) {
     interp.warn(
-      `${what}(): r = ${r} is larger than half the shortest side; using ${limit}.`,
+      `${what}(): ${param} = ${r} is larger than half the shortest side; using ${limit}.`,
       span,
       'eval.radius-clamped',
     );
     return Math.max(0, limit);
   }
   return r;
+}
+
+/**
+ * The edge treatment a `cube()` or `square()` call asked for.
+ *
+ * `r` rounds and `chamfer` cuts flat; they are two answers to one question, so
+ * a call giving both gets one of them and a warning rather than some blend.
+ * `r` wins because it was there first — a file written before `chamfer`
+ * existed keeps its shape.
+ */
+function edgeTreatment(
+  args: Map<string, Value>,
+  size: number[],
+  what: 'cube' | 'square',
+  interp: Interpreter,
+  span: SourceSpan,
+): { r: number; chamfer: number } {
+  const r = cornerRadius(asNumber(args.get('r'), 0), size, what, interp, span);
+  const chamfer = cornerRadius(asNumber(args.get('chamfer'), 0), size, what, interp, span, 'chamfer');
+  if (r > 0 && chamfer > 0) {
+    interp.warn(
+      `${what}(): r rounds the edges and chamfer cuts them flat; give one or the other. Using r = ${r}.`,
+      span,
+      'eval.edge-both',
+    );
+    return { r, chamfer: 0 };
+  }
+  return { r, chamfer };
 }
 
 /**
@@ -2295,14 +2337,38 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    * agree.
    */
   cube: {
-    params: ['size', 'center', 'r'],
-    defaults: { size: '1', center: 'false', r: '0' },
+    // `centerxy` (BetterSCAD) centres on X and Y and leaves the base on Z = 0,
+    // which is how most parts want to sit: centred over the origin, standing
+    // on the grid. `center` keeps its stock meaning, and wins when both are
+    // given — it already centres X and Y, so there is nothing to reconcile.
+    //
+    // `chamfer` (BetterSCAD) cuts every edge flat at 45 degrees, where `r`
+    // rounds it: the same word, meaning the same thing, as on `cylinder()`.
+    params: ['size', 'center', 'r', 'centerxy', 'chamfer'],
+    defaults: { size: '1', center: 'false', r: '0', centerxy: 'false', chamfer: '0' },
     build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 3, 1) ?? [1, 1, 1];
       const center = isTruthy(args.get('center'));
-      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'cube', interp, span);
+      const centerxy = !center && isTruthy(args.get('centerxy'));
+      const { r, chamfer } = edgeTreatment(args, size, 'cube', interp, span);
 
-      if (r <= 0) return node('cube', { size, center }, [], [], span);
+      const place = (shape: SceneNode): SceneNode => {
+        if (center) return shape;
+        if (centerxy) return transformNode(translation(0, 0, size[2] / 2), [shape], span);
+        return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [shape], span);
+      };
+
+      // The three face slabs on their own *are* the chamfered box: hulled,
+      // each pair of neighbouring faces is joined by a flat plane at 45
+      // degrees, and each corner by a triangle. Exact, with no curve to facet.
+      if (chamfer > 0) return place(node('hull', {}, faceSlabs(size, chamfer, span), [], span));
+
+      if (r <= 0) {
+        const box = node('cube', { size, center }, [], [], span);
+        return centerxy
+          ? transformNode(translation(-size[0] / 2, -size[1] / 2, 0), [box], span)
+          : box;
+      }
 
       const corners: SceneNode[] = [];
       for (const sx of [-1, 1]) {
@@ -2319,9 +2385,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         }
       }
 
-      const hull = node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span);
-      if (center) return hull;
-      return transformNode(translation(size[0] / 2, size[1] / 2, size[2] / 2), [hull], span);
+      return place(node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span));
     },
   },
 
@@ -2454,12 +2518,19 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    * The hull still has four circles.
    */
   square: {
-    params: ['size', 'center', 'r'],
-    defaults: { size: '1', center: 'false', r: '0' },
+    // `chamfer` (BetterSCAD) cuts each corner flat, where `r` rounds it.
+    params: ['size', 'center', 'r', 'chamfer'],
+    defaults: { size: '1', center: 'false', r: '0', chamfer: '0' },
     build: (args, _children, scope, interp, span) => {
       const size = asVector(args.get('size') ?? 1, 2, 1) ?? [1, 1];
       const center = isTruthy(args.get('center'));
-      const r = cornerRadius(asNumber(args.get('r'), 0), size, 'square', interp, span);
+      const { r, chamfer } = edgeTreatment(args, size, 'square', interp, span);
+
+      const place = (shape: SceneNode): SceneNode =>
+        center ? shape : transformNode(translation(size[0] / 2, size[1] / 2, 0), [shape], span);
+
+      // Two crossed rectangles, hulled: an octagon with 45-degree corners.
+      if (chamfer > 0) return place(node('hull', {}, faceSlabs(size, chamfer, span), [], span));
 
       if (r <= 0) return node('square', { size, center }, [], [], span);
 
@@ -2476,9 +2547,7 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         }
       }
 
-      const hull = node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span);
-      if (center) return hull;
-      return transformNode(translation(size[0] / 2, size[1] / 2, 0), [hull], span);
+      return place(node('hull', {}, [...corners, ...faceSlabs(size, r, span)], [], span));
     },
   },
 
