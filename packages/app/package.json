@@ -1,13 +1,13 @@
 {
   "name": "@betterscad/app",
-  "version": "0.21.1",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test test/*.test.js"
+    "test": "node --experimental-strip-types --import ./test/resolve-ts.mjs --test test/*.test.js"
   },
   "dependencies": {
     "@betterscad/engine": "*",

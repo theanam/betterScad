@@ -9,6 +9,7 @@
 import { EditorState } from '@codemirror/state';
 
 import type { CameraState } from '../viewport/controls.js';
+import { DEFAULT_ARRANGEMENT, sanitize, type Arrangement } from './panels.js';
 import { parseBscad, serializeBscad, type BscadMetadata, type Value } from '@betterscad/engine';
 
 /** What a document writes to disk: `.bscad` carries metadata, `.scad` does not. */
@@ -58,14 +59,8 @@ export interface Document {
 }
 
 export interface LayoutState {
-  /** Editor column width as a fraction of the workspace. */
-  editorFraction: number;
-  /** Console height as a fraction of the right column. */
-  consoleFraction: number;
-  customizerVisible: boolean;
-  consoleVisible: boolean;
-  /** The Files panel, which holds the project directory. */
-  filesVisible: boolean;
+  /** Where every panel is, whether it shows, and how big it is. */
+  panels: Arrangement;
   theme: 'light' | 'dark';
   autoRender: boolean;
   showGrid: boolean;
@@ -97,11 +92,7 @@ export interface LayoutState {
 }
 
 export const DEFAULT_LAYOUT: LayoutState = {
-  editorFraction: 0.44,
-  consoleFraction: 0.26,
-  customizerVisible: false,
-  consoleVisible: true,
-  filesVisible: false,
+  panels: DEFAULT_ARRANGEMENT,
   theme: 'dark',
   autoRender: true,
   showGrid: true,
@@ -115,6 +106,39 @@ export const DEFAULT_LAYOUT: LayoutState = {
 };
 
 const STORAGE_KEY = 'betterscad.workspace.v1';
+
+/** The fields a session saved before panels could move kept its layout in. */
+interface LegacyLayout {
+  editorFraction?: number;
+  consoleFraction?: number;
+  customizerVisible?: boolean;
+  consoleVisible?: boolean;
+  filesVisible?: boolean;
+}
+
+/**
+ * The saved arrangement, or one rebuilt from the fields that came before it.
+ *
+ * A session from before panels could move has its sizes and its open panels
+ * in five loose fields; carrying them over means the first load after the
+ * update looks exactly like the last one before it.
+ */
+function restorePanels(saved: (Partial<LayoutState> & LegacyLayout) | undefined): Arrangement {
+  if (saved?.panels) return sanitize(saved.panels);
+  const panels = sanitize(undefined);
+  if (!saved) return panels;
+  if (typeof saved.customizerVisible === 'boolean') panels.visible.customizer = saved.customizerVisible;
+  if (typeof saved.consoleVisible === 'boolean') panels.visible.console = saved.consoleVisible;
+  if (typeof saved.filesVisible === 'boolean') panels.visible.files = saved.filesVisible;
+  return sanitize({
+    ...panels,
+    split: saved.editorFraction ?? panels.split,
+    weights:
+      typeof saved.consoleFraction === 'number' && saved.consoleFraction > 0 && saved.consoleFraction < 1
+        ? { ...panels.weights, viewport: 100 * (1 - saved.consoleFraction), console: 100 * saved.consoleFraction }
+        : panels.weights,
+  });
+}
 
 /** What "start blank" and File ▸ New produce. */
 export const BLANK_DOCUMENT = `// New model
@@ -163,7 +187,9 @@ function idNumber(doc: { id: string }): number {
 export class Workspace {
   documents: Document[] = [];
   activeId = '';
-  layout: LayoutState = { ...DEFAULT_LAYOUT };
+  // A copy of the arrangement, not the default's own: dragging a panel must
+  // never move it in the default too.
+  layout: LayoutState = { ...DEFAULT_LAYOUT, panels: sanitize(undefined) };
 
   private nextId = 1;
 
@@ -281,7 +307,12 @@ export class Workspace {
         ...(Object.keys(doc.parameters).length > 0 ? { current: doc.parameters } : {}),
       },
       activePreset: Object.keys(doc.parameters).length > 0 ? 'current' : doc.metadata.activePreset,
-      layout: { editorFraction: this.layout.editorFraction, consoleFraction: this.layout.consoleFraction },
+      layout: {
+        editorFraction: this.layout.panels.split,
+        consoleFraction:
+          this.layout.panels.weights.console /
+          (this.layout.panels.weights.console + this.layout.panels.weights.viewport),
+      },
     });
   }
 
@@ -326,7 +357,7 @@ export class Workspace {
       const payload = JSON.parse(raw) as {
         version?: number;
         activeId?: string;
-        layout?: Partial<LayoutState>;
+        layout?: Partial<LayoutState> & LegacyLayout;
         documents?: Omit<Document, 'editorState' | 'handle'>[];
       };
       // An empty document list is a real state, not a failed restore: it is
@@ -334,7 +365,16 @@ export class Workspace {
       // the next visit would undo that deliberately.
       if (payload.version !== 1 || !Array.isArray(payload.documents)) return false;
 
-      this.layout = { ...DEFAULT_LAYOUT, ...payload.layout };
+      // The legacy fields are read once, into `panels`, and not carried on.
+      const {
+        editorFraction: _editorFraction,
+        consoleFraction: _consoleFraction,
+        customizerVisible: _customizerVisible,
+        consoleVisible: _consoleVisible,
+        filesVisible: _filesVisible,
+        ...saved
+      } = (payload.layout ?? {}) as Partial<LayoutState> & LegacyLayout;
+      this.layout = { ...DEFAULT_LAYOUT, ...saved, panels: restorePanels(payload.layout) };
       this.documents = payload.documents.map((d) => ({
         ...d,
         metadata: d.metadata ?? { version: 1 },

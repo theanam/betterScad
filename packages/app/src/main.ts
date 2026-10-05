@@ -88,9 +88,10 @@ import {
 } from './ui/dialogs.js';
 import { showReferenceDialog } from './ui/reference-view.js';
 import { AxisIndicator } from './ui/axis-indicator.js';
-import { announce, button, clear, debounce, el, formatNumber } from './ui/dom.js';
+import { announce, button, clear, debounce, el, formatNumber, icon, openMenu } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
-import { Split } from './ui/layout.js';
+import { PanelLayout } from './ui/panels.js';
+import { PANEL_IDS, PANEL_NAMES, PRESETS, fromPreset, type PanelId } from './state/panels.js';
 import type { StartChoices } from './ui/choices.js';
 import { editorEmptyState, viewportEmptyState } from './ui/empty-state.js';
 import { showWelcome } from './ui/welcome.js';
@@ -135,10 +136,7 @@ class App {
   private viewportEmpty!: HTMLElement;
   private animationBar?: AnimationBar;
 
-  private mainSplit!: Split;
-  private rightSplit!: Split;
-  private customizerHost!: HTMLElement;
-  private filesHost!: HTMLElement;
+  private panels!: PanelLayout;
   private animationHost!: HTMLElement;
   private busyBadge!: HTMLElement;
   private measureReadout!: HTMLElement;
@@ -283,6 +281,7 @@ class App {
       toggleCustomizer: () => this.toggleCustomizer(),
       toggleConsole: () => this.toggleConsole(),
       toggleFiles: () => this.toggleFiles(),
+      openLayout: (anchor) => this.openLayoutMenu(anchor),
       changeSetting: (key, value) => this.changeSetting(key, value),
       openPalette: () => this.palette.open(),
       openFonts: () => void this.openFontManager(),
@@ -306,9 +305,6 @@ class App {
       // were ever driven while already hidden.
       onClose: () => this.setCustomizerVisible(false),
     });
-    this.customizerHost = el('div', { class: 'paneldock', style: 'display:none; flex: 0 0 42%;' }, [
-      this.customizerPanel.element,
-    ]);
 
     this.filesPanel = new FilesPanel({
       onAdd: () => void this.addProjectFiles(),
@@ -321,9 +317,6 @@ class App {
       onRemove: (file) => void this.removeProjectFile(file),
       onClose: () => this.setFilesVisible(false),
     });
-    this.filesHost = el('div', { class: 'paneldock', style: 'display:none; flex: 0 0 34%;' }, [
-      this.filesPanel.element,
-    ]);
 
     // --- viewport column ---
     const viewportHost = el('div', { class: 'viewport' });
@@ -354,44 +347,83 @@ class App {
     );
 
     this.consolePanel = new ConsolePanel(
-      (line, column) => this.editor.goTo(line, column),
+      (line, column) => {
+        // Jumping to a line in a hidden editor would go nowhere visible.
+        const { visible, maximized } = this.panels.state;
+        if (!visible.editor || (maximized !== null && maximized !== 'editor')) this.setPanelVisible('editor', true);
+        this.editor.goTo(line, column);
+      },
       () => void this.previewDowngrade(),
     );
 
-    this.rightSplit = new Split({
-      orientation: 'horizontal',
-      initialFraction: 1 - this.workspace.layout.consoleFraction,
-      minFraction: 0.2,
-      maxFraction: 0.95,
-      onResize: (fraction) => {
-        this.workspace.layout.consoleFraction = 1 - fraction;
-        this.workspace.persist();
-        this.viewport.resize();
-      },
-    });
-    this.rightSplit.first.append(viewportHost, this.animationHost);
-    this.rightSplit.second.append(this.consolePanel.element);
-
-    this.mainSplit = new Split({
-      orientation: 'vertical',
-      initialFraction: this.workspace.layout.editorFraction,
-      onResize: (fraction) => {
-        this.workspace.layout.editorFraction = fraction;
-        this.workspace.persist();
-        this.viewport.resize();
-      },
-    });
     this.editorEmpty = editorEmptyState(this.startChoices());
 
-    this.mainSplit.first.classList.add('pane--editor');
-    this.mainSplit.first.append(
-      this.tabs.element,
+    // The editor's header is its tab strip, with the panel's own controls at
+    // the far end of it.
+    const editorBar = el('div', { class: 'editorbar' }, [this.tabs.element]);
+    const editorPanel = el('div', { class: 'panel pane--editor' }, [
+      editorBar,
       editorHost,
       this.editorEmpty,
-      this.customizerHost,
-      this.filesHost,
-    );
-    this.mainSplit.second.append(this.rightSplit.element);
+    ]);
+    const viewportPanel = el('div', { class: 'panel' }, [viewportHost, this.animationHost]);
+
+    this.panels = new PanelLayout({
+      content: {
+        editor: editorPanel,
+        viewport: viewportPanel,
+        console: this.consolePanel.element,
+        customizer: this.customizerPanel.element,
+        files: this.filesPanel.element,
+      },
+      arrangement: this.workspace.layout.panels,
+      onChange: (arrangement) => {
+        this.workspace.layout.panels = arrangement;
+        this.workspace.persist();
+        this.refreshChrome();
+      },
+      // Guarded: the first render happens inside the constructor, before the
+      // viewport and the editor exist.
+      onLayout: () => {
+        this.viewport?.resize();
+        this.editor?.view.requestMeasure();
+      },
+    });
+
+    // Each panel's move and maximize controls go into the header it already
+    // has. The Customizer and Files keep their own close button last, where a
+    // dismiss belongs; the others get one here.
+    const hide = (id: PanelId): HTMLButtonElement => {
+      const node = el('button', {
+        class: 'panelctl__btn',
+        type: 'button',
+        'aria-label': `Hide ${PANEL_NAMES[id]}`,
+        onclick: () => this.setPanelVisible(id, false),
+      }) as HTMLButtonElement;
+      node.append(icon('close', 14));
+      setHint(node, `Hide the ${PANEL_NAMES[id].toLowerCase()} — bring it back from Layout`);
+      return node;
+    };
+    const editorControls = this.panels.controlsFor('editor');
+    editorControls.append(hide('editor'));
+    editorBar.append(editorControls);
+
+    const viewportControls = this.panels.controlsFor('viewport');
+    viewportControls.classList.add('viewport__panelctl');
+    viewportControls.append(hide('viewport'));
+    viewportHost.append(viewportControls);
+
+    const consoleControls = this.panels.controlsFor('console');
+    consoleControls.append(hide('console'));
+    this.consolePanel.element.querySelector('.panel__header')?.append(consoleControls);
+
+    for (const [id, panel] of [
+      ['customizer', this.customizerPanel.element],
+      ['files', this.filesPanel.element],
+    ] as const) {
+      const header = panel.querySelector('.panel__header');
+      header?.insertBefore(this.panels.controlsFor(id), header.lastElementChild);
+    }
 
     this.statusBar = new StatusBar(() => {
       this.workspace.layout.autoRender = !this.workspace.layout.autoRender;
@@ -399,7 +431,7 @@ class App {
       this.refreshChrome();
     });
 
-    root.append(this.toolbar.element, this.mainSplit.element, this.statusBar.element);
+    root.append(this.toolbar.element, this.panels.element, this.statusBar.element);
 
     // --- live components, created after they have a sized host ---
     let paintHud: (() => void) | undefined;
@@ -452,7 +484,6 @@ class App {
     paintHud();
 
     this.palette = new CommandPalette(this.registry);
-    this.applyLayoutVisibility();
   }
 
   /**
@@ -1711,39 +1742,64 @@ class App {
   // -- layout and theme -----------------------------------------------------
 
   private toggleCustomizer(): void {
-    this.setCustomizerVisible(!this.workspace.layout.customizerVisible);
+    this.togglePanel('customizer');
   }
 
   private setCustomizerVisible(visible: boolean): void {
-    this.workspace.layout.customizerVisible = visible;
-    this.applyLayoutVisibility();
-    this.workspace.persist();
-    this.refreshChrome();
+    this.setPanelVisible('customizer', visible);
   }
 
   private toggleConsole(): void {
-    this.workspace.layout.consoleVisible = !this.workspace.layout.consoleVisible;
-    this.applyLayoutVisibility();
-    this.workspace.persist();
-    this.refreshChrome();
+    this.togglePanel('console');
   }
 
   private toggleFiles(): void {
-    this.setFilesVisible(!this.workspace.layout.filesVisible);
+    this.togglePanel('files');
   }
 
   private setFilesVisible(visible: boolean): void {
-    this.workspace.layout.filesVisible = visible;
-    this.applyLayoutVisibility();
-    this.workspace.persist();
-    this.refreshChrome();
+    this.setPanelVisible('files', visible);
   }
 
-  private applyLayoutVisibility(): void {
-    this.customizerHost.style.display = this.workspace.layout.customizerVisible ? 'flex' : 'none';
-    this.filesHost.style.display = this.workspace.layout.filesVisible ? 'flex' : 'none';
-    this.rightSplit.setSecondVisible(this.workspace.layout.consoleVisible);
-    this.viewport?.resize();
+  private togglePanel(id: PanelId): void {
+    const { visible, maximized } = this.panels.state;
+    // A panel hidden behind a maximized one reads as off, so pressing its
+    // button shows it rather than "hiding" something already out of sight.
+    this.setPanelVisible(id, !visible[id] || (maximized !== null && maximized !== id));
+  }
+
+  /** Shows or hides one panel; persisting and the toolbar follow from `onChange`. */
+  private setPanelVisible(id: PanelId, visible: boolean): void {
+    this.panels.setVisible(id, visible);
+    if (visible && id === 'editor') this.editor.focus();
+  }
+
+  private applyPreset(id: string): void {
+    this.panels.set(fromPreset(id));
+  }
+
+  /**
+   * The Layout menu: the presets, then a switch per panel.
+   *
+   * Presets first because they are what someone opening the menu is most
+   * likely after — "put it back" or "give me the model" — and each one says
+   * in a line what it arranges, since the names alone cannot.
+   */
+  private openLayoutMenu(anchor: HTMLElement): void {
+    const { visible, maximized } = this.panels.state;
+    openMenu(anchor, [
+      ...PRESETS.map((preset) => ({
+        label: preset.id === 'default' ? 'Reset to default' : preset.label,
+        description: preset.description,
+        onSelect: () => this.applyPreset(preset.id),
+      })),
+      ...PANEL_IDS.map((id) => ({
+        kind: 'toggle' as const,
+        label: PANEL_NAMES[id],
+        value: visible[id] && (maximized === null || maximized === id),
+        onChange: (on: boolean) => this.setPanelVisible(id, on),
+      })),
+    ]);
   }
 
   private toggleTheme(): void {
@@ -1816,8 +1872,13 @@ class App {
     const active = this.workspace.active;
     const extensions = active ? this.extensionsIn(active) : [];
     this.consolePanel.setExtensions(extensions, !!active);
+    const { visible, maximized } = this.workspace.layout.panels;
+    // On only if it can actually be seen: one hidden behind a maximized panel is not.
+    const showing = (id: PanelId): boolean => visible[id] && (maximized === null || maximized === id);
     this.toolbar.update({
-      ...this.workspace.layout,
+      customizerVisible: showing('customizer'),
+      consoleVisible: showing('console'),
+      filesVisible: showing('files'),
       settings: this.workspace.layout,
       renderBroke: this.renderBroke,
       documentFormat: active ? this.workspace.formatOf(active) : 'bscad',
@@ -1973,10 +2034,24 @@ class App {
         run: () => this.viewport.setMeasuring(!this.viewport.measuring),
       },
 
+      { id: 'panel.editor', category: 'Panels', title: 'Toggle code editor', run: () => this.togglePanel('editor') },
+      { id: 'panel.viewport', category: 'Panels', title: 'Toggle viewport', run: () => this.togglePanel('viewport') },
       { id: 'panel.files', category: 'Panels', title: 'Toggle Files', run: () => this.toggleFiles() },
       { id: 'panel.customizer', category: 'Panels', title: 'Toggle Customizer', run: () => this.toggleCustomizer() },
       { id: 'panel.console', category: 'Panels', title: 'Toggle Console', run: () => this.toggleConsole() },
       { id: 'panel.theme', category: 'Panels', title: 'Toggle light / dark theme', run: () => this.toggleTheme() },
+      ...PANEL_IDS.map((id) => ({
+        id: `layout.maximize.${id}`,
+        category: 'Layout',
+        title: `Maximize ${PANEL_NAMES[id].toLowerCase()} / restore`,
+        run: () => this.panels.toggleMaximized(id),
+      })),
+      ...PRESETS.map((preset) => ({
+        id: `layout.preset.${preset.id}`,
+        category: 'Layout',
+        title: preset.id === 'default' ? 'Reset layout to default' : `Layout: ${preset.label}`,
+        run: () => this.applyPreset(preset.id),
+      })),
       {
         id: 'settings.roundMeasure',
         category: 'Settings',

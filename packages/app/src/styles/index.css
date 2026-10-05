@@ -622,6 +622,181 @@ textarea {
   background: var(--bs-solid-500);
 }
 
+/* --- movable panels -------------------------------------------------------- */
+
+.layout {
+  position: relative;
+  flex-direction: row;
+}
+
+.layout__column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bs-surface);
+}
+
+.layout__panel > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The panel being dragged dims where it was, so the drop indicator reads as
+   "here instead". */
+.layout__panel--lifted {
+  opacity: 0.45;
+}
+
+.layout--dragging,
+.layout--dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* Where a dragged panel will land: a bar at a gap between panels, or a band
+   down the side of the window for a new column. */
+.layout__drop {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: 2px;
+  background: var(--bs-solid-500);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bs-solid-500) 40%, transparent);
+}
+
+.layout__drop--column {
+  background: color-mix(in srgb, var(--bs-solid-500) 18%, transparent);
+  border: 2px dashed var(--bs-solid-500);
+}
+
+.layout__ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bs-surface-raised, var(--bs-surface));
+  border: 1px solid var(--bs-border-strong);
+  box-shadow: var(--bs-shadow-1);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-text);
+}
+
+.layout__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bs-space-2);
+  color: var(--bs-text-muted);
+}
+
+.layout__empty p {
+  margin: 0;
+}
+
+.layout__emptyhint {
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-text-faint);
+}
+
+/* A panel's own move and maximize controls, set into its header. Quiet until
+   the header is hovered: they are there for rearranging, not for every glance. */
+.panelctl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.panelctl__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-radius-sm, 4px);
+  background: transparent;
+  color: var(--bs-text-faint);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--bs-transition), color var(--bs-transition), background var(--bs-transition);
+}
+
+.panelctl__grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.panelctl__btn:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+:is(.panel__header, .editorbar, .viewport):hover .panelctl__btn:not(:disabled),
+.panelctl__btn:focus-visible {
+  opacity: 1;
+}
+
+.panelctl__btn:hover:not(:disabled) {
+  color: var(--bs-text);
+  background: var(--bs-surface-hover, color-mix(in srgb, var(--bs-text) 8%, transparent));
+}
+
+.panelctl__btn[aria-pressed='true'] {
+  color: var(--bs-solid-500);
+  opacity: 1;
+}
+
+/* The editor's header is its tab strip; the controls sit at its far end. */
+.editorbar {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  background: var(--bs-surface-sunken);
+  border-bottom: 1px solid var(--bs-border);
+}
+
+.editorbar > .tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.editorbar > .panelctl {
+  padding: 0 var(--bs-space-2);
+}
+
+/* The viewport has no header, so its controls float in its top-right corner,
+   with the camera readout moved below them. */
+.viewport__panelctl {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.viewport:has(.viewport__panelctl) .viewport__hud {
+  top: 36px;
+}
+
 /* --- panel chrome --------------------------------------------------------- */
 
 .panel {
@@ -630,23 +805,6 @@ textarea {
   min-height: 0;
   overflow: hidden;
   background: var(--bs-surface);
-}
-
-/* A panel docked under the editor: the Customizer, the Files list.
-   Column direction, so the panel inside stretches across the column instead of
-   sizing to its own content — a list of short file names would otherwise make
-   the panel narrower than the one above it, and it would change width as rows
-   came and went. */
-.paneldock {
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  border-top: 1px solid var(--bs-border);
-}
-
-.paneldock > .panel {
-  flex: 1;
-  min-width: 0;
 }
 
 .panel__header {

@@ -133,6 +133,17 @@ const ICONS: Record<string, string> = {
   // A box whose back face is the same size as its front, joined by parallel
   // edges: no vanishing point, which is what orthographic means.
   orthographic: 'M2 5.5h8.5v8.5H2zM5.5 2H14v8.5M2 5.5 5.5 2M10.5 5.5 14 2M10.5 14 14 10.5',
+  // Two columns, the right one split: the workspace as the Layout menu sees it.
+  layout: 'M2 2.5h12v11H2zM7 2.5v11M7 8h7',
+  // Six dots in two columns: something to take hold of. Filled, so the dots
+  // stay round at 14px.
+  grip:
+    'M5 4a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0zM8.7 4a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0z' +
+    'M5 8a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0zM8.7 8a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0z' +
+    'M5 12a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0zM8.7 12a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0z',
+  // Corners pushed out to the edges, and pulled back in.
+  maximize: 'M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9',
+  unmaximize: 'M13 7H9V3M9 7l4.5-4.5M3 9h4v4M7 9l-4.5 4.5',
 };
 
 /**
@@ -142,7 +153,7 @@ const ICONS: Record<string, string> = {
  * not. Stroking the GitHub mark would trace every contour of its silhouette and
  * read as noise at 16px, so it is filled the way its owner draws it.
  */
-const FILLED_ICONS = new Set(['github']);
+const FILLED_ICONS = new Set(['github', 'grip']);
 
 /** Inline SVG icon; `stroke` style keeps them crisp at 16px. */
 export function icon(name: keyof typeof ICONS | string, size = 15): SVGSVGElement {
