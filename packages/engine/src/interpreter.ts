@@ -405,6 +405,7 @@ class Interpreter {
             `Cannot resolve include <${stmt.path}>.`,
             stmt.span,
             'eval.unresolved-include',
+            stmt.path,
           );
           continue;
         }
@@ -422,7 +423,12 @@ class Interpreter {
       } else if (stmt.kind === 'use') {
         const used = this.includes.get(stmt.path);
         if (!used) {
-          this.diagnostics.error(`Cannot resolve use <${stmt.path}>.`, stmt.span, 'eval.unresolved-use');
+          this.diagnostics.error(
+            `Cannot resolve use <${stmt.path}>.`,
+            stmt.span,
+            'eval.unresolved-use',
+            stmt.path,
+          );
           continue;
         }
         // `use` imports definitions only — never variables, never geometry.

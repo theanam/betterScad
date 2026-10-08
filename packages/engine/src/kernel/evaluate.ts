@@ -217,7 +217,7 @@ export class GeometrySession {
         try {
           const data = await assets.read(path);
           if (!data) {
-            ctx.diagnostics.error(`Cannot read "${path}".`, undefined, 'kernel.asset-missing');
+            ctx.diagnostics.error(`Cannot read "${path}".`, undefined, 'kernel.asset-missing', path);
             return;
           }
           ctx.files.set(path, data);

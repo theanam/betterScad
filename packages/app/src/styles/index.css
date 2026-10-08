@@ -1326,6 +1326,18 @@ textarea {
   color: var(--bs-text-faint);
 }
 
+.log__help {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bs-space-2);
+  margin-top: var(--bs-space-1);
+}
+
+.log__hint {
+  color: var(--bs-text-muted);
+}
+
 /* --- customizer ----------------------------------------------------------- */
 
 .customizer__group {
@@ -1852,6 +1864,13 @@ dialog::backdrop {
 .files__row:hover {
   background: var(--bs-surface-raised);
   color: var(--bs-text);
+}
+
+/* A file that has just arrived from the console's Add file button. */
+.files__row--new {
+  background: var(--bs-surface-raised);
+  color: var(--bs-text);
+  box-shadow: inset 2px 0 0 var(--bs-solid-500);
 }
 
 .files__row--nested {

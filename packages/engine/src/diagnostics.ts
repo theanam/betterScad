@@ -30,6 +30,11 @@ export interface Diagnostic {
   span?: SourceSpan;
   /** Stable identifier, e.g. `parse.unexpected-token`, used for tests and docs. */
   code?: string;
+  /**
+   * The project file this is about, when the problem is that it is not there.
+   * Lets a front end offer to add it rather than only describe the gap.
+   */
+  missingFile?: string;
 }
 
 export function position(offset: number, line: number, column: number): Position {
@@ -102,8 +107,8 @@ export class DiagnosticBag {
     this.items.push(d);
   }
 
-  error(message: string, span?: SourceSpan, code?: string): void {
-    this.add({ severity: 'error', message, span, code });
+  error(message: string, span?: SourceSpan, code?: string, missingFile?: string): void {
+    this.add({ severity: 'error', message, span, code, ...(missingFile ? { missingFile } : {}) });
   }
 
   warn(message: string, span?: SourceSpan, code?: string): void {

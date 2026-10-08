@@ -17,6 +17,8 @@ export interface ConsoleEntry {
   line?: number;
   column?: number;
   file?: string;
+  /** A project file this entry is about and the project does not have. */
+  missingFile?: string;
 }
 
 const ICON: Record<ConsoleEntry['severity'], string> = {
@@ -49,6 +51,8 @@ export class ConsolePanel {
     private readonly onJump: (line: number, column: number) => void,
     /** Opens the downgrade preview, from the Info tab's link. */
     private readonly onPreviewDowngrade: () => void,
+    /** Picks a file for the project under the name a script asked for. */
+    private readonly onAddMissingFile: (path: string) => void,
   ) {
     this.list = el('ul', { class: 'console__list' });
     this.problemCount = el('span', { class: 'paneltab__count', hidden: true });
@@ -121,6 +125,7 @@ export class ConsolePanel {
       line: d.span?.start.line,
       column: d.span?.start.column,
       file: d.span?.file,
+      missingFile: d.missingFile,
     })));
 
     if (stats) {
@@ -212,6 +217,35 @@ export class ConsolePanel {
     };
   }
 
+  /**
+   * The way out of a "file not found" line, on the line.
+   *
+   * The Files panel is where the fix lives, but a panel that is hidden or just
+   * not noticed is not somewhere anyone looks for it; the error is where they
+   * are already looking.
+   */
+  private missingFileHelp(path: string): HTMLElement {
+    const node = button({
+      label: 'Add file…',
+      iconName: 'plus',
+      variant: 'primary',
+      title: `Choose a file to use as ${path}`,
+      onClick: () => this.onAddMissingFile(path),
+    });
+    // The row itself may jump to the line; this should not.
+    node.addEventListener('click', (event) => event.stopPropagation());
+    node.addEventListener('keydown', (event) => event.stopPropagation());
+    return el('span', { class: 'log__help' }, [
+      el('span', {
+        class: 'log__hint',
+        text:
+          'Files live in the project’s Files panel, and every tab can use them by name. ' +
+          `Pick the file and it is added as “${path}”.`,
+      }),
+      node,
+    ]);
+  }
+
   private render(): void {
     clear(this.list);
 
@@ -281,6 +315,7 @@ export class ConsolePanel {
                   text: `  ${entry.file && entry.file !== 'main.scad' ? `${entry.file}:` : 'line '}${entry.line}`,
                 })
               : null,
+            entry.missingFile ? this.missingFileHelp(entry.missingFile) : null,
           ]),
         ],
       );

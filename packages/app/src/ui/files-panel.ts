@@ -45,6 +45,8 @@ export class FilesPanel {
   private files: readonly ProjectFile[] = [];
   /** Paths the last render resolved; see the class comment. */
   private used = new Set<string>();
+  /** The file just added from the console, until its highlight fades. */
+  private revealed: string | undefined;
 
   constructor(private readonly callbacks: FilesPanelCallbacks) {
     this.body = el('div', { class: 'panel__body files' });
@@ -80,6 +82,19 @@ export class FilesPanel {
     this.files = files;
     this.used = used;
     this.render();
+  }
+
+  /** Scrolls to a file and marks it as just added, so its arrival is seen. */
+  reveal(path: string): void {
+    this.revealed = path;
+    this.render();
+    const row = this.body.querySelector('.files__row--new');
+    row?.scrollIntoView({ block: 'nearest' });
+    window.setTimeout(() => {
+      if (this.revealed !== path) return;
+      this.revealed = undefined;
+      row?.classList.remove('files__row--new');
+    }, 3000);
   }
 
   private render(): void {
@@ -146,7 +161,11 @@ export class FilesPanel {
         : 'Nothing in the model on screen refers to this file.',
     );
 
-    return el('div', { class: nested ? 'files__row files__row--nested' : 'files__row' }, [
+    const classes = ['files__row'];
+    if (nested) classes.push('files__row--nested');
+    if (file.path === this.revealed) classes.push('files__row--new');
+
+    return el('div', { class: classes.join(' ') }, [
       dot,
       icon(KIND_ICONS[file.kind], 13),
       label,

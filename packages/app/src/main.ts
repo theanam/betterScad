@@ -354,6 +354,7 @@ class App {
         this.editor.goTo(line, column);
       },
       () => void this.previewDowngrade(),
+      (path) => void this.addMissingFile(path),
     );
 
     this.editorEmpty = editorEmptyState(this.startChoices());
@@ -1512,6 +1513,33 @@ class App {
         : `Added ${files.length} files. Every tab can use them by name.`,
       'success',
     );
+    void this.render(true);
+  }
+
+  /**
+   * Answers a "file not found" line in the console.
+   *
+   * The file is stored under the name the script asked for — `import("logo.svg")`
+   * wants exactly that path, whatever the file on disk is called — and then the
+   * Files panel is brought up with it highlighted, because the point of doing
+   * this from the console is that people learn the panel is there.
+   */
+  private async addMissingFile(path: string): Promise<void> {
+    const picked = await openBinaryFiles();
+    if (picked.length === 0) return;
+
+    const wanted = path.split('/').pop() ?? path;
+    // One file is the answer, whatever it is called. Several: the one with the
+    // right name is, and the rest are added as themselves.
+    const answer = picked.length === 1 ? picked[0] : picked.find((f) => f.name === wanted);
+    for (const file of picked) {
+      await this.addProjectFile(file === answer ? path : file.name, file.data);
+    }
+
+    const { visible, maximized } = this.panels.state;
+    if (!visible.files || (maximized !== null && maximized !== 'files')) this.setPanelVisible('files', true);
+    this.filesPanel.reveal(path);
+    this.toasts.show(`Added ${path}. It is in the Files panel; every tab can use it by name.`, 'success');
     void this.render(true);
   }
 
