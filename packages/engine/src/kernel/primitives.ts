@@ -25,14 +25,26 @@ export function circlePoints(r: number, count: number): Polygon2 {
   return points;
 }
 
+// `Manifold.cube([0, 0, 0])` reports isEmpty() but unions as if it were the whole
+// scene: `union([cylinder, thatCube])` has zero volume. The empty union is a
+// genuinely empty solid.
+export function emptySolid(api: ManifoldAPI): Manifold {
+  return api.Manifold.union([]);
+}
+
+// manifold's CrossSection constructor throws on `[]`; one empty contour is the empty region.
+function emptySection(api: ManifoldAPI): CrossSection {
+  return new api.CrossSection([[]]);
+}
+
 export function makeCircle(api: ManifoldAPI, r: number, res: Resolution): CrossSection {
-  if (r <= 0) return new api.CrossSection([]);
+  if (r <= 0) return emptySection(api);
   return new api.CrossSection([circlePoints(r, fragments(r, res)) as Vec2[]], 'Positive');
 }
 
 export function makeSquare(api: ManifoldAPI, size: number[], center: boolean): CrossSection {
   const [w, h] = [size[0], size[1]];
-  if (w <= 0 || h <= 0) return new api.CrossSection([]);
+  if (w <= 0 || h <= 0) return emptySection(api);
   const [x0, y0] = center ? [-w / 2, -h / 2] : [0, 0];
   return new api.CrossSection(
     [[[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]] as Vec2[]],
@@ -52,7 +64,7 @@ export function makePolygon(
   points: [number, number][],
   paths: number[][] | undefined,
 ): CrossSection {
-  if (points.length < 3) return new api.CrossSection([]);
+  if (points.length < 3) return emptySection(api);
   if (!paths || paths.length === 0) {
     return new api.CrossSection([points as Vec2[]], 'EvenOdd');
   }
@@ -61,12 +73,12 @@ export function makePolygon(
     const contour = path.map((i) => points[i]).filter((p): p is [number, number] => Array.isArray(p));
     if (contour.length >= 3) contours.push(contour as Vec2[]);
   }
-  if (contours.length === 0) return new api.CrossSection([]);
+  if (contours.length === 0) return emptySection(api);
   return new api.CrossSection(contours, 'EvenOdd');
 }
 
 export function makeCube(api: ManifoldAPI, size: number[], center: boolean): Manifold {
-  if (size.some((s) => s <= 0)) return api.Manifold.cube([0, 0, 0] as Vec3);
+  if (size.some((s) => s <= 0)) return emptySolid(api);
   return api.Manifold.cube(size as Vec3, center);
 }
 
@@ -76,7 +88,7 @@ export function makeCube(api: ManifoldAPI, size: number[], center: boolean): Man
  * capped by a flat polygon rather than converging to a point.
  */
 export function makeSphere(api: ManifoldAPI, r: number, res: Resolution): Manifold {
-  if (r <= 0) return api.Manifold.cube([0, 0, 0] as Vec3);
+  if (r <= 0) return emptySolid(api);
   const segments = fragments(r, res);
   const rings = Math.max(1, Math.floor((segments + 1) / 2));
 
@@ -133,7 +145,7 @@ export function makeCylinder(
   center: boolean,
   res: Resolution,
 ): Manifold {
-  if (h <= 0 || (r1 <= 0 && r2 <= 0)) return api.Manifold.cube([0, 0, 0] as Vec3);
+  if (h <= 0 || (r1 <= 0 && r2 <= 0)) return emptySolid(api);
   const segments = fragments(Math.max(r1, r2), res);
   const zBottom = center ? -h / 2 : 0;
   const zTop = zBottom + h;

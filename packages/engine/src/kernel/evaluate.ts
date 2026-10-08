@@ -30,6 +30,7 @@ import {
 import { Value } from '../values.js';
 import { Arena, Assembly, Piece, RGBA, assembly, emptyAssembly } from './geometry.js';
 import {
+  emptySolid,
   makeCircle,
   makeCube,
   makeCylinder,
@@ -1365,6 +1366,8 @@ function buildRotateExtrude(node: SceneNode, ctx: Ctx): Assembly {
     }
     const result = guardGeom(ctx, node.span, 'rotate_extrude', () => {
       const section = piece.solid as CrossSection;
+      // An empty profile (a zero-size circle, say) has no bounds worth reading.
+      if (section.isEmpty()) return ctx.arena.track(emptySolid(ctx.api));
       const rect = section.bounds();
       if (rect.min[0] < -1e-9) {
         ctx.diagnostics.warn(
@@ -1763,7 +1766,11 @@ function mergePieces(pieces: readonly Piece[], ctx: Ctx): Piece[] {
       continue;
     }
     const merged = guardGeom(ctx, undefined, 'union', () =>
-      ctx.arena.track(ctx.api.Manifold.union(group.map((p) => p.solid as Manifold))),
+      // Manifold's extrude (and revolve) of an empty section returns an "empty"
+      // that unions as if it were everything, so empties never reach the union.
+      ctx.arena.track(
+        ctx.api.Manifold.union(group.map((p) => p.solid as Manifold).filter((solid) => !solid.isEmpty())),
+      ),
     );
     if (merged) out.push({ dim: 3, solid: merged, color: group[0].color, display: group[0].display });
     else out.push(...group);
