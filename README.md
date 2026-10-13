@@ -87,6 +87,25 @@ npm run dev          # http://localhost:5174
 npm run build        # static site in packages/app/dist — serve it anywhere
 ```
 
+Or using a container:
+
+```sh
+docker build --tag betterscad:latest .
+docker run --rm --publish 8020:80 betterscad:latest   # http://localhost:8020
+```
+
+The `Dockerfile` builds the static site with Node and serves it with NGINX, so
+nothing but Docker is needed on your machine.
+
+The default image carries no canonical URL or sitemap, so it is safe to serve
+from anywhere without claiming to be [betterscad.org](https://betterscad.org).
+If you are deploying it under your own domain, pass that address so the SEO tags
+point at it:
+
+```sh
+docker build --build-arg BETTERSCAD_SITE_URL=https://cad.example.com --tag betterscad:latest .
+```
+
 ## Language extensions
 
 Everything OpenSCAD has, plus the following. Save as OpenSCAD `.scad` and these

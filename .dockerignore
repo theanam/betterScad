@@ -1,0 +1,21 @@
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+.git
+.github
+.vscode
+.DS_Store
+.vite
+**/dev-dist
+coverage
+inspection
+.font-cache
+Dockerfile
+.dockerignore
+
+# Keep the published CNAME out of container builds so the default image serves
+# no betterscad.org canonical/sitemap. Set BETTERSCAD_SITE_URL to point the
+# absolute SEO tags at your own host instead.
+packages/app/public/CNAME
