@@ -79,7 +79,8 @@ export interface SketchDocument {
 
 /** Coordinates are kept to a thousandth of a millimetre. */
 export function round(value: number): number {
-  return Math.round(value * 1000) / 1000;
+  // `|| 0` turns the -0 a negative rounding can leave into a plain 0.
+  return Math.round(value * 1000) / 1000 || 0;
 }
 
 export const MAX_NODES = 2000;

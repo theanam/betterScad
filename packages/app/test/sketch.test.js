@@ -13,6 +13,7 @@ import { Engine } from '@betterscad/engine';
 
 import { digestSketch, normalizeSketch, scaleNode, translateNode } from '../src/sketch/doc.js';
 import { boundsOfSketch, flattenSketch } from '../src/sketch/flatten.js';
+import { gripsOf, isSmooth, moveGrip } from '../src/sketch/nodes.js';
 import { exactBounds, fromContours, fromSvg, toSvg } from '../src/sketch/svg.js';
 
 let engine;
@@ -158,4 +159,33 @@ test('erased regions: normalised, kept out of material, and resolved through the
   assert.ok(Math.abs((await areaOf(text)) - 300) < 1e-6, 'the import sees the plate with its middle gone');
   // The editable document survives, cut and all.
   assert.deepEqual(fromSvg(text), doc);
+});
+
+test('a curve offers its handles as grips, and a smooth point keeps its handles in line', () => {
+  const path = normalizeSketch({
+    nodes: [{ kind: 'path', anchors: [{ x: 0, y: 0, in: [-5, 0], out: [5, 0] }, { x: 20, y: 0, in: [-3, 4], out: [2, 2] }], closed: true }],
+  }).nodes[0];
+  const grips = gripsOf(path);
+  assert.deepEqual(grips.filter((g) => g.handle).map((g) => g.id), ['i0', 'o0', 'i1', 'o1']);
+  assert.ok(grips.findIndex((g) => g.id === 'o0') < grips.findIndex((g) => g.id === 'a0'), 'handles win a click over their anchor');
+  assert.equal(isSmooth(path.anchors[0]), true);
+  assert.equal(isSmooth(path.anchors[1]), false);
+
+  // Pull the out handle of the smooth point upward: the in handle turns to stay opposite, keeping its length.
+  const smooth = moveGrip(path, 'o0', [0, 5]);
+  assert.deepEqual(smooth.anchors[0].out, [0, 5]);
+  assert.deepEqual(smooth.anchors[0].in, [0, -5]);
+  // Breaking it leaves the other handle where it was.
+  const corner = moveGrip(path, 'o0', [0, 5], true);
+  assert.deepEqual(corner.anchors[0].in, [-5, 0]);
+  // A corner's handles are independent either way.
+  const independent = moveGrip(path, 'i1', [18, 6]);
+  assert.deepEqual(independent.anchors[1].in, [-2, 6]);
+  assert.deepEqual(independent.anchors[1].out, [2, 2]);
+});
+
+test('every anchor of a long traced path is a grip', () => {
+  const anchors = Array.from({ length: 60 }, (_, i) => ({ x: Math.cos(i / 10) * 50, y: Math.sin(i / 10) * 50, in: [-1, 0], out: [1, 0] }));
+  const path = normalizeSketch({ nodes: [{ kind: 'path', anchors, closed: true }] }).nodes[0];
+  assert.equal(gripsOf(path).filter((g) => !g.handle).length, 60);
 });

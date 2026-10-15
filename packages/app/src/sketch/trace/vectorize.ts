@@ -274,9 +274,14 @@ function fitLoop(loop: Point[], tolerance: number, cornerAngle: number, toBoard:
   // A segment is a true straight edge when the raw boundary between its ends
   // hugs the chord far more tightly than the simplification allowed: a pixel
   // staircase of a straight line is within half a pixel, an arc's chord is not.
+  // A pixel staircase a few pixels long is "straight" by that test too, but
+  // treating it as an edge puts a corner at each end and litters a curve with
+  // anchors; a straight edge has to be long enough to be one.
   const straight = kept.map((from, k) => {
     const to = kept[(k + 1) % kept.length];
     const raw = slice(loop, from, to);
+    const chord = Math.hypot(raw[raw.length - 1][0] - raw[0][0], raw[raw.length - 1][1] - raw[0][1]);
+    if (chord < tolerance * 10) return false;
     return raw.every((p) => pointToSegment(p, raw[0], raw[raw.length - 1]) <= Math.max(0.5, tolerance / 3));
   });
 

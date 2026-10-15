@@ -36,7 +36,8 @@ test('a disc traces to a curved path, not a polygon of pixels', () => {
   const nodes = vectorizeMask(m, identity);
   assert.equal(nodes.length, 1);
   assert.equal(nodes[0].kind, 'path');
-  assert.ok(nodes[0].anchors.length <= 10, `few anchors, not ${nodes[0].anchors.length}`);
+  assert.ok(nodes[0].anchors.length <= 8, `few anchors, not ${nodes[0].anchors.length}`);
+  assert.ok(nodes[0].anchors.every((a) => a.in && a.out), 'every anchor of a circle is smooth');
   assert.ok(nodes[0].anchors.some((a) => a.out), 'it is made of curves');
   // The area of what it encloses is close to the disc's.
   const ring = flattenSketch(normalizeSketch({ nodes })).rings[0];

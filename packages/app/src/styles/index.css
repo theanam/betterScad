@@ -3066,6 +3066,13 @@ kbd {
   stroke-width: 1.5;
 }
 
+.sketch__handlegrip {
+  fill: var(--bs-text-muted);
+  stroke: var(--bs-surface-raised);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
 .sketch__calib {
   fill: var(--bs-warning);
   stroke: var(--bs-text);

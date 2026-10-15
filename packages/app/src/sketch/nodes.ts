@@ -13,8 +13,8 @@ import { pointInRing, type Ring } from './flatten.js';
 
 /** Shapes smaller than this, in mm, are a click that did not mean to drag. */
 const MIN_SIZE = 0.05;
-/** Past this many anchors a path moves as a whole rather than offering grips. */
-export const MAX_GRIPS = 24;
+/** A sanity cap on grips, well past anything drawn or traced by hand. */
+export const MAX_GRIPS = 2000;
 
 // ---------------------------------------------------------------------------
 // From gestures
@@ -113,8 +113,15 @@ export function distanceToSegment(p: Point, a: Point, b: Point): number {
 export interface Grip {
   id: string;
   at: Point;
+  /** A curve handle rather than a point of the outline. */
+  handle?: boolean;
 }
 
+/**
+ * The grips of an outline: its points, and for a curve its handles too, so a
+ * traced outline has the same control surface as one drawn with the pen.
+ * Handles come first, since they sit near their anchor and should win a click.
+ */
 export function gripsOf(node: SketchNode): Grip[] {
   // An erased region was computed, not drawn; it is moved or restored, never reshaped.
   if (node.cut) return [];
@@ -137,13 +144,36 @@ export function gripsOf(node: SketchNode): Grip[] {
       ];
     case 'poly':
       return node.points.length > MAX_GRIPS ? [] : node.points.map((p, i) => ({ id: `v${i}`, at: p }));
-    case 'path':
-      return node.anchors.length > MAX_GRIPS ? [] : node.anchors.map((a, i) => ({ id: `a${i}`, at: [a.x, a.y] }));
+    case 'path': {
+      if (node.anchors.length > MAX_GRIPS) return [];
+      const handles: Grip[] = [];
+      node.anchors.forEach((a, i) => {
+        if (a.in) handles.push({ id: `i${i}`, at: [a.x + a.in[0], a.y + a.in[1]], handle: true });
+        if (a.out) handles.push({ id: `o${i}`, at: [a.x + a.out[0], a.y + a.out[1]], handle: true });
+      });
+      return [...handles, ...node.anchors.map((a, i) => ({ id: `a${i}`, at: [a.x, a.y] as Point }))];
+    }
   }
 }
 
-/** The node with one grip moved to `to`. */
-export function moveGrip(node: SketchNode, id: string, to: Point): SketchNode {
+/** Whether an anchor's two handles lie on one line through it: a smooth point. */
+export function isSmooth(a: Anchor): boolean {
+  if (!a.in || !a.out) return false;
+  const li = Math.hypot(a.in[0], a.in[1]);
+  const lo = Math.hypot(a.out[0], a.out[1]);
+  if (li < 1e-9 || lo < 1e-9) return false;
+  // Opposite directions: the dot of the unit vectors is -1.
+  return (a.in[0] * a.out[0] + a.in[1] * a.out[1]) / (li * lo) < -0.999;
+}
+
+/**
+ * The node with one grip moved to `to`.
+ *
+ * A handle on a smooth anchor takes the opposite handle round with it, so
+ * the curve stays smooth through the point; `breakHandle` lets it go, which
+ * is how a smooth point is turned into a corner.
+ */
+export function moveGrip(node: SketchNode, id: string, to: Point, breakHandle = false): SketchNode {
   const [x, y] = [round(to[0]), round(to[1])];
   switch (node.kind) {
     case 'rect': {
@@ -166,7 +196,24 @@ export function moveGrip(node: SketchNode, id: string, to: Point): SketchNode {
     }
     case 'path': {
       const index = Number(id.slice(1));
-      return { ...node, anchors: node.anchors.map((a, i) => (i === index ? { ...a, x, y } : a)) };
+      const kind = id[0];
+      if (kind === 'a') return { ...node, anchors: node.anchors.map((a, i) => (i === index ? { ...a, x, y } : a)) };
+      return {
+        ...node,
+        anchors: node.anchors.map((a, i) => {
+          if (i !== index) return a;
+          const moved: Point = [round(x - a.x), round(y - a.y)];
+          const next: Anchor = { ...a, [kind === 'i' ? 'in' : 'out']: moved };
+          const other = kind === 'i' ? 'out' : 'in';
+          if (!breakHandle && isSmooth(a) && a[other]) {
+            // The opposite handle keeps its length and turns to stay in line.
+            const len = Math.hypot(a[other]![0], a[other]![1]);
+            const m = Math.hypot(moved[0], moved[1]);
+            if (m > 1e-9) next[other] = [round((-moved[0] / m) * len), round((-moved[1] / m) * len)];
+          }
+          return next;
+        }),
+      };
     }
   }
 }

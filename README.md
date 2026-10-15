@@ -183,8 +183,9 @@ the marks on a scan or a logo, and *Trace the subject* finds the main object
 in a photograph — a small on-device model (U²-Net, Apache-2.0, 2.4 MB,
 downloaded once on first use), with nothing sent anywhere. *Invert* traces
 the other side: light marks on a dark ground, or the stencil around the
-subject. Either way the result is lines and pen curves you can edit, not a
-cloud of points.
+subject. Either way the result is lines and pen curves with the same anchors
+and handles a pen drawing has — drag a handle to reshape a curve, Alt to break
+a smooth point into a corner — not a cloud of points.
 
 | Key | Does |
 | --- | --- |

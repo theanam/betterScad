@@ -787,7 +787,10 @@ class SketchBoard {
         break;
       case 'grip': {
         drag.moved = true;
-        this.setDoc({ version: 1, nodes: this.doc.nodes.map((n, i) => (i === drag.node ? moveGrip(n, drag.grip, this.cursor!) : n)) });
+        // Handles are not snapped: a curve's shape is not a grid thing. Alt
+        // breaks a smooth point into a corner while held.
+        const to = drag.grip[0] === 'i' || drag.grip[0] === 'o' ? raw : this.cursor!;
+        this.setDoc({ version: 1, nodes: this.doc.nodes.map((n, i) => (i === drag.node ? moveGrip(n, drag.grip, to, e.altKey) : n)) });
         break;
       }
       case 'photo': {
@@ -1101,7 +1104,9 @@ class SketchBoard {
       }
       const nodes = vectorizeMask(mask, {
         toBoard: (px, py) => pixelToBoard(b, (px / mask.width) * b.image.naturalWidth, (py / mask.height) * b.image.naturalHeight),
-        simplify: 1.2,
+        // The model's mask has a soft, slightly ragged edge; a looser fit
+        // gives fewer anchors and a smoother curve. Ink is crisp and can be tight.
+        simplify: mode === 'subject' ? 2 : 1.2,
         minArea: 12,
       });
       if (nodes.length === 0) {
@@ -1339,9 +1344,8 @@ class SketchBoard {
     const node = this.doc.nodes[one];
     if (!node) return;
     const g = this.group('sketch__grips');
-    for (const grip of gripsOf(node)) g.appendChild(this.dot(S(grip.at), 'sketch__grip'));
     if (node.kind === 'path') {
-      // Handles are drawn so a curve's shape can be read, though only anchors move.
+      // The handle lines first, under their grips.
       for (const a of node.anchors) {
         for (const h of [a.in, a.out]) {
           if (!h) continue;
@@ -1349,6 +1353,7 @@ class SketchBoard {
         }
       }
     }
+    for (const grip of gripsOf(node)) g.appendChild(this.dot(S(grip.at), grip.handle ? 'sketch__handlegrip' : 'sketch__grip'));
   }
 
   private renderLabels(S: (p: Point) => Point): void {
@@ -1451,7 +1456,7 @@ class SketchBoard {
     const node = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     node.setAttribute('cx', x.toFixed(1));
     node.setAttribute('cy', y.toFixed(1));
-    node.setAttribute('r', cls === 'sketch__grip' ? '5' : '4');
+    node.setAttribute('r', cls === 'sketch__grip' ? '5' : cls === 'sketch__handlegrip' ? '3.5' : '4');
     node.setAttribute('class', cls);
     return node;
   }
