@@ -174,14 +174,32 @@ export function scaling(x: number, y: number, z: number): Mat4 {
   return [x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1];
 }
 
+/**
+ * Cosine and sine of an angle in degrees, exact at the right angles.
+ *
+ * `Math.cos(-Math.PI / 2)` is 6e-17, not 0. Rotate a cylinder by -90° with
+ * that and its flat end lands a hair off the plane it was meant to sit on;
+ * subtract it from a wall it was flush with and the kernel, being exact,
+ * leaves a skin 1e-16 thick across the mouth of the hole — which draws as a
+ * solid face and exports as one. OpenSCAD snaps these for the same reason.
+ */
+export function cosSinDegrees(degrees: number): [number, number] {
+  const quarter = degrees / 90;
+  if (Number.isInteger(quarter)) {
+    const q = ((quarter % 4) + 4) % 4;
+    return q === 0 ? [1, 0] : q === 1 ? [0, 1] : q === 2 ? [-1, 0] : [0, -1];
+  }
+  const rad = (degrees * Math.PI) / 180;
+  const snap = (v: number): number => (Math.abs(v) < 1e-12 ? 0 : Math.abs(v - 1) < 1e-12 ? 1 : Math.abs(v + 1) < 1e-12 ? -1 : v);
+  return [snap(Math.cos(rad)), snap(Math.sin(rad))];
+}
+
 /** Rotation about an arbitrary axis, angle in degrees (Rodrigues' formula). */
 export function rotationAxis(axis: [number, number, number], degrees: number): Mat4 {
   const len = Math.hypot(axis[0], axis[1], axis[2]);
   if (len === 0) return [...IDENTITY] as Mat4;
   const [x, y, z] = [axis[0] / len, axis[1] / len, axis[2] / len];
-  const rad = (degrees * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
+  const [c, s] = cosSinDegrees(degrees);
   const t = 1 - c;
   return [
     t * x * x + c, t * x * y + s * z, t * x * z - s * y, 0,
