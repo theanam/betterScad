@@ -34,6 +34,10 @@ export interface FilesPanelCallbacks {
   onInsert(file: ProjectFile): void;
   /** Opens a library in a tab, so it can be edited rather than only referenced. */
   onOpen(file: ProjectFile): void;
+  /** Opens the drawing board on a new drawing, which lands here as an SVG. */
+  onDraw(): void;
+  /** Opens an SVG on the drawing board. */
+  onEditDrawing(file: ProjectFile): void;
   onRename(file: ProjectFile): void;
   onRemove(file: ProjectFile): void;
   onClose(): void;
@@ -55,6 +59,12 @@ export class FilesPanel {
       el('div', { class: 'panel__header' }, [
         el('span', { text: 'Files' }),
         el('span', { class: 'toolbar__spacer' }),
+        button({
+          label: 'Draw',
+          iconName: 'draw',
+          title: 'Draw an outline to extrude; it is added here as an SVG',
+          onClick: () => this.callbacks.onDraw(),
+        }),
         button({
           label: 'Add files',
           iconName: 'plus',
@@ -108,9 +118,13 @@ export class FilesPanel {
             class: 'param__hint',
             text:
               'Add an image, an SVG, a mesh, a font or a library and every tab can use it by name, ' +
-              'as though it sat in the same folder as your model. Drop files here, or use Add files.',
+              'as though it sat in the same folder as your model. Drop files here, or use Add files. ' +
+              'Or draw an outline here and extrude it.',
           }),
-          button({ label: 'Add files…', onClick: () => this.callbacks.onAdd() }),
+          el('div', { class: 'files__emptyactions' }, [
+            button({ label: 'Draw…', iconName: 'draw', onClick: () => this.callbacks.onDraw() }),
+            button({ label: 'Add files…', onClick: () => this.callbacks.onAdd() }),
+          ]),
         ]),
       );
       return;
@@ -182,6 +196,13 @@ export class FilesPanel {
         onSelect: () => this.callbacks.onInsert(file),
       },
     ];
+    if (/\.svg$/i.test(file.path)) {
+      items.push({
+        label: 'Edit drawing',
+        description: 'Opens it on the drawing board; Done writes it back here',
+        onSelect: () => this.callbacks.onEditDrawing(file),
+      });
+    }
     if (file.kind === 'library') {
       items.push({
         label: 'Open in a tab',

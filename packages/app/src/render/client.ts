@@ -8,6 +8,7 @@
 
 import type { Value } from '@betterscad/engine';
 import type {
+  ClipResponse,
   ExportResponse,
   TranspileResponse,
   FontResponse,
@@ -177,6 +178,11 @@ export class RenderClient {
     context: { files: Record<string, string>; parameters: Record<string, Value>; time: number },
   ): Promise<TranspileResponse> {
     return this.send<TranspileResponse>({ type: 'transpile', id: this.nextId++, source, file, ...context });
+  }
+
+  /** A 2D boolean on polygons, done by the kernel. */
+  clip(op: 'region' | 'material', inside: [number, number][][][], outside: [number, number][][][]): Promise<[number, number][][]> {
+    return this.send<ClipResponse>({ type: 'clip', id: this.nextId++, op, inside, outside }).then((r) => r.polygons);
   }
 
   exportModel(

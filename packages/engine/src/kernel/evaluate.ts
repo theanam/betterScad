@@ -15,7 +15,7 @@ import { TriMesh, weldVertices } from '../geom/mesh.js';
 import { gridFromGrayscale, parseSurfaceDat, surfaceToMesh } from '../geom/surface.js';
 import { importDXF } from '../io/import/dxf.js';
 import { importMesh } from '../io/import/mesh.js';
-import { importSVG } from '../io/import/svg.js';
+import { importSVG, type SvgImportResult } from '../io/import/svg.js';
 import { Contribution, Display, resolveContribution, resolveDisplay } from '../roles.js';
 import {
   Bounds,
@@ -1655,12 +1655,20 @@ function buildImport(node: SceneNode, ctx: Ctx): Assembly {
       ctx.diagnostics.warn(`${file}: no closed 2D contours found.`, node.span, 'kernel.import-empty');
       return emptyAssembly();
     }
-    const transformed = contours.contours.map((contour) =>
-      contour.map(([x, y]) => [(x - origin[0]) * scale, (y - origin[1]) * scale] as [number, number]),
-    );
-    return guard(ctx, node.span, 'import', () =>
-      flatPiece(ctx, new ctx.api.CrossSection(transformed as Vec2[][], 'EvenOdd')),
-    );
+    const place = (contour: [number, number][]): Vec2[] =>
+      contour.map(([x, y]) => [(x - origin[0]) * scale, (y - origin[1]) * scale] as Vec2);
+    // A DXF is one flat set of closed polylines; an SVG is elements, each a
+    // shape in its own right, unioned together the way OpenSCAD reads them.
+    const groups =
+      ext === 'svg'
+        ? (contours as SvgImportResult).groups
+        : [{ contours: contours.contours, fillRule: 'EvenOdd' as const }];
+    return guard(ctx, node.span, 'import', () => {
+      const sections = groups.map((group) =>
+        ctx.arena.track(new ctx.api.CrossSection(group.contours.map(place), group.fillRule)),
+      );
+      return flatPiece(ctx, sections.length === 1 ? sections[0] : ctx.api.CrossSection.union(sections));
+    });
   }
 
   const imported = importMesh(data, file);

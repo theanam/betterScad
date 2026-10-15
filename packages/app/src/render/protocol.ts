@@ -92,12 +92,22 @@ export interface CancelRequest {
   id: number;
 }
 
+/** A 2D boolean for the drawing board; see `clipPolygons` in the engine. */
+export interface ClipRequest {
+  type: 'clip';
+  id: number;
+  op: 'region' | 'material';
+  inside: [number, number][][][];
+  outside: [number, number][][][];
+}
+
 export type WorkerRequest =
   | RenderRequest
   | ExportRequest
   | SetFilesRequest
   | LoadFontRequest
   | TranspileRequest
+  | ClipRequest
   | CancelRequest;
 
 /** One file a render resolved, and which of the two directories supplied it. */
@@ -193,6 +203,12 @@ export interface TranspileResponse {
   errors: Diagnostic[];
 }
 
+export interface ClipResponse {
+  type: 'clip-result';
+  id: number;
+  polygons: [number, number][][];
+}
+
 export interface ErrorResponse {
   type: 'error';
   id: number;
@@ -210,5 +226,6 @@ export type WorkerResponse =
   | ExportResponse
   | FontResponse
   | TranspileResponse
+  | ClipResponse
   | ErrorResponse
   | ReadyResponse;

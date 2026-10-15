@@ -49,11 +49,12 @@ you.
 | **Preview and render** | `F5` previews, `F6` renders what Export writes. Auto-render keeps up as you type. |
 | **Exports** | STL, 3MF, OFF, AMF for 3D; SVG and DXF for 2D; plain `.scad`; and PNG pictures — the current view or any named view at up to 4K, or a sheet of front, right, top and isometric views at one scale, on a transparent, white or themed background. |
 | **Imports** | STL, OBJ, OFF, DXF, SVG, and heightmaps via `surface()`. |
+| **Draw it** | A drawing board for outlines: lines, pen curves, boxes and circles, with measurements you type into. Trace over a picture scaled to a known distance, or let the picture trace itself. The drawing lands in the project as an SVG that `import()` extrudes. |
 | **Project files** | Add images, drawings, meshes, fonts and libraries once; every tab reaches them by name, as though they sat in the same folder. |
 | **Fonts for `text()`** | Name a font and it loads itself — ~50 Google Fonts, the ones installed on your machine, or a file of your own. Every one previewed in its own typeface. |
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
 | **Orthographic view** | One click flattens the view: no perspective, parallel edges stay parallel and sizes read true at any depth — what front and top views are for. Remembered across reloads. |
-| **Arrange the panels** | Drag any panel — code, viewport, console, Customizer, Files — to either column, resize them, hide the code, or maximize one panel to fill the window. The Layout menu has presets (model focus, code focus, tune parameters, mirrored) and a reset to default. Remembered across reloads. |
+| **Arrange the panels** | Drag any panel — code, viewport, console, Customizer, Files — to either column, resize them, hide the code, or maximize one panel to fill the window. The Settings menu's Layout section has presets (model focus, code focus, tune parameters, mirrored) and a reset to default. Remembered across reloads. |
 | **Measurement** | Click points in the viewport for coordinates and distances. |
 | **Vary colours** | One click paints every item its own colour, so touching parts are easy to tell apart. Everything in one `union()` stays one colour; colours set with `color()` are kept. |
 | **Animation** | `$t` playback in the app, frame export from the CLI. |
@@ -149,6 +150,53 @@ Every one of these, and every element of OpenSCAD itself, is written up with a
 rendered example in [`docs/reference.md`](docs/reference.md) — the same content
 the app shows under **Help** (`F1`). The implementation details are in
 [`docs/language.md`](docs/language.md).
+
+## Draw an outline and extrude it
+
+Not every shape starts as code. **Draw** in the Files panel (or *New
+drawing…* in the command palette) opens a drawing board: lines, a pen for
+curves, boxes and circles, on a millimetre grid. Every segment carries its
+length, every box its width, height and corner radius, every circle its
+diameter — click a number and type a new one. An outline inside another is a
+hole; overlapping outlines merge. Points snap to the grid and to the corners,
+centres and edges of what is already drawn, with a guide line showing what
+they lined up with; hold Alt to draw free.
+
+Select several outlines (Shift+click, or drag a box around them) and **group**
+them: a group moves and deletes as one, and inside-means-hole is judged within
+it. The **eraser** takes a region out: click where two grouped circles overlap
+and that lens is gone from the extrusion, while both circles stay circles you
+can still move and resize. Click an erased region to put it back.
+
+<img src="docs/images/drawing-board.png" alt="The drawing board: a box with a round hole and typed measurements, a triangle, and a curved outline drawn with the pen, over a faded reference picture." width="900">
+
+**Done** writes the drawing into the project as an ordinary SVG and puts
+`linear_extrude(5) import("drawing.svg");` at the cursor. The file is plain
+SVG in millimetres — OpenSCAD reads it just the same — and it also carries
+the editable drawing, so *Edit drawing* in the Files panel brings back the
+boxes and curves, not the points they became.
+
+**Trace a picture.** Load a photo or a scan behind the board and fade it.
+To set its size, pick two points in it and type how far apart they really
+are. Then draw over it, or have it traced for you: *Trace dark lines* outlines
+the marks on a scan or a logo, and *Trace the subject* finds the main object
+in a photograph — a small on-device model (U²-Net, Apache-2.0, 2.4 MB,
+downloaded once on first use), with nothing sent anywhere. *Invert* traces
+the other side: light marks on a dark ground, or the stencil around the
+subject. Either way the result is lines and pen curves you can edit, not a
+cloud of points.
+
+| Key | Does |
+| --- | --- |
+| `V` `L` `P` `R` `C` `E` | Pick, Lines, Pen, Box, Circle, Eraser |
+| `Shift`+click · drag on empty board | Add to the selection · select what the box encloses |
+| `⌘G` `⌘⇧G` `⌘A` | Group, ungroup, select all |
+| `Enter` | Finish the line run or close the pen path |
+| `Escape` | Drop the shape in progress, then the tool, then the selection |
+| `Alt` (held) | Draw off the grid |
+| Grid button | Snap to the grid, snap to other outlines, and the grid step from 0.1 to 10 mm; remembered |
+| `Delete` | Remove the selected outline |
+| Wheel · right-drag | Zoom · pan |
 
 ## Type in inches, keep a millimetre file
 

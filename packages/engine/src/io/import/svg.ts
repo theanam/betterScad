@@ -13,11 +13,25 @@
 import type { Contour2, Point2 } from './dxf.js';
 
 export interface SvgImportResult {
+  /** Every contour, flat. */
   contours: Contour2[];
+  /**
+   * The same contours grouped by the element that drew them.
+   *
+   * Holes are subpaths of one element under its fill rule, and separate
+   * elements are unioned, which is how OpenSCAD reads an SVG: two overlapping
+   * `<path>`s make one shape, not a hole where they cross.
+   */
+  groups: SvgGroup[];
   /** Document size in millimetres. */
   width: number;
   height: number;
   issues: { message: string }[];
+}
+
+export interface SvgGroup {
+  contours: Contour2[];
+  fillRule: 'EvenOdd' | 'NonZero';
 }
 
 interface Element {
@@ -112,8 +126,10 @@ export function importSVG(
   }
 
   const contours: Contour2[] = [];
+  const groups: SvgGroup[] = [];
 
   for (const element of elements) {
+    const before = contours.length;
     switch (element.name.toLowerCase()) {
       case 'path': {
         const parsed = parsePathData(element.attrs.d ?? '', steps);
@@ -157,6 +173,9 @@ export function importSVG(
       default:
         break;
     }
+    if (contours.length > before) {
+      groups.push({ contours: contours.slice(before), fillRule: fillRuleOf(element) });
+    }
   }
 
   if (height === 0) {
@@ -178,7 +197,14 @@ export function importSVG(
     }
   }
 
-  return { contours, width: width * mmPerUnit, height: height * mmPerUnit, issues };
+  return { contours, groups, width: width * mmPerUnit, height: height * mmPerUnit, issues };
+}
+
+/** `fill-rule`, from the attribute or the style; SVG's default is nonzero. */
+function fillRuleOf(element: Element): 'EvenOdd' | 'NonZero' {
+  const attr = element.attrs['fill-rule'];
+  const styled = /fill-rule\s*:\s*(evenodd|nonzero)/i.exec(element.attrs.style ?? '')?.[1];
+  return (attr ?? styled ?? '').toLowerCase() === 'evenodd' ? 'EvenOdd' : 'NonZero';
 }
 
 function ellipse(cx: number, cy: number, rx: number, ry: number, steps: number): Contour2 {

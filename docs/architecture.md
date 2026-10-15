@@ -371,3 +371,46 @@ with a line in the console saying so.
 Each family is tried once. `resolve()` falls back silently when a family is
 missing, so a font that cannot be fetched would otherwise be asked for again on
 every render, for ever.
+
+## The drawing board
+
+`packages/app/src/sketch/`
+
+A drawing is a document of primitives — boxes, circles, line runs and pen
+paths with handles — in millimetres, y up. It stays primitives all the way to
+the file, which is what keeps it small enough to live *inside* the SVG it
+becomes and editable when that SVG is opened again.
+
+```
+  doc.ts         the document: kinds, normalise, transforms, digest
+  flatten.ts     outlines -> sampled rings; open/crossing/tiny; holes by nesting
+  svg.ts         document -> SVG (paths + the document in <metadata>), and back
+  view.ts        camera, snap, grid
+  nodes.ts       gestures, hit-testing, grips, typed measurements
+  reference.ts   the picture behind the board, and its two-point scale
+  editor.ts      the dialog
+  trace/         picture -> mask -> outlines
+```
+
+The SVG follows how an SVG is read: each piece of material is one `<path>`
+with its holes as even-odd subpaths, and separate paths union — which is also
+how `import()` now reads every SVG, per element, as OpenSCAD does. A box with
+a circle inside it is therefore a plate with a hole in both programs.
+
+Outlines can carry a **group**, and a group can carry **erased regions**
+(`cut` polygons). What is inside what is judged within a group, and groups
+union with each other. A cut is the cell of the group's arrangement under an
+eraser click — inside every outline that contains the point, outside every
+one that does not — computed by the kernel (`clipPolygons`, through the
+render worker's `clip` request) and stored as a plain polygon, so the circles
+it was cut from stay circles. On export a group with cuts is resolved the same
+way (`resolveCuts`) and written as the polygons the kernel made; everything
+else is written exactly, as curves.
+
+Tracing is two halves. A mask comes from Otsu's threshold on the luminance
+(dark lines on paper) or from U²-Netp, a 2.4 MB salient-object model run by
+ONNX Runtime Web in a worker, lazily, from our own origin. The mask is then
+vectorised here: boundaries followed as loops of pixel corners, simplified,
+cut at corners, and each run fitted with Schneider's cubic fitting — or kept a
+line when the raw boundary says it is one. The output is the same path and
+line nodes the pen would have made, so a traced outline edits like a drawn one.

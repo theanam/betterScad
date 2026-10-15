@@ -58,11 +58,13 @@ export class SettingsButton {
 
   constructor(
     private readonly onChange: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void,
+    /** The Layout entries — presets and panel switches — built on open, after the settings. */
+    private readonly layoutItems: () => MenuItem[],
   ) {
     this.element = button({
       label: 'Settings',
       iconName: 'gear',
-      title: 'Theme, units and editor settings',
+      title: 'Theme, units, editor settings, and the panel layout',
       onClick: () => this.open(),
     });
     this.element.setAttribute('aria-haspopup', 'menu');
@@ -129,6 +131,7 @@ export class SettingsButton {
         ],
         onChange: (value) => this.onChange('indentWidth', Number(value) as AppSettings['indentWidth']),
       },
+      ...this.layoutItems(),
     ]);
   }
 }
@@ -153,8 +156,10 @@ export interface ToolbarActions {
   toggleCustomizer(): void;
   toggleConsole(): void;
   toggleFiles(): void;
-  /** The Layout menu, anchored under its button. */
-  openLayout(anchor: HTMLElement): void;
+  /** Opens the drawing board on a new drawing. */
+  draw(): void;
+  /** The Layout entries for the gear menu: presets, then a switch per panel. */
+  layoutItems(): MenuItem[];
   /** One setting changed in the gear menu. */
   changeSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void;
   openPalette(): void;
@@ -167,7 +172,6 @@ export class Toolbar {
   private readonly customizerButton: HTMLButtonElement;
   private readonly consoleButton: HTMLButtonElement;
   private readonly filesButton: HTMLButtonElement;
-  private readonly layoutButton: HTMLButtonElement;
   private readonly previewButton: HTMLButtonElement;
   private readonly renderButton: HTMLButtonElement;
   private readonly settingsButton: SettingsButton;
@@ -196,15 +200,10 @@ export class Toolbar {
       title: 'Files every tab can use by name — images, drawings, meshes, fonts and libraries',
       onClick: () => this.actions.toggleFiles(),
     });
-    this.layoutButton = button({
-      label: 'Layout',
-      iconName: 'layout',
-      title: 'Arrange the panels — presets, and which ones show',
-      onClick: () => this.actions.openLayout(this.layoutButton),
-    });
-    this.layoutButton.setAttribute('aria-haspopup', 'menu');
-    this.layoutButton.setAttribute('aria-expanded', 'false');
-    this.settingsButton = new SettingsButton((key, value) => actions.changeSetting(key, value));
+    this.settingsButton = new SettingsButton(
+      (key, value) => actions.changeSetting(key, value),
+      () => actions.layoutItems(),
+    );
     this.previewButton = button({
       label: 'Preview',
       iconName: 'play',
@@ -281,11 +280,12 @@ export class Toolbar {
         el('span', { class: 'btn__key', text: formatShortcut('Mod+K') }),
       ]),
       el('div', { class: 'toolbar__group' }, [
+        // Drawing sits before the Files panel it lands in.
+        button({ label: 'Draw', iconName: 'draw', title: 'Draw an outline to extrude — it is added to the project as an SVG', onClick: () => actions.draw() }),
         this.filesButton,
         button({ label: 'Fonts', iconName: 'font', onClick: () => actions.openFonts() }),
         this.customizerButton,
         this.consoleButton,
-        this.layoutButton,
         // Help sits with the panels rather than out by the GitHub link: it is
         // part of the app, not a way out of it, and a newcomer looking for
         // "where do I find out what cylinder() takes" looks along this row.

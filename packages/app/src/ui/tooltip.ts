@@ -22,14 +22,28 @@ let current: HTMLElement | undefined;
 let recentlyShown = false;
 let recentTimer: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * Where something floating has to live to be seen.
+ *
+ * A modal `<dialog>` sits in the browser's top layer, above everything in
+ * the document — including a menu or a hint appended to the body, which then
+ * opens invisibly behind it. Inside the dialog, `position: fixed` still means
+ * the viewport, so the only change is the parent.
+ */
+export function floatingHost(): HTMLElement {
+  const dialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
+  return dialogs.length > 0 ? dialogs[dialogs.length - 1] : document.body;
+}
+
 function ensureElement(): HTMLElement {
   if (!tip) {
     tip = document.createElement('div');
     tip.className = 'hint';
     // Purely decorative: the control it describes is already labelled.
     tip.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(tip);
   }
+  const host = floatingHost();
+  if (tip.parentElement !== host) host.appendChild(tip);
   return tip;
 }
 

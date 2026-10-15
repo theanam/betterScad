@@ -17,7 +17,12 @@ import {
   type Diagnostic,
   type ExtensionUse,
   type Value,
+  importSVG,
 } from '@betterscad/engine';
+import type { SketchDocument } from './sketch/doc.js';
+import { fromContours, fromSvg, resolveCuts, toSvg } from './sketch/svg.js';
+import { showSketchEditor } from './sketch/editor.js';
+import { SubjectTracer } from './sketch/trace/tracer.js';
 
 import { ScadEditor } from './editor/editor.js';
 import { setRoundMeasure } from './editor/completions.js';
@@ -88,7 +93,7 @@ import {
 } from './ui/dialogs.js';
 import { showReferenceDialog } from './ui/reference-view.js';
 import { AxisIndicator } from './ui/axis-indicator.js';
-import { announce, button, clear, debounce, el, formatNumber, icon, openMenu } from './ui/dom.js';
+import { announce, button, clear, debounce, el, formatNumber, icon, type MenuItem } from './ui/dom.js';
 import { installTooltips, setHint } from './ui/tooltip.js';
 import { PanelLayout } from './ui/panels.js';
 import { PANEL_IDS, PANEL_NAMES, PRESETS, fromPreset, type PanelId } from './state/panels.js';
@@ -281,7 +286,8 @@ class App {
       toggleCustomizer: () => this.toggleCustomizer(),
       toggleConsole: () => this.toggleConsole(),
       toggleFiles: () => this.toggleFiles(),
-      openLayout: (anchor) => this.openLayoutMenu(anchor),
+      draw: () => void this.newDrawing(),
+      layoutItems: () => this.layoutMenuItems(),
       changeSetting: (key, value) => this.changeSetting(key, value),
       openPalette: () => this.palette.open(),
       openFonts: () => void this.openFontManager(),
@@ -313,6 +319,8 @@ class App {
         this.editor.focus();
       },
       onOpen: (file) => this.openLibraryInTab(file),
+      onDraw: () => void this.newDrawing(),
+      onEditDrawing: (file) => void this.editDrawing(file),
       onRename: (file) => void this.renameProjectFile(file),
       onRemove: (file) => void this.removeProjectFile(file),
       onClose: () => this.setFilesVisible(false),
@@ -1468,6 +1476,86 @@ class App {
     }, this.specimens);
   }
 
+  // -- drawings ----------------------------------------------------------------
+
+  private tracer: SubjectTracer | undefined;
+
+  /**
+   * Opens the drawing board on a new drawing. Done writes it into the project
+   * as an SVG — a file like any other, which `import()` reads and OpenSCAD
+   * reads just the same — and writes the call that extrudes it at the cursor.
+   */
+  private async newDrawing(): Promise<void> {
+    const doc = await this.openDrawingBoard('New drawing');
+    if (!doc || doc.nodes.length === 0) return;
+    const name = await showPrompt('Name the drawing', 'File name', this.freeDrawingName(), {
+      confirmLabel: 'Add to project',
+      hint: 'It goes into the Files panel as an SVG. Every tab can import it by this name.',
+    });
+    if (!name) return;
+    const path = /\.svg$/i.test(name) ? name : `${name}.svg`;
+    const svg = toSvg(doc, await resolveCuts(doc, this.clip2d));
+    await this.addProjectFile(path, new TextEncoder().encode(svg.text));
+    this.editor.insertAtCursor(`linear_extrude(5) import("${path}");\n`);
+    this.editor.focus();
+    this.revealProjectFile(path);
+    this.toasts.show(`Added ${path} and the call that extrudes it.`, 'success');
+    void this.render(true);
+  }
+
+  /**
+   * Reopens a drawing from the project. One drawn here comes back exactly as
+   * it was; somebody else's SVG comes in as its outlines, as lines.
+   */
+  private async editDrawing(file: ProjectFile): Promise<void> {
+    const text = new TextDecoder().decode(file.data);
+    let initial = fromSvg(text);
+    if (!initial) {
+      const imported = importSVG(text);
+      initial = fromContours(imported.contours);
+      if (initial.nodes.length === 0) {
+        this.toasts.show(`${file.path} has no closed outlines to edit.`, 'error');
+        return;
+      }
+    }
+    const doc = await this.openDrawingBoard(file.path, initial);
+    if (!doc) return;
+    await this.addProjectFile(file.path, new TextEncoder().encode(toSvg(doc, await resolveCuts(doc, this.clip2d)).text));
+    this.toasts.show(`Saved ${file.path}.`, 'success');
+    void this.render(true);
+  }
+
+  private openDrawingBoard(title: string, initial?: SketchDocument): Promise<SketchDocument | undefined> {
+    this.tracer ??= new SubjectTracer(document.baseURI);
+    return showSketchEditor({
+      title,
+      initial,
+      images: this.projectFiles.list.filter((f) => f.kind === 'surface').map((f) => ({ path: f.path, data: f.data })),
+      pickImage: async () => {
+        const picked = await openBinaryFiles();
+        return picked[0];
+      },
+      trace: this.tracer,
+      clip: this.clip2d,
+    });
+  }
+
+  /** The kernel's 2D booleans, for the drawing board's eraser and its export. */
+  private readonly clip2d = (op: 'region' | 'material', inside: [number, number][][][], outside: [number, number][][][]) =>
+    this.client.clip(op, inside, outside);
+
+  private freeDrawingName(): string {
+    const taken = new Set(this.projectFiles.list.map((f) => f.path));
+    if (!taken.has('drawing.svg')) return 'drawing.svg';
+    for (let i = 2; ; i++) if (!taken.has(`drawing-${i}.svg`)) return `drawing-${i}.svg`;
+  }
+
+  private revealProjectFile(path: string): void {
+    const { visible, maximized } = this.panels.state;
+    if (!visible.files || (maximized !== null && maximized !== 'files')) this.setPanelVisible('files', true);
+    this.filesPanel.reveal(path);
+  }
+
   // -- the project directory ------------------------------------------------
 
   /**
@@ -1837,18 +1925,20 @@ class App {
   }
 
   /**
-   * The Layout menu: the presets, then a switch per panel.
+   * The Layout entries of the gear menu: the presets, then a switch per panel.
    *
    * Presets first because they are what someone opening the menu is most
    * likely after — "put it back" or "give me the model" — and each one says
    * in a line what it arranges, since the names alone cannot.
    */
-  private openLayoutMenu(anchor: HTMLElement): void {
+  private layoutMenuItems(): MenuItem[] {
     const { visible, maximized } = this.panels.state;
-    openMenu(anchor, [
+    return [
+      { kind: 'heading', label: 'Layout', description: 'Arrange the panels: a preset, or which ones show' },
       ...PRESETS.map((preset) => ({
         label: preset.id === 'default' ? 'Reset to default' : preset.label,
         description: preset.description,
+        iconName: `layout-${preset.id}`,
         onSelect: () => this.applyPreset(preset.id),
       })),
       ...PANEL_IDS.map((id) => ({
@@ -1857,7 +1947,7 @@ class App {
         value: visible[id] && (maximized === null || maximized === id),
         onChange: (on: boolean) => this.setPanelVisible(id, on),
       })),
-    ]);
+    ];
   }
 
   private toggleTheme(): void {
@@ -2024,6 +2114,12 @@ class App {
         category: 'File',
         title: 'Save as .zip — the model and every file it uses…',
         run: () => void this.saveAsZip(),
+      },
+      {
+        id: 'file.newDrawing',
+        category: 'File',
+        title: 'New drawing…',
+        run: () => void this.newDrawing(),
       },
       { id: 'file.export', category: 'File', title: 'Export model…', shortcut: 'Mod+E', run: () => void this.exportModel() },
       {

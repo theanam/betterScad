@@ -52,8 +52,13 @@ function serviceWorkerManifest(): Plugin {
       const emitted = Object.keys(bundle).filter(
         // The worker must not precache itself, and source maps are dead weight.
         // Nor the reference screenshots: see `referenceImages` for why.
+        // Nor the ONNX runtime's 14 MB of WebAssembly, which only the drawing
+        // tool's automatic trace needs: the lazy path caches it on first use.
         (name) =>
-          name !== 'sw.js' && !name.endsWith('.map') && !name.startsWith(`${REFERENCE_DIR}/`),
+          name !== 'sw.js' &&
+          !name.endsWith('.map') &&
+          !name.startsWith(`${REFERENCE_DIR}/`) &&
+          !/ort-.*\.wasm$/.test(name),
       );
       this.emitFile({
         type: 'asset',
@@ -387,5 +392,7 @@ export default defineConfig({
   // dev shell and `npm run screenshot` pointing at the wrong server.
   server: { port: 5174, strictPort: true },
   // The engine is consumed as source in dev so edits hot-reload.
-  optimizeDeps: { exclude: ['manifold-3d'] },
+  // Both ship WebAssembly beside their entry; pre-bundling would answer the
+  // sibling request with index.html.
+  optimizeDeps: { exclude: ['manifold-3d', 'onnxruntime-web'] },
 });

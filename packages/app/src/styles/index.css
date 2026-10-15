@@ -366,6 +366,9 @@ textarea {
   flex-direction: column;
   min-width: 200px;
   max-width: 300px;
+  /* The gear menu is long; on a short window it scrolls rather than clips. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   padding: var(--bs-space-1);
   border: 1px solid var(--bs-border);
   border-radius: var(--bs-radius);
@@ -386,10 +389,43 @@ textarea {
   cursor: pointer;
 }
 
+/* An item with a picture: the icon on the left, the text as it would be. */
+.menu__item--icon {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--bs-space-3);
+}
+
+.menu__item--icon svg {
+  flex: none;
+  color: var(--bs-text-muted);
+}
+
+.menu__item--icon .menu__itemtext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .menu__item:hover,
 .menu__item:focus-visible {
   background: var(--bs-surface-sunken);
   outline: none;
+}
+
+.menu__heading {
+  margin-top: var(--bs-space-1);
+  padding: var(--bs-space-2) var(--bs-space-2) var(--bs-space-1);
+  border-top: 1px solid var(--bs-border);
+  color: var(--bs-text-muted);
+}
+
+.menu__heading .menu__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
 }
 
 .menu__label {
@@ -2792,4 +2828,305 @@ kbd {
   .reference__footnote {
     display: none;
   }
+}
+
+/* --- the drawing board ---------------------------------------------------- */
+
+/* The board wants the whole window: a drawing is made at the size you can see
+   it, and a small one would mean zooming for every box. */
+.dialog--board {
+  width: 96vw;
+  max-width: 96vw;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog--board .dialog__body {
+  flex: 1;
+  max-height: none;
+  padding: 0;
+}
+
+.sketch__header {
+  gap: var(--bs-space-2);
+  padding-block: var(--bs-space-2);
+}
+
+.sketch__title {
+  font-weight: 600;
+  margin-right: var(--bs-space-2);
+}
+
+.sketch__tools {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface-sunken);
+}
+
+.sketch__sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--bs-border);
+  margin-inline: var(--bs-space-1);
+}
+
+.sketch__photo {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-1) var(--bs-space-4);
+  border-bottom: 1px solid var(--bs-border);
+  background: var(--bs-surface-sunken);
+  font-size: var(--bs-font-size-sm);
+}
+
+.sketch__photoname {
+  font-weight: 500;
+}
+
+.sketch__photosize {
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+}
+
+.sketch__fade {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  color: var(--bs-text-muted);
+}
+
+.sketch__fade input {
+  width: 110px;
+}
+
+.sketch {
+  position: relative;
+}
+
+.sketch__board {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bs-viewport-bg);
+  touch-action: none;
+  user-select: none;
+}
+
+.sketch__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.sketch__labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sketch__hint {
+  position: absolute;
+  left: var(--bs-space-3);
+  bottom: var(--bs-space-3);
+  max-width: 60%;
+  padding: var(--bs-space-1) var(--bs-space-2);
+  border-radius: var(--bs-radius-sm);
+  background: color-mix(in srgb, var(--bs-surface-raised) 85%, transparent);
+  color: var(--bs-text-muted);
+  font-size: var(--bs-font-size-sm);
+  pointer-events: none;
+}
+
+.sketch__gridline {
+  stroke: var(--bs-border);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.sketch__gridline--coarse {
+  opacity: 0.9;
+}
+
+.sketch__axis {
+  stroke-width: 1.2;
+}
+
+.sketch__axis--x {
+  stroke: #d45a5a;
+}
+
+.sketch__axis--y {
+  stroke: #5aa65a;
+}
+
+.sketch__image--moving {
+  cursor: move;
+}
+
+.sketch__fill {
+  fill: var(--bs-solid-500);
+  fill-opacity: 0.32;
+  stroke: none;
+}
+
+.sketch__ring {
+  fill: none;
+  stroke: var(--bs-solid-500);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.sketch__cut {
+  fill: var(--bs-viewport-bg);
+  stroke: none;
+}
+
+.sketch__ring--cut {
+  stroke: var(--bs-text-faint);
+  stroke-dasharray: 2 3;
+}
+
+.sketch__marquee {
+  fill: var(--bs-accent-ink);
+  fill-opacity: 0.08;
+  stroke: var(--bs-accent-ink);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.sketch__ring--hole {
+  stroke-dasharray: 4 3;
+}
+
+.sketch__ring--open,
+.sketch__ring--crossing,
+.sketch__ring--tiny {
+  stroke: var(--bs-danger);
+  stroke-dasharray: 5 4;
+}
+
+.sketch__ring--selected {
+  stroke: var(--bs-text);
+  stroke-width: 2.5;
+}
+
+.sketch__draftline {
+  fill: none;
+  stroke: var(--bs-accent-ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.sketch__first {
+  fill: var(--bs-surface-raised);
+  stroke: var(--bs-accent-ink);
+  stroke-width: 2;
+}
+
+.sketch__anchor {
+  fill: var(--bs-accent-ink);
+  stroke: none;
+}
+
+.sketch__handle {
+  fill: none;
+  stroke: var(--bs-text-muted);
+  stroke-width: 1;
+}
+
+.sketch__handledot {
+  fill: var(--bs-text-muted);
+}
+
+.sketch__grip {
+  fill: var(--bs-surface-raised);
+  stroke: var(--bs-accent-ink);
+  stroke-width: 2;
+  cursor: grab;
+}
+
+.sketch__guide {
+  fill: none;
+  stroke: #e0559a;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.sketch__guidedot {
+  fill: none;
+  stroke: #e0559a;
+  stroke-width: 1.5;
+}
+
+.sketch__calib {
+  fill: var(--bs-warning);
+  stroke: var(--bs-text);
+  stroke-width: 1.5;
+}
+
+.sketch__calibline {
+  fill: none;
+  stroke: var(--bs-warning);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+/* Measurements are buttons: click one and it becomes a field. They float over
+   the board and are the one thing on it that is not the board. */
+.sketch__dim,
+.sketch__diminput,
+.sketch__readout {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 1px 6px;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-surface-raised);
+  color: var(--bs-text);
+  font-family: var(--bs-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: text;
+}
+
+.sketch__dim--selected {
+  border-color: var(--bs-accent-ink);
+}
+
+.sketch__diminput {
+  width: 72px;
+  outline: 2px solid var(--bs-accent-ink);
+}
+
+.sketch__readout {
+  transform: none;
+  border-color: var(--bs-accent-ink);
+  pointer-events: none;
+}
+
+.sketch__footer {
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--bs-space-2);
+}
+
+.sketch__note {
+  color: var(--bs-text-muted);
+  font-size: var(--bs-font-size-sm);
+}
+
+.files__emptyactions {
+  display: flex;
+  gap: var(--bs-space-2);
+  justify-content: center;
 }

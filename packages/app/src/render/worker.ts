@@ -8,6 +8,7 @@
  */
 
 import {
+  clipPolygons,
   Engine,
   FontRegistry,
   exportResult,
@@ -73,6 +74,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         return;
       case 'transpile':
         await handleTranspile(request);
+        return;
+      case 'clip':
+        post({
+          type: 'clip-result',
+          id: request.id,
+          polygons: clipPolygons((await engine()).api, { op: request.op, inside: request.inside, outside: request.outside }),
+        });
         return;
       case 'set-files':
         projectFiles = request.files;

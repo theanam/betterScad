@@ -6,7 +6,7 @@
  * bundle cost buys nothing here (spec feature 1: a small static site).
  */
 
-import { setHint } from './tooltip.js';
+import { setHint, floatingHost } from './tooltip.js';
 
 type Attributes = Record<string, string | number | boolean | undefined | EventListener>;
 
@@ -101,6 +101,31 @@ const ICONS: Record<string, string> = {
   // A sheet with its corner turned back, drawn as the outline plus the fold.
   file: 'M9.2 1.5H4a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5V4.8zM9.2 1.5v3.3h3.3',
   trash: 'M2.5 4.3h11M6.2 4.3V2.4h3.6v1.9M3.9 4.3l.7 9.3h6.8l.7-9.3M6.6 6.8v4.3M9.4 6.8v4.3',
+  undo: 'M6.5 3.5 3 7l3.5 3.5M3 7h6.5a3.5 3.5 0 0 1 0 7H7',
+  redo: 'M9.5 3.5 13 7l-3.5 3.5M13 7H6.5a3.5 3.5 0 0 0 0 7H9',
+  // A picture: a frame, a horizon of hills, and a sun.
+  image: 'M2 3h12v10H2zM2 11l3.5-3.5 2.5 2.5 2-2L14 12M10.5 6a.5.5 0 1 0 .01 0',
+  // A wand with sparks: tracing happens by itself.
+  trace: 'M3 13l6-6M9.5 2.5v-1M12.5 5.5h1M11 4l1-1M11 7l1 1M8 4 7 3',
+  draw: 'M3 13l1-4 7-7 3 3-7 7zM10 3l3 3',
+  // The panel layouts, as the arrangement each one makes: code is the tall
+  // narrow block, the model the wide one, the console the strip under it.
+  'layout-default': 'M2 2h5v12H2zM9 2h5v7H9zM9 11h5v3H9z',
+  'layout-model': 'M2 2h12v8H2zM2 12h12v2H2z',
+  'layout-code': 'M2 2h7v8H2zM2 12h7v2H2zM11 2h3v12h-3z',
+  'layout-tune': 'M2 2h8v12H2zM12 2h2v12h-2z',
+  'layout-swapped': 'M2 2h5v7H2zM2 11h5v3H2zM9 2h5v12H9z',
+  // The drawing board's tools.
+  pick: 'M3.5 2.5 12.5 8.2 8.3 9.3 6 13.5z',
+  lines: 'M2 13 5.5 4l4 6L14 3M2 13h.01M5.5 4h.01M9.5 10h.01M14 3h.01',
+  pen: 'M2 13C5 3 11 13 14 3M5.5 7.5l2.5 2.5',
+  box: 'M2.5 3.5h11v9h-11z',
+  circle: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11',
+  // An eraser: a tilted block with a wiped line under it.
+  eraser: 'M2.5 10.5 9 4l4 4-5 5H5.5zM3 13.5h10',
+  // Two shapes with a frame around them; the frame is what grouping adds.
+  group: 'M2 2h5v5H2zM9 9h5v5H9zM1.5 1.5h13v13h-13z',
+  ungroup: 'M2 2h5v5H2zM9 9h5v5H9zM12.5 1.5l2 2m0-2-2 2',
   // A stack of three sheets, for the panel that holds the project's files.
   files: 'M5.5 1.5h5.2l2.8 2.8v7.2h-8zM10.4 1.5v3.1h3.1M2.5 4.5v10h7.5',
   // A question mark in a ring. The dot is a zero-length segment, which the
@@ -226,6 +251,8 @@ export interface MenuAction {
   /** A second line explaining what the item does, for the less obvious ones. */
   description?: string;
   shortcut?: string;
+  /** A picture beside the label, for items that are easier to see than to read. */
+  iconName?: string;
   onSelect(): void;
 }
 
@@ -254,7 +281,14 @@ export interface MenuToggle {
   onChange(value: boolean): void;
 }
 
-export type MenuItem = MenuAction | MenuChoice | MenuToggle;
+/** A heading between sections of one menu; not a control. */
+export interface MenuHeading {
+  kind: 'heading';
+  label: string;
+  description?: string;
+}
+
+export type MenuItem = MenuAction | MenuChoice | MenuToggle | MenuHeading;
 
 /**
  * Opens a popup menu anchored under an element.
@@ -311,6 +345,10 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
   ];
 
   for (const item of items) {
+    if (item.kind === 'heading') {
+      node.appendChild(el('div', { class: 'menu__heading', role: 'presentation' }, rowText(item)));
+      continue;
+    }
     if (item.kind === 'choice' || item.kind === 'toggle') {
       const row = el('div', { class: 'menu__setting', role: 'group', 'aria-label': item.label });
       row.append(el('span', { class: 'menu__settingtext' }, rowText(item)));
@@ -362,12 +400,17 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
         item.onSelect();
       },
     }) as HTMLButtonElement;
-    entry.append(...rowText(item, item.shortcut));
+    if (item.iconName) {
+      entry.classList.add('menu__item--icon');
+      entry.append(icon(item.iconName, 18), el('span', { class: 'menu__itemtext' }, rowText(item, item.shortcut)));
+    } else {
+      entry.append(...rowText(item, item.shortcut));
+    }
     buttons.push(entry);
     node.appendChild(entry);
   }
 
-  document.body.appendChild(node);
+  floatingHost().appendChild(node);
 
   const rect = anchor.getBoundingClientRect();
   const height = node.offsetHeight;
