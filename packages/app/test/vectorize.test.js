@@ -84,3 +84,12 @@ test('ink: a two-tone picture splits at its dark tone, and the marks are the mas
   assert.equal(mask.data[20], 0);
   assert.equal(vectorizeMask(mask, identity).length, 1);
 });
+
+test('a loop whose curves would cross comes back as a polygon, never a crossing path', () => {
+  // A disc with a slot one pixel wide: the fit around the notch is where overshoot happens.
+  const m = mask(120, 120, (x, y) => Math.hypot(x - 60, y - 60) < 45 && !(x === 60 && y > 60));
+  const nodes = vectorizeMask(m, identity);
+  assert.equal(nodes.length, 1);
+  const ring = flattenSketch(normalizeSketch({ nodes })).rings[0];
+  assert.notEqual(ring.status, 'crossing');
+});

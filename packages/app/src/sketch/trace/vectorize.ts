@@ -15,6 +15,7 @@
  */
 
 import type { Anchor, PathNode, Point, PolyNode, SketchNode } from '../doc.js';
+import { ringOf } from '../flatten.js';
 
 export interface Mask {
   /** One byte per pixel, row-major; 128 and up is inside. */
@@ -50,7 +51,15 @@ export function vectorizeMask(mask: Mask, options: VectorizeOptions): SketchNode
   const nodes: SketchNode[] = [];
   for (const loop of loops) {
     const node = fitLoop(loop, simplify, cornerAngle, options.toBoard);
-    if (node) nodes.push(node);
+    if (!node) continue;
+    // A curve fit can overshoot at a narrow notch and cross itself, and a
+    // crossing outline encloses nothing. The simplified polygon never does.
+    if (node.kind === 'path' && ringOf(node, 0).status === 'crossing') {
+      const points = simplifyLoop(loop, simplify).map(([x, y]) => options.toBoard(x, y));
+      if (points.length >= 3) nodes.push({ kind: 'poly', points, closed: true });
+      continue;
+    }
+    nodes.push(node);
   }
   return nodes;
 }

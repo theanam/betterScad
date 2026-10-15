@@ -205,6 +205,7 @@ class SketchBoard {
 
   private readonly dialog: HTMLDialogElement;
   private readonly svg: SVGSVGElement;
+  private readonly board: HTMLElement;
   private readonly staticLayer: SVGGElement;
   private readonly dynamicLayer: SVGGElement;
   private readonly labels: HTMLElement;
@@ -265,7 +266,10 @@ class SketchBoard {
     this.groupButton = button({ iconName: 'group', title: 'Group the selected outlines', shortcut: 'Mod+G', onClick: () => this.groupSelection() });
     this.ungroupButton = button({ iconName: 'ungroup', title: 'Ungroup', shortcut: 'Mod+Shift+G', onClick: () => this.ungroupSelection() });
 
-    const board = el('div', { class: 'sketch__board' }, [this.svg as unknown as HTMLElement, this.labels, this.readouts, this.hint]);
+    // Focusable, so keys reach the dialog again after a measurement field
+    // has been typed into and removed: focus has to land somewhere.
+    const board = el('div', { class: 'sketch__board', tabindex: '-1' }, [this.svg as unknown as HTMLElement, this.labels, this.readouts, this.hint]);
+    this.board = board;
     this.doneButton = button({ label: 'Done', variant: 'primary', onClick: () => this.finish() });
 
     this.dialog = el('dialog', { class: 'dialog--wide dialog--board' }, [
@@ -341,6 +345,7 @@ class SketchBoard {
     this.size = { w: Math.max(1, rect.width), h: Math.max(1, rect.height) };
     this.fitView();
     this.setTool('pick');
+    this.board.focus({ preventScroll: true });
   }
 
   // -- state ----------------------------------------------------------------
@@ -1383,8 +1388,10 @@ class SketchBoard {
     input.style.top = label.style.top;
     const done = (apply: boolean): void => {
       input.remove();
-      // The label the field replaced has to come back whatever happens.
+      // The label the field replaced has to come back whatever happens, and
+      // the keys have to keep working: the field was where focus lived.
       this.staticKey = '';
+      this.board.focus({ preventScroll: true });
       if (apply) {
         const next = Number(input.value.replace(',', '.'));
         const node = this.doc.nodes[index];
