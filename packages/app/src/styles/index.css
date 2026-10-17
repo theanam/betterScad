@@ -3149,6 +3149,11 @@ kbd {
   overflow: hidden;
 }
 
+/* The dialog holds focus so the arrow keys work at once; that needs no ring. */
+.tour:focus {
+  outline: none;
+}
+
 .tour__head {
   display: flex;
   align-items: center;
