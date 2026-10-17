@@ -260,7 +260,7 @@ export function showTour(callbacks: TourCallbacks): HTMLDialogElement {
     dotButtons.forEach((dot, i) => dot.setAttribute('aria-selected', String(i === index)));
     counter.textContent = `${index + 1} / ${SLIDES.length}`;
     back.disabled = index === 0;
-    next.replaceChildren(index === SLIDES.length - 1 ? 'Get started' : 'Next', icon('caret', 13));
+    next.replaceChildren(index === SLIDES.length - 1 ? 'Get started' : 'Next', icon('chevron-right', 13));
     next.classList.toggle('tour__next--last', index === SLIDES.length - 1);
     preload(index + 1);
   };
