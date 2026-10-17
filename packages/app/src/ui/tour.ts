@@ -61,7 +61,7 @@ const example = (name: string, caption: string): Picture => ({ src: `./${REFEREN
 const SLIDES: Slide[] = [
   {
     kicker: 'Welcome',
-    title: 'CAD in your browser, and nowhere else',
+    title: 'CAD in your browser',
     body: [
       'BetterSCAD is a modern editor for the <b>OpenSCAD</b> language. Open any <b>.scad</b> file and it renders unchanged.',
       'Everything runs on your machine: <b>no server, no account, nothing uploaded</b>. It works offline, and it installs like an app.',
@@ -71,7 +71,7 @@ const SLIDES: Slide[] = [
   },
   {
     kicker: 'Write',
-    title: 'Code on the left, the model as you type',
+    title: 'The model renders as you type',
     body: [
       'Autocomplete with every call form, the signature kept on screen while you fill it in, and errors shown inline.',
       'The <b>Customizer</b> turns your <code>//</code> comments into sliders and dropdowns. Type <b>5in</b> and get 127: the file stays in millimetres.',
@@ -154,7 +154,7 @@ const SLIDES: Slide[] = [
   },
   {
     kicker: 'Help',
-    title: 'Every element explained, with a picture',
+    title: 'A reference for every element',
     body: [
       'Press <b>F1</b> for the reference: the whole language, OpenSCAD and the additions, written for someone who has never used CAD, each with a rendered example you can insert.',
       'The Console’s <b>Info</b> tab lists which extensions a file uses and previews the plain .scad it becomes.',

@@ -411,5 +411,5 @@ export { manifoldToMesh, meshToManifold } from './kernel/primitives.js';
 export type { Assembly, Piece, RGBA } from './kernel/geometry.js';
 
 /** Engine version, reported by `betterscad --version` and the about panel. */
-export const ENGINE_VERSION = '0.29.1';
+export const ENGINE_VERSION = '0.29.2';
 export { cosSinDegrees } from './scene.js';
