@@ -40,6 +40,7 @@ you.
 | | |
 | --- | --- |
 | **Runs on your machine** | No server, no account. Your models never leave the browser. |
+| **A tour on first visit** | Ten slides of pictures showing what the app and the language additions can do, skippable at any step and shown once; *Take the tour* in the command palette brings it back. |
 | **Full OpenSCAD language** | Existing `.scad` files open and render unchanged. |
 | **Real files** | Opens and saves straight to disk, with a download/upload fallback on Firefox and Safari. |
 | **Live customizer** | Sliders and dropdowns generated from your `//` parameter comments. |

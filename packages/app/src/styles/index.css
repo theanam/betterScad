@@ -3137,3 +3137,195 @@ kbd {
   gap: var(--bs-space-2);
   justify-content: center;
 }
+
+/* --- the first-run tour --------------------------------------------------- */
+
+.tour {
+  width: min(1040px, 94vw);
+  max-width: min(1040px, 94vw);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tour__head {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3) var(--bs-space-4);
+  border-bottom: 1px solid var(--bs-border);
+}
+
+.tour__brand {
+  font-weight: 600;
+}
+
+.tour__counter {
+  color: var(--bs-text-faint);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  margin-right: var(--bs-space-2);
+}
+
+/* The picture takes the top half and more; the words sit under it. */
+.tour__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tour__panel--in .tour__visual {
+  animation: tour-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.tour__panel--in .tour__text {
+  animation: tour-rise 0.45s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes tour-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tour__visual {
+  height: min(52vh, 520px);
+  background: var(--bs-surface-sunken);
+  border-bottom: 1px solid var(--bs-border);
+  overflow: hidden;
+}
+
+.tour__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0%;
+}
+
+.tour__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--bs-space-3);
+  height: 100%;
+  padding: var(--bs-space-3);
+  box-sizing: border-box;
+}
+
+.tour__cell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  border: 1px solid var(--bs-border);
+  border-radius: var(--bs-radius);
+  background: var(--bs-surface);
+  overflow: hidden;
+}
+
+.tour__cell img {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: cover;
+}
+
+.tour__cell figcaption {
+  padding: 4px 8px;
+  border-top: 1px solid var(--bs-border);
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-mono);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tour__text {
+  padding: var(--bs-space-4) var(--bs-space-5) var(--bs-space-3);
+}
+
+.tour__kicker {
+  color: var(--bs-accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--bs-tracking-label);
+  text-transform: uppercase;
+}
+
+.tour__title {
+  margin: 4px 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.tour__body p {
+  margin: 0 0 6px;
+  max-width: 78ch;
+  color: var(--bs-text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.tour__body b {
+  color: var(--bs-text);
+  font-weight: 600;
+}
+
+.tour__body code {
+  font-family: var(--bs-font-mono);
+  color: var(--bs-text);
+}
+
+.tour__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-3);
+  padding: var(--bs-space-3) var(--bs-space-4);
+  border-top: 1px solid var(--bs-border);
+}
+
+.tour__dots {
+  display: flex;
+  gap: 6px;
+}
+
+.tour__dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bs-border-strong);
+  cursor: pointer;
+  transition: transform var(--bs-transition), background var(--bs-transition);
+}
+
+.tour__dot[aria-selected='true'] {
+  background: var(--bs-brand);
+  transform: scale(1.35);
+}
+
+.tour__dot:focus-visible {
+  outline: 2px solid var(--bs-accent-ink);
+  outline-offset: 2px;
+}
+
+.tour__next--last {
+  padding-inline: 18px;
+}
+
+@media (max-height: 760px) {
+  .tour__visual {
+    height: 42vh;
+  }
+}

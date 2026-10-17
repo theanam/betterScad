@@ -100,6 +100,7 @@ import { PANEL_IDS, PANEL_NAMES, PRESETS, fromPreset, type PanelId } from './sta
 import type { StartChoices } from './ui/choices.js';
 import { editorEmptyState, viewportEmptyState } from './ui/empty-state.js';
 import { showWelcome } from './ui/welcome.js';
+import { showTour, tourSeen } from './ui/tour.js';
 import { Viewport, type ImageOptions } from './viewport/viewport.js';
 import type { CameraState } from './viewport/controls.js';
 
@@ -237,8 +238,12 @@ class App {
     this.installGlobalHandlers();
 
     // After the boot screen is gone and the sample has rendered, so the choice
-    // is made against a working app rather than an empty frame.
-    if (firstRun) this.openWelcome();
+    // is made against a working app rather than an empty frame. The tour goes
+    // first, once ever; the welcome's three choices follow it.
+    if (firstRun) {
+      if (tourSeen()) this.openWelcome();
+      else showTour({ onClose: () => this.openWelcome() });
+    }
   }
 
   private finishBoot(): void {
@@ -2257,6 +2262,7 @@ class App {
         shortcut: 'F1',
         run: () => this.openReference(),
       },
+      { id: 'help.tour', category: 'Help', title: 'Take the tour', run: () => showTour({ onClose: () => undefined }) },
       { id: 'help.welcome', category: 'Help', title: 'Welcome to BetterSCAD', run: () => this.openWelcome() },
       { id: 'help.about', category: 'Help', title: 'About BetterSCAD', run: () => showAboutDialog(ENGINE_VERSION) },
       {

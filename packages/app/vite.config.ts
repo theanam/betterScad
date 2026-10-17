@@ -58,6 +58,7 @@ function serviceWorkerManifest(): Plugin {
           name !== 'sw.js' &&
           !name.endsWith('.map') &&
           !name.startsWith(`${REFERENCE_DIR}/`) &&
+          !name.startsWith(`${TOUR_DIR}/`) &&
           !/ort-.*\.wasm$/.test(name),
       );
       this.emitFile({
@@ -118,6 +119,42 @@ function referenceImages(): Plugin {
           fileName: `${REFERENCE_DIR}/${name}`,
           source: readFileSync(join(dir, name)),
         });
+      }
+    },
+  };
+}
+
+/** Where the tour's pictures are served from, matching `TOUR_DIR` in `src/ui/tour.ts`. */
+const TOUR_DIR = 'tour';
+
+/**
+ * Serves and publishes the pictures the first-run tour shows.
+ *
+ * They are the README's screenshots in `docs/images/`, so the tour and the
+ * README show one set of pictures and neither can go stale on its own. Like
+ * the reference screenshots they are not precached: a first visit should not
+ * pay for a megabyte of pictures it is about to see exactly once.
+ */
+function tourImages(): Plugin {
+  const dir = fileURLToPath(new URL('../../docs/images', import.meta.url));
+  const prefix = `/${TOUR_DIR}/`;
+  return {
+    name: 'betterscad:tour-images',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = req.url?.split('?')[0] ?? '';
+        const name = path.startsWith(prefix) ? path.slice(prefix.length) : undefined;
+        if (!name || !/^[\w-]+\.png$/.test(name)) return next();
+        const file = join(dir, name);
+        if (!existsSync(file)) return next();
+        res.setHeader('Content-Type', 'image/png');
+        res.end(readFileSync(file));
+      });
+    },
+    generateBundle() {
+      for (const name of readdirSync(dir)) {
+        if (!name.endsWith('.png')) continue;
+        this.emitFile({ type: 'asset', fileName: `${TOUR_DIR}/${name}`, source: readFileSync(join(dir, name)) });
       }
     },
   };
@@ -354,7 +391,7 @@ export default defineConfig({
   // `sitemap.xml` during `generateBundle`, and `serviceWorkerManifest` builds
   // its precache list from whatever is in the bundle when *it* runs. Neither
   // file is any use offline, and the precache is a first-visit download.
-  plugins: [serviceWorkerManifest(), referenceImages(), analyticsTag(), siteMetadata()],
+  plugins: [serviceWorkerManifest(), referenceImages(), analyticsTag(), siteMetadata(), tourImages()],
   build: {
     target: 'es2022',
     sourcemap: true,
