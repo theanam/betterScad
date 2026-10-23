@@ -34,6 +34,7 @@ const TRANSFORMS = new Set([
   'translatex', 'translatey', 'translatez',
   'rotatex', 'rotatey', 'rotatez',
   'mirrorx', 'mirrory', 'mirrorz',
+  'center', 'centerx', 'centery', 'centerz', 'centerxy',
 ]);
 
 const PRIMITIVES = new Set([

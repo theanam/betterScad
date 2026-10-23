@@ -140,6 +140,7 @@ out, exactly as in OpenSCAD.
 | `rotatex(a)`<br>`rotatey(a)`<br>`rotatez(a)` | Turn about one axis | `rotate([a, 0, 0])`, and so on |
 | `mirrorx()`<br>`mirrory()`<br>`mirrorz()` | Flip across one plane | `mirror([1, 0, 0])`, and so on |
 | `get_size(object)`<br>`get_position(object)` | How big a part is, and where its lowest corner is, as `[x, y, z]` — `get_size(base()).z` to stack on it | ⚠️ The value it measured, fixed at the parameters the file was saved with |
+| `center() { … }`<br>`centerx()`, `centery()`, `centerz()`, `centerxy()` | Centres everything inside on the first thing inside, on the named axes. It moves and does not group, so `difference() center() { … }` still subtracts and `hull() center() { … }` still hulls | ⚠️ `translate()` by the moves it measured, fixed at the parameters the file was saved with |
 | `for (i = 0; i < n; i = i + 1)` | A C-style loop as a statement | A range `for` with the condition as a guard |
 | `is_range(x)` | Tests for a range, like the other `is_*` functions | ⚠️ Nothing — it becomes `undef` in stock OpenSCAD |
 

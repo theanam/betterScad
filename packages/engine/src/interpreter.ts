@@ -15,6 +15,7 @@
 import {
   Argument,
   Assignment,
+  CENTER_AXES,
   Expr,
   ForClause,
   ListElement,
@@ -28,6 +29,7 @@ import {
 } from './ast.js';
 import { BUILTIN_FUNCTIONS, BuiltinContext, echoArgs } from './builtins.js';
 import { DiagnosticBag, ScadError, SourceSpan } from './diagnostics.js';
+import { resolveContribution } from './roles.js';
 import {
   Bounds,
   DEFAULT_RESOLUTION,
@@ -190,10 +192,13 @@ export interface EvaluateResult {
   /** Top-level variable values after evaluation, for the Customizer to read back. */
   topLevelVars: Map<string, Value>;
   /**
-   * What each `get_size()` / `get_position()` measured, by `measureKey`: every
-   * distinct value it produced, in the order they came. One value means the
-   * call can be written as that value; more means it measures a different
-   * object each time it runs.
+   * What each `get_size()` / `get_position()` measured, and the moves each
+   * `center()` made, by `measureKey`: every distinct value it produced, in the
+   * order they came. One value means the call can be written as that value;
+   * more means it measures a different object each time it runs.
+   *
+   * A `center()` records `[[offset, [dx, dy, dz]], …]`: the source offset of
+   * each statement inside it that moved, and how far.
    */
   measurements: Map<string, Value[]>;
   /** Files a measurement needed that were not loaded; see `Measurer.unloaded`. */
@@ -318,6 +323,12 @@ class Interpreter {
      * already gathered into `scope` by the scope it sits in.
      */
     hoisted = false,
+    /**
+     * Where each statement's nodes go, when a caller needs them kept apart —
+     * `center()` measures and moves each statement as one thing. Defaults to
+     * `out` for every statement.
+     */
+    sinkFor: (stmt: Statement) => SceneNode[] = () => out,
   ): void {
     const flattened = this.spliceIncludes(statements, scope, file);
     if (!hoisted) this.declareScope(flattened, scope, isTopLevel);
@@ -327,16 +338,17 @@ class Interpreter {
       if (stmt.kind === 'assign' || stmt.kind === 'module-decl' || stmt.kind === 'function-decl') {
         continue;
       }
+      const sink = sinkFor(stmt);
       if (isBareBlock(stmt)) {
         // Not a scope for names, as in OpenSCAD — its assignments are already
         // in `scope` — but still a group, and so still the boundary a
         // negative() inside it cuts within.
         const kids: SceneNode[] = [];
         this.executeScope(stmt.body, scope, kids, file, false, true);
-        this.emit(out, scopeGroup(kids, stmt.roles, stmt.span));
+        this.emit(sink, scopeGroup(kids, stmt.roles, stmt.span));
         continue;
       }
-      this.executeStatement(stmt, scope, out, file);
+      this.executeStatement(stmt, scope, sink, file);
     }
   }
 
@@ -661,6 +673,14 @@ class Interpreter {
       return;
     }
 
+    // Not in the built-in table, because it is not a node: it moves its
+    // children and hands them on, so it needs them one statement at a time.
+    const axes = CENTER_AXES[name];
+    if (axes) {
+      this.callCenter(name, axes, stmt, scope, out, file);
+      return;
+    }
+
     const builtin = BUILTIN_MODULES[name];
     if (builtin) {
       const kids: SceneNode[] = [];
@@ -696,6 +716,142 @@ class Interpreter {
     }
 
     this.diagnostics.warn(`Ignoring unknown module \`${name}()\`.`, stmt.nameSpan, 'eval.unknown-module');
+  }
+
+  /**
+   * `center() { … }`, and `centerx()`, `centery()`, `centerz()`, `centerxy()`
+   * (BetterSCAD extension): everything inside after the first thing is moved so
+   * its bounding box is centred on the first thing's, on the named axes.
+   *
+   * It moves, and nothing else. The children go into the enclosing list as if
+   * the call were not there — not grouped — so `difference() center() { a; b; }`
+   * subtracts `b` from `a`, `hull() center() { … }` hulls everything inside,
+   * and a `negative()` inside reaches whatever scope encloses the call. The
+   * braces are still a scope for names, as any module call's are.
+   *
+   * Each statement inside is one thing: a `for` loop is measured and moved as a
+   * whole, and so is `children()`. That is what lets the export write the move
+   * on the statement it was written on.
+   *
+   * The moves are measured here but applied as ordinary transforms, so the
+   * geometry is built once and the kernel never hears of `center()`.
+   */
+  private callCenter(
+    name: string,
+    axes: readonly [boolean, boolean, boolean],
+    stmt: Extract<Statement, { kind: 'module-call' }>,
+    scope: Scope,
+    out: SceneNode[],
+    file: string,
+  ): void {
+    // Each statement's nodes kept apart, in source order.
+    const things: { stmt: Statement; nodes: SceneNode[] }[] = [];
+    const sinkFor = (s: Statement): SceneNode[] => {
+      const nodes: SceneNode[] = [];
+      things.push({ stmt: s, nodes });
+      return nodes;
+    };
+    if (this.hasBracedChildren(stmt.children)) {
+      const block = stmt.children[0] as Extract<Statement, { kind: 'block' }>;
+      this.executeScope(block.body, new Scope(scope, scope), [], file, false, false, sinkFor);
+    } else {
+      for (const child of stmt.children) {
+        this.executeStatement(child, new Scope(scope, scope), sinkFor(child), file);
+      }
+    }
+
+    // Emits every node as it was, with the call's own modifiers on each.
+    const unmoved = (): void => {
+      for (const thing of things) {
+        for (const n of thing.nodes) out.push(this.withRoles(n, stmt.roles));
+      }
+    };
+
+    // A `*` statement is not there, and nor is one that produced no node —
+    // an `if` not taken, an assignment.
+    const measurable = (n: SceneNode): boolean => resolveContribution(n.roles) !== 'ignored';
+    const present = things.filter((t) => t.nodes.some(measurable));
+    if (present.length < 2) {
+      if (present.length === 1) {
+        this.diagnostics.warn(
+          `\`${name}()\` has one thing inside it and nothing to centre it on, so it is left ` +
+            'where it is. To centre a shape on the origin, use its `center = true`.',
+          stmt.nameSpan,
+          'eval.center-alone',
+        );
+      }
+      unmoved();
+      return;
+    }
+
+    const boxes: (Bounds | undefined)[] = [];
+    for (const thing of present) {
+      // Measured as the shape it is: a `%` ghost or a negative() is centred on
+      // the geometry it would draw, not on nothing.
+      const object = group(thing.nodes.filter(measurable).map((n) => (n.roles.length === 0 ? n : { ...n, roles: [] })));
+      const box = this.measureBounds(object, name, stmt.nameSpan, 'nothing is moved');
+      if (box === 'unavailable') {
+        // No kernel, or a file still to be read: already reported, or the
+        // compile runs again once the file is in.
+        unmoved();
+        return;
+      }
+      boxes.push(box);
+    }
+
+    const anchor = boxes[0];
+    if (!anchor) {
+      this.diagnostics.warn(
+        `\`${name}()\`: the first thing inside it has no geometry, so there is nothing to centre ` +
+          'the rest on; they are left where they are.',
+        stmt.nameSpan,
+        'eval.center-empty',
+      );
+      unmoved();
+      return;
+    }
+    const centre = (box: Bounds): [number, number, number] =>
+      [0, 1, 2].map((i) => (box.min[i] + box.max[i]) / 2) as [number, number, number];
+    const target = centre(anchor);
+
+    const moves = new Map<Statement, [number, number, number]>();
+    const recorded: Value[] = [];
+    present.forEach((thing, i) => {
+      const box = boxes[i];
+      // Nothing to measure — an empty `for` — is nothing to move.
+      if (i === 0 || !box) return;
+      const own = centre(box);
+      const move = [0, 1, 2].map((k) => (axes[k] ? settle(target[k] - own[k]) : 0)) as [number, number, number];
+      if (move.every((d) => d === 0)) return;
+      moves.set(thing.stmt, move);
+      recorded.push([thing.stmt.span.start.offset, [...move]]);
+    });
+
+    // Kept like a `get_size()` value: the export writes the moves, and a call
+    // that moves things differently from run to run has no one set to write.
+    const key = measureKey(stmt.span);
+    const seen = this.measurements.get(key);
+    if (!seen) this.measurements.set(key, [recorded]);
+    else if (!seen.some((v) => deepEqual(v, recorded))) seen.push(recorded);
+
+    for (const thing of things) {
+      const move = moves.get(thing.stmt);
+      for (const n of thing.nodes) {
+        if (!move) {
+          out.push(this.withRoles(n, stmt.roles));
+          continue;
+        }
+        // The node's own modifiers go on the moved node: a `#` marks the shape
+        // where it now is, and a negative() cuts where it now is.
+        const moved = node('transform', { matrix: translation(...move) }, [{ ...n, roles: [] }], n.roles, n.span);
+        this.emit(out, this.withRoles(moved, stmt.roles));
+      }
+    }
+  }
+
+  /** `n` with `roles` added in front of its own; `n` itself when there are none. */
+  private withRoles(n: SceneNode, roles: string[]): SceneNode {
+    return roles.length === 0 ? n : { ...n, roles: [...roles, ...n.roles] };
   }
 
   private callUserModule(
@@ -1423,22 +1579,8 @@ class Interpreter {
     this.executeStatement(expr.body, new Scope(scope, scope), kids, expr.span.file);
     const object = group(kids);
 
-    const measurer = this.options.measurer;
-    if (!measurer) {
-      this.diagnostics.warn(
-        `\`${name}()\` needs the geometry kernel, which is not loaded here; using undef.`,
-        expr.nameSpan,
-        'eval.measure-no-kernel',
-      );
-      return undefined;
-    }
-    const unloaded = measurer.unloaded(object);
-    if (unloaded.length > 0) {
-      for (const path of unloaded) this.unloadedAssets.add(path);
-      return undefined;
-    }
-
-    const bounds = measurer.measure(object);
+    const bounds = this.measureBounds(object, name, expr.nameSpan, 'using undef');
+    if (bounds === 'unavailable') return undefined;
     let value: Value;
     if (!bounds) {
       this.diagnostics.warn(
@@ -1458,6 +1600,38 @@ class Interpreter {
     if (!seen) this.measurements.set(key, [value]);
     else if (!seen.some((v) => deepEqual(v, value))) seen.push(value);
     return value;
+  }
+
+  /**
+   * Builds `object` and reads its bounding box, for `name()`.
+   *
+   * `undefined` is an object with no geometry. `'unavailable'` is one that
+   * cannot be measured now: there is no kernel, which is warned about, or the
+   * object imports a file not yet read, which is recorded in `unloadedAssets`
+   * for the caller to read before evaluating again.
+   */
+  private measureBounds(
+    object: SceneNode,
+    name: string,
+    nameSpan: SourceSpan,
+    /** What happens instead, for the warning: "using undef", "nothing is moved". */
+    instead: string,
+  ): Bounds | 'unavailable' | undefined {
+    const measurer = this.options.measurer;
+    if (!measurer) {
+      this.diagnostics.warn(
+        `\`${name}()\` needs the geometry kernel, which is not loaded here; ${instead}.`,
+        nameSpan,
+        'eval.measure-no-kernel',
+      );
+      return 'unavailable';
+    }
+    const unloaded = measurer.unloaded(object);
+    if (unloaded.length > 0) {
+      for (const path of unloaded) this.unloadedAssets.add(path);
+      return 'unavailable';
+    }
+    return measurer.measure(object);
   }
 
   private bindBuiltinFunctionArgs(

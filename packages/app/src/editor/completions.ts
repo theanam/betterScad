@@ -460,6 +460,13 @@ const MODULES: BuiltinDoc[] = [
       { template: 'children([${1:0} : $children - 1])', detail: 'children(range)  — a run of them' },
     ],
   },
+  // Centring (BetterSCAD extension). One statement is one thing, and the first
+  // thing is the one the rest line up on.
+  { label: 'center', template: 'center() {\n\t${}\n}', detail: 'center() { … }  — BetterSCAD', info: 'Centres everything inside on the first thing inside, on every axis. It moves and does not group: `difference() center() { … }` still subtracts, `hull() center() { … }` still hulls.\n\nExports to `.scad` as `translate()` by the moves it measured.', type: 'class' },
+  { label: 'centerx', template: 'centerx() {\n\t${}\n}', detail: 'centerx() { … }  — BetterSCAD', info: 'Centres everything inside on the first thing inside, along X. It moves and does not group: `difference() centerx() { … }` still subtracts, `hull() centerx() { … }` still hulls.\n\nExports to `.scad` as `translate()` by the moves it measured.', type: 'class' },
+  { label: 'centery', template: 'centery() {\n\t${}\n}', detail: 'centery() { … }  — BetterSCAD', info: 'Centres everything inside on the first thing inside, along Y. It moves and does not group: `difference() centery() { … }` still subtracts, `hull() centery() { … }` still hulls.\n\nExports to `.scad` as `translate()` by the moves it measured.', type: 'class' },
+  { label: 'centerz', template: 'centerz() {\n\t${}\n}', detail: 'centerz() { … }  — BetterSCAD', info: 'Centres everything inside on the first thing inside, along Z. It moves and does not group: `difference() centerz() { … }` still subtracts, `hull() centerz() { … }` still hulls.\n\nExports to `.scad` as `translate()` by the moves it measured.', type: 'class' },
+  { label: 'centerxy', template: 'centerxy() {\n\t${}\n}', detail: 'centerxy() { … }  — BetterSCAD', info: 'Centres everything inside on the first thing inside, on X and Y, keeping its height. It moves and does not group: `difference() centerxy() { … }` still subtracts, `hull() centerxy() { … }` still hulls.\n\nExports to `.scad` as `translate()` by the moves it measured.', type: 'class' },
   { label: 'negative', template: 'negative() {\n\t${}\n}', detail: 'negative()  — BetterSCAD extension', info: 'Turns a subtree into negative space, subtracted from every sibling in scope.\n\nExports to legacy .scad as a difference().', type: 'class' },
 ];
 

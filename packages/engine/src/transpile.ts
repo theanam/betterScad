@@ -14,11 +14,13 @@
 import {
   Argument,
   Assignment,
+  CENTER_AXES,
   Expr,
   ForClause,
   ListElement,
   MEASURE_FUNCTIONS,
   MeasureExpr,
+  ModuleCall,
   Parameter,
   ScadFile,
   Statement,
@@ -826,7 +828,8 @@ class Printer {
         return;
 
       case 'module-call': {
-        const call = `${prefix}${this.moduleCall(stmt.name, stmt.args)}`;
+        const call =
+          `${prefix}${this.moduleCall(stmt.name, stmt.args)}` + (stmt.comment ? ` /* ${stmt.comment} */` : '');
         if (stmt.children.length === 0) {
           this.line(depth, `${call};`);
           return;
@@ -1418,15 +1421,23 @@ export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions 
     source: options.source,
     ownFunctions: declaredFunctionNames(file),
   });
-  printer.printBody(file.body, 0);
+  // `center()` is taken out of the tree before printing; see `expandCenters`.
+  const centers: CenterPass = {
+    values: options.measurements,
+    ownModules: declaredModuleNames(file),
+    rewrites: new Set(),
+    unmeasured: false,
+    varying: [],
+  };
+  printer.printBody(expandCenters(file.body, centers), 0);
   // Printed first, because printing is what discovers which helpers are needed.
   const body = printer.helperDefinitions() + printer.toString();
-  const rewrites = [...printer.rewrites];
+  const rewrites = [...centers.rewrites, ...printer.rewrites];
   const outcome = {
     rewrites,
     unmeasurable: printer.unmeasurable,
-    unmeasured: printer.unmeasured,
-    varying: printer.varying,
+    unmeasured: printer.unmeasured || centers.unmeasured,
+    varying: [...printer.varying, ...centers.varying],
   };
 
   if (options.header === false) return { source: body, ...outcome };
@@ -1442,6 +1453,158 @@ export function transpileToLegacyScad(file: ScadFile, options: TranspileOptions 
   ].join('\n');
 
   return { source: header + body, ...outcome };
+}
+
+/** What `expandCenters` reads and reports; the printer's `measured` and outcome, for the pass. */
+interface CenterPass {
+  values?: Map<string, Value[]>;
+  /** Module names the file declares; a call of one of those is the user's, not `center()`. */
+  ownModules: Set<string>;
+  rewrites: Set<string>;
+  unmeasured: boolean;
+  varying: TranspileResult['varying'];
+}
+
+/**
+ * Writes every `center()` as the moves it measured, and takes the call out.
+ *
+ * Done on the tree before printing, because `center()` is not a node in the
+ * geometry: its children go into the enclosing list as if the call were not
+ * there, so the rewrite splices them into the enclosing list too. A module
+ * call's braces are its child list in OpenSCAD, not a group, so
+ * `difference() center() { a; b; }` becomes `difference() { a; translate(…) b; }`
+ * and still subtracts. Where a splice lands in a position that holds one
+ * statement — the body of an `if`, a `for`, a `let` or a module — it is braced
+ * into one, which adds a group the evaluator did not have; that changes
+ * nothing but how far a negative() written in there reaches.
+ *
+ * The braces are a scope for names, as any module call's are, so an
+ * assignment inside them is written as a `let()` on each statement that could
+ * see it, rather than spliced out into the enclosing scope where it would be
+ * scope-wide and could redefine a name already in use there.
+ *
+ * Each move is keyed by the source offset of the statement it was written on,
+ * which is how the evaluator recorded it (see `Interpreter.callCenter`). A
+ * statement that is itself a `center()` is expanded first and every statement
+ * that comes of it moved by the same amount, which is the group moved.
+ */
+function expandCenters(body: Statement[], pass: CenterPass): Statement[] {
+  const list = (statements: Statement[]): Statement[] => statements.flatMap((s) => expand(s));
+
+  /** `stmt` in a position that holds exactly one statement. */
+  const single = (stmt: Statement): Statement => {
+    const out = expand(stmt);
+    return out.length === 1 ? out[0] : { kind: 'block', body: out, roles: [], span: stmt.span };
+  };
+
+  const braced = (children: Statement[]): children is [Extract<Statement, { kind: 'block' }>] =>
+    children.length === 1 && children[0].kind === 'block' && children[0].roles.length === 0;
+
+  const expand = (stmt: Statement): Statement[] => {
+    switch (stmt.kind) {
+      case 'module-call': {
+        if (CENTER_AXES[stmt.name] && !pass.ownModules.has(stmt.name)) return expandCenter(stmt);
+        if (stmt.children.length === 0) return [stmt];
+        if (braced(stmt.children)) {
+          const only = stmt.children[0];
+          return [{ ...stmt, children: [{ ...only, body: list(only.body) }] }];
+        }
+        const children = list(stmt.children);
+        return [
+          {
+            ...stmt,
+            children:
+              children.length === 1 ? children : [{ kind: 'block', body: children, roles: [], span: stmt.span }],
+          },
+        ];
+      }
+      case 'block':
+        return [{ ...stmt, body: list(stmt.body) }];
+      case 'if':
+        return [{ ...stmt, then: single(stmt.then), else: stmt.else && single(stmt.else) }];
+      case 'for':
+      case 'intersection-for':
+      case 'for-c':
+      case 'let-stmt':
+      case 'module-decl':
+        return [{ ...stmt, body: single(stmt.body) }];
+      case 'assert-stmt':
+      case 'echo-stmt':
+        return [stmt.body ? { ...stmt, body: single(stmt.body) } : stmt];
+      default:
+        return [stmt];
+    }
+  };
+
+  /** `child`, moved: `translate([dx, dy, dz]) /* center() *\/ child`. */
+  const moved = (child: Statement, move: Value[], name: string): Statement => {
+    const { span } = child;
+    const vector: Expr = {
+      kind: 'list',
+      span,
+      elements: move.map((d) => ({ kind: 'item', value: { kind: 'number', value: d as number, span } })),
+    };
+    return {
+      kind: 'module-call',
+      name: 'translate',
+      args: [{ value: vector, span }],
+      children: [child],
+      roles: [],
+      span,
+      nameSpan: span,
+      comment: `${name}()`,
+    };
+  };
+
+  const expandCenter = (call: ModuleCall): Statement[] => {
+    pass.rewrites.add(`${call.name}() written as the moves it measured`);
+    const body = braced(call.children) ? call.children[0].body : call.children;
+
+    const moves = new Map<number, Value[]>();
+    if (!pass.values) {
+      pass.unmeasured = true;
+    } else {
+      const found = pass.values.get(measureKey(call.span));
+      // Never ran means nothing here moved, and nothing is written.
+      if (found && found.length > 1) {
+        pass.varying.push({ name: call.name, line: call.span.start.line, values: found.length });
+      } else if (found && Array.isArray(found[0])) {
+        for (const entry of found[0]) {
+          if (!Array.isArray(entry) || typeof entry[0] !== 'number' || !Array.isArray(entry[1])) continue;
+          moves.set(entry[0], entry[1]);
+        }
+      }
+    }
+
+    // The scope's assignments, for a `let()` on every statement that could see
+    // them. Scope-wide, so the last of a name wins, where the first was.
+    const bindings: Assignment[] = [];
+    for (const s of body) {
+      if (s.kind !== 'assign') continue;
+      const binding: Assignment = { kind: 'assignment', name: s.name, value: s.value, span: s.span };
+      const at = bindings.findIndex((b) => b.name === s.name);
+      if (at >= 0) bindings[at] = binding;
+      else bindings.push(binding);
+    }
+
+    const out: Statement[] = [];
+    for (const s of body) {
+      if (s.kind === 'assign') continue;
+      const move = moves.get(s.span.start.offset);
+      for (const expanded of expand(s)) {
+        if (isDeclaration(expanded)) {
+          out.push(expanded);
+          continue;
+        }
+        let stmt = move ? moved(expanded, move, call.name) : expanded;
+        if (bindings.length > 0) stmt = { kind: 'let-stmt', bindings, body: stmt, roles: [], span: s.span };
+        out.push(stmt);
+      }
+    }
+    return out;
+  };
+
+  return list(body);
 }
 
 /** A value as `.scad` source: what a measurement is written as. */
@@ -1488,9 +1651,13 @@ function nodesOfKind<K extends string>(root: unknown, kind: K): Extract<Expr | S
  */
 export function usesMeasurements(file: ScadFile): boolean {
   const own = declaredFunctionNames(file);
-  return nodesOfKind(file.body, 'measure').some(
-    (m) => !own.has(m.measure === 'size' ? 'get_size' : 'get_position'),
-  );
+  if (
+    nodesOfKind(file.body, 'measure').some((m) => !own.has(m.measure === 'size' ? 'get_size' : 'get_position'))
+  ) {
+    return true;
+  }
+  const ownModules = declaredModuleNames(file);
+  return nodesOfKind(file.body, 'module-call').some((c) => CENTER_AXES[c.name] && !ownModules.has(c.name));
 }
 
 /** Every function name the file declares, at any depth. */
@@ -1546,6 +1713,7 @@ export interface ExtensionUse {
  */
 export function describeExtensions(file: ScadFile): ExtensionUse[] {
   const found = new Map<string, ExtensionUse>();
+  const ownModules = declaredModuleNames(file);
 
   const record = (key: string, name: string, downgrade: string, line: number): void => {
     const existing = found.get(key);
@@ -1597,6 +1765,15 @@ export function describeExtensions(file: ScadFile): ExtensionUse[] {
         stmt.name,
         `${stmt.name}()`,
         `Rewritten as ${stock}([…]) on that axis.`,
+        stmt.span.start.line,
+      );
+    }
+    if (stmt.kind === 'module-call' && CENTER_AXES[stmt.name] && !ownModules.has(stmt.name)) {
+      record(
+        stmt.name,
+        `${stmt.name}()`,
+        'Written as translate() by the moves it measured when the file is saved. They stay ' +
+          'fixed: change a parameter in OpenSCAD and they will not follow.',
         stmt.span.start.line,
       );
     }
@@ -1709,14 +1886,23 @@ export function toStockScad(
                 'the sizes can be measured.',
               code: 'transpile.measure-unmeasured',
             }
-          : {
-              severity: 'error',
-              message:
-                `${first.name}() on line ${first.line} comes out ${first.values} different ways ` +
-                'as the code runs, so no single value can stand in for it in OpenSCAD. ' +
-                'Measure outside the module or loop, and pass the value in.',
-              code: 'transpile.measure-varies',
-            },
+          : CENTER_AXES[first.name]
+            ? {
+                severity: 'error',
+                message:
+                  `${first.name}() on line ${first.line} moves its children ${first.values} different ` +
+                  'ways as the code runs, so no single move can stand in for it in OpenSCAD. ' +
+                  'Call it outside the module or loop, on shapes of one size.',
+                code: 'transpile.measure-varies',
+              }
+            : {
+                severity: 'error',
+                message:
+                  `${first.name}() on line ${first.line} comes out ${first.values} different ways ` +
+                  'as the code runs, so no single value can stand in for it in OpenSCAD. ' +
+                  'Measure outside the module or loop, and pass the value in.',
+                code: 'transpile.measure-varies',
+              },
       ],
     };
   }

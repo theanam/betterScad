@@ -141,7 +141,7 @@ const SLIDES: Slide[] = [
     kicker: 'Language · shorthands',
     title: 'Less typing, more modelling',
     body: [
-      '<b>translatez(5)</b>, <b>rotatex(90)</b>, <b>mirrory()</b> instead of a vector for one axis. <b>translate(x, y, z)</b> with loose numbers. <b>get_size()</b> and <b>get_position()</b> measure a shape so the next one can follow it. A C-style <b>for</b> loop. All of it rewritten to stock OpenSCAD on save.',
+      '<b>translatez(5)</b>, <b>rotatex(90)</b>, <b>mirrory()</b> instead of a vector for one axis. <b>translate(x, y, z)</b> with loose numbers. <b>get_size()</b> and <b>get_position()</b> measure a shape so the next one can follow it; <b>center()</b> lines one up on another. A C-style <b>for</b> loop. All of it rewritten to stock OpenSCAD on save.',
     ],
     grid: [
       example('rotatex', 'rotatex()'),

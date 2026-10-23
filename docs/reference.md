@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 20 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 21 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -3329,7 +3329,7 @@ See also: [`mirror()`](#entry-mirror) · [`translatex(), translatey(), translate
 
 ## Measuring
 
-Ask how big a part is, instead of working it out by hand and keeping the sum up to date.
+Ask how big a part is, or centre one on another, instead of working it out by hand and keeping the sum up to date.
 
 <a id="entry-get_size"></a>
 
@@ -3439,6 +3439,57 @@ The far corner is `get_position(p) + get_size(p)`.
 **Saved as OpenSCAD `.scad`:** The same as `get_size()`: written as the value it measured, fixed from then on.
 
 See also: [`get_size()`](#entry-get_size) · [`translate()`](#entry-translate)
+
+<a id="entry-center"></a>
+
+### center(), centerx(), centery(), centerz(), centerxy()
+
+```
+center() { first; others… }
+```
+
+Lines things up. Everything inside the braces after the first thing is moved so it is centred on the first thing — a logo in the middle of a plate, a hole through the middle of a boss — without you working out where the middle is. The name says which axes: `centerxy()` centres on X and Y and leaves the height alone, which is the usual want for something sitting on top of something else.
+
+```scad
+centerxy() {
+  cube([40, 30, 4], r = 2);
+  color("orange") translatez(4)
+    linear_extrude(2) text("hi", size = 14, halign = "center", valign = "center");
+}
+```
+
+<img src="images/reference/center-label.png" alt="The word lands in the middle of the plate, and stays on top of it." width="420">
+
+*The word lands in the middle of the plate, and stays on top of it.*
+
+```scad
+difference() center() {
+  cylinder(h = 12, r = 10, $fn = 48);
+  cube([30, 3, 20]);
+}
+```
+
+<img src="images/reference/center-slot.png" alt="A slot through the middle of a boss: difference() still sees two shapes." width="420">
+
+*A slot through the middle of a boss: `difference()` still sees two shapes.*
+
+The first thing never moves. It is the anchor; the rest are moved so the centre of each one’s bounding box matches the centre of its bounding box, on the named axes.
+
+It moves and does **not** group. The things inside land in whatever encloses the call exactly as if it were not there, so `difference() center() { a(); b(); }` subtracts `b` from `a`, `intersection() center() { … }` intersects, and `hull() center() { … }` hulls everything. A `negative()` inside reaches the scope around the call, because the braces group nothing. They are still a scope for names, as any module call’s are.
+
+Each statement inside is one thing. A `for` loop is measured and moved as a whole, a `children()` moves every child together, and a `{ … }` block moves as one.
+
+Everything is measured as it would be drawn, through transforms and booleans, the same way `get_size()` measures. A `*` statement is not there; a `%` or `#` one is measured as the shape it shows.
+
+Flat shapes have no height, so `centerz()` leaves them where they are, and `center()` on two squares does what `centerxy()` does.
+
+One thing alone has nothing to be centred on, and is left where it is with a warning. To put a shape on the origin, use its `center = true`.
+
+A file that defines its own `module center` keeps its own.
+
+**Saved as OpenSCAD `.scad`:** OpenSCAD cannot measure anything, so each move is written as a `translate()` by the distance it measured, in the list the call was in: `difference() centerxy() { … }` becomes `difference() { …; translate([20, 15, 0]) /* centerxy() */ … }`. **The moves are fixed** at the parameters the file was saved with; change a parameter in OpenSCAD and the parts will not follow. A call that moves things differently each time it runs — one inside a module, centring on that module’s argument — has no single move to write, and saving refuses and names the line.
+
+See also: [`get_size()`](#entry-get_size) · [`get_position()`](#entry-get_position) · [`translate()`](#entry-translate) · [`hull()`](#entry-hull) · [`difference()`](#entry-difference)
 
 ## Language
 

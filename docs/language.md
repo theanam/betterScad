@@ -211,6 +211,7 @@ numbered suffix rather than shadowing it.
 | [`gear()`](#gear) | module: the same involute profile, extruded |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
 | [Single-axis transforms](#single-axis-transforms) | the stock call with zeros in the other slots |
+| [`center()`](#center) | `translate()` by the moves it measured, spliced into the same list |
 | [C-style statement `for`](#c-style-statement-for) | bounded range `for` with the condition as a guard |
 | [`is_range()`](#is_range) | none — left as written |
 
@@ -721,6 +722,67 @@ The mirrors take no argument: they name a plane, not a distance.
 
 **Downgrade:** `translatex(d)` becomes `translate([d, 0, 0])`, `mirrorz()`
 becomes `mirror([0, 0, 1])`, and so on. Exact.
+
+### `center()`
+
+Lines things up. Everything inside the braces after the first statement is
+moved so its bounding box is centred on the first statement's, on the axes the
+name says: `center()` on all three, `centerx()`, `centery()`, `centerz()` on
+one, `centerxy()` on two — the usual want for something sitting on top of
+something else, since it keeps the height.
+
+```scad
+centerxy() {
+  cube([40, 30, 4]);                       // the anchor: never moves
+  translatez(4) linear_extrude(2) text("hi", halign = "center", valign = "center");
+}
+```
+
+**It moves and does not group.** The children land in whatever encloses the
+call exactly as if it were not there, so the classic booleans see them as
+their operands:
+
+```scad
+difference() center() { boss(); cube([30, 3, 3]); }   // a slot through the middle
+hull() centerxy() { plate(); translatez(20) sphere(5); }
+```
+
+Two things follow from that. A `negative()` inside reaches the scope around the
+call, because the braces group nothing; `difference() center() { … }` is the
+scoped form. And the braces are still a scope for *names*, as any module call's
+are: an assignment inside stays inside.
+
+**Each statement is one thing.** A `for` loop is measured and moved as a whole,
+`children()` moves every child together, and a bare `{ … }` block moves as one.
+A `*` statement is not there; a `%` or `#` one is measured as the shape it
+shows. Measurement is `get_size()`'s: the real geometry, through transforms and
+booleans, built once and reused by the render. Flat shapes have no height, so
+`centerz()` leaves them alone.
+
+One thing alone has nothing to be centred on; it stays put, with a warning
+pointing at `center = true`. A file with its own `module center` keeps it.
+
+**Downgrade:** OpenSCAD cannot measure, so each move is written as a
+`translate()` by the distance measured, spliced into the list the call was in,
+with the call in a comment:
+
+```scad
+difference() {
+  cube([40, 30, 10]);
+  translate([20, 15, 0]) /* centerxy() */
+    cylinder(h = 30, r = 3, center = true);
+}
+```
+
+The moves are fixed at the parameters the file was saved with, like a
+`get_size()` value. A call that moves things differently from run to run — one
+inside a module, centring on that module's argument — has no single move to
+write, and the export refuses and names the line. An assignment inside the
+braces is written as a `let()` on each statement that could see it, so it stays
+theirs. Where the splice lands somewhere that holds one statement — the body of
+an `if`, a `for`, a `let` or a module — it is braced into one, which bounds a
+`negative()` written in there where the evaluator did not; the geometry is the
+same.
 
 ### `is_range()`
 

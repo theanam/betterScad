@@ -225,6 +225,27 @@ export const MEASURE_FUNCTIONS: Record<string, MeasureExpr['measure']> = {
 };
 
 /**
+ * `center()` and its one- and two-axis forms — a BetterSCAD extension — as the
+ * axes each one moves on.
+ *
+ * Every statement inside the braces after the first is moved so its bounding
+ * box is centred on the first one's, on these axes. Like `get_size()` it
+ * measures geometry while the code runs, and the legacy export writes the
+ * moves it measured; the measurements are kept under `measureKey` of the call.
+ *
+ * Here rather than in the interpreter because the transpiler and the editor
+ * need the same list, and a name added to one but not the others is a call
+ * that renders and then cannot be saved.
+ */
+export const CENTER_AXES: Record<string, readonly [boolean, boolean, boolean]> = {
+  center: [true, true, true],
+  centerx: [true, false, false],
+  centery: [false, true, false],
+  centerz: [false, false, true],
+  centerxy: [true, true, false],
+};
+
+/**
  * Where a `get_size()` was written, as the key its measurements are kept under.
  *
  * The file and offset rather than the node, because the export parses the
@@ -295,6 +316,14 @@ export interface ModuleCall extends NodeBase {
   roles: string[];
   /** Span of just the callee name, for precise error underlining. */
   nameSpan: SourceSpan;
+  /**
+   * Written after the call when it is printed, as `/* … *\/`.
+   *
+   * Only a call the transpiler made up carries one — the `translate()` that
+   * stands in for a `center()` says which — so the generated file says why the
+   * number is there. The parser never sets it.
+   */
+  comment?: string;
 }
 
 export interface BlockStmt extends NodeBase {

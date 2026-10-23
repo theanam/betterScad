@@ -1008,7 +1008,7 @@ export const SHORTHAND: ReferenceGroup = {
 export const MEASURING: ReferenceGroup = {
   id: 'measuring',
   title: 'Measuring',
-  blurb: 'Ask how big a part is, instead of working it out by hand and keeping the sum up to date.',
+  blurb: 'Ask how big a part is, or centre one on another, instead of working it out by hand and keeping the sum up to date.',
   entries: [
     {
       id: 'get_size',
@@ -1109,6 +1109,71 @@ export const MEASURING: ReferenceGroup = {
       ],
       see: ['get_size', 'translate'],
       keywords: ['position', 'bounds', 'bounding box', 'corner', 'origin', 'where', 'measure'],
+    },
+    {
+      id: 'center',
+      name: 'center(), centerx(), centery(), centerz(), centerxy()',
+      signature: 'center() { first; others… }',
+      extension: true,
+      plain:
+        'Lines things up. Everything inside the braces after the first thing is moved so it is ' +
+        'centred on the first thing — a logo in the middle of a plate, a hole through the ' +
+        'middle of a boss — without you working out where the middle is. The name says which ' +
+        'axes: `centerxy()` centres on X and Y and leaves the height alone, which is the usual ' +
+        'want for something sitting on top of something else.',
+      details: [
+        'The first thing never moves. It is the anchor; the rest are moved so the centre of ' +
+          'each one’s bounding box matches the centre of its bounding box, on the named axes.',
+        'It moves and does **not** group. The things inside land in whatever encloses the call ' +
+          'exactly as if it were not there, so `difference() center() { a(); b(); }` subtracts ' +
+          '`b` from `a`, `intersection() center() { … }` intersects, and `hull() center() { … }` ' +
+          'hulls everything. A `negative()` inside reaches the scope around the call, because ' +
+          'the braces group nothing. They are still a scope for names, as any module call’s are.',
+        'Each statement inside is one thing. A `for` loop is measured and moved as a whole, a ' +
+          '`children()` moves every child together, and a `{ … }` block moves as one.',
+        'Everything is measured as it would be drawn, through transforms and booleans, the ' +
+          'same way `get_size()` measures. A `*` statement is not there; a `%` or `#` one is ' +
+          'measured as the shape it shows.',
+        'Flat shapes have no height, so `centerz()` leaves them where they are, and ' +
+          '`center()` on two squares does what `centerxy()` does.',
+        'One thing alone has nothing to be centred on, and is left where it is with a warning. ' +
+          'To put a shape on the origin, use its `center = true`.',
+        'A file that defines its own `module center` keeps its own.',
+      ],
+      downgrade:
+        'OpenSCAD cannot measure anything, so each move is written as a `translate()` by the ' +
+        'distance it measured, in the list the call was in: `difference() centerxy() { … }` ' +
+        'becomes `difference() { …; translate([20, 15, 0]) /* centerxy() */ … }`. **The moves ' +
+        'are fixed** at the parameters the file was saved with; change a parameter in OpenSCAD ' +
+        'and the parts will not follow. A call that moves things differently each time it runs ' +
+        '— one inside a module, centring on that module’s argument — has no single move to ' +
+        'write, and saving refuses and names the line.',
+      examples: [
+        {
+          code: [
+            'centerxy() {',
+            '  cube([40, 30, 4], r = 2);',
+            '  color("orange") translatez(4)',
+            '    linear_extrude(2) text("hi", size = 14, halign = "center", valign = "center");',
+            '}',
+          ].join('\n'),
+          image: 'center-label',
+          view: 'plan',
+          caption: 'The word lands in the middle of the plate, and stays on top of it.',
+        },
+        {
+          code: [
+            'difference() center() {',
+            '  cylinder(h = 12, r = 10, $fn = 48);',
+            '  cube([30, 3, 20]);',
+            '}',
+          ].join('\n'),
+          image: 'center-slot',
+          caption: 'A slot through the middle of a boss: `difference()` still sees two shapes.',
+        },
+      ],
+      see: ['get_size', 'get_position', 'translate', 'hull', 'difference'],
+      keywords: ['centre', 'align', 'middle', 'line up', 'anchor', 'position', 'on top of'],
     },
   ],
 };
