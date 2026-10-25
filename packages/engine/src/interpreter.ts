@@ -2259,8 +2259,19 @@ function chamferedCylinder(
     [0, h],
   ];
 
-  const points: [number, number][] = [corners[0]];
-  for (const index of [1, 2] as const) {
+  /** An outer corner that has something to ease, and how far its arc reaches. */
+  interface Eased {
+    chamfer: number;
+    corner: [number, number];
+    toPrevious: [number, number];
+    toNext: [number, number];
+    angle: number;
+    /** How far back along each edge the arc meets it. */
+    reach: number;
+    /** The edge this corner has to itself: the base or the top. */
+    own: number;
+  }
+  const eased = (index: 1 | 2): Eased | undefined => {
     const chamfer = index === 1 ? spec.f1 : spec.f2;
     const corner = corners[index];
     const previous = corners[index - 1];
@@ -2268,32 +2279,46 @@ function chamferedCylinder(
 
     // A corner at the axis is the tip of a cone: there are no two edges to sit
     // an arc between, so there is nothing to ease.
-    if (chamfer <= 0 || corner[0] <= 0) {
-      points.push(corner);
-      continue;
-    }
+    if (chamfer <= 0 || corner[0] <= 0) return undefined;
 
     const toPrevious = unit(previous, corner);
     const toNext = unit(next, corner);
-    if (!toPrevious || !toNext) {
-      points.push(corner);
-      continue;
-    }
+    if (!toPrevious || !toNext) return undefined;
 
     // Interior angle between the two edges at this corner.
     const cosine = clamp(toPrevious[0] * toNext[0] + toPrevious[1] * toNext[1], -1, 1);
     const angle = Math.acos(cosine);
-    if (!(angle > 1e-6) || Math.PI - angle < 1e-6) {
-      points.push(corner);
+    if (!(angle > 1e-6) || Math.PI - angle < 1e-6) return undefined;
+
+    const reach = chamfer / Math.tan(angle / 2);
+    const own = distance(index === 1 ? previous : next, corner);
+    return { chamfer, corner, toPrevious, toNext, angle, reach, own };
+  };
+  const ends: Record<1 | 2, Eased | undefined> = { 1: eased(1), 2: eased(2) };
+
+  // A chamfer that reaches past the edges it sits on would fold the profile
+  // inside out, so it is clamped to them. The side is shared between the two
+  // ends, so they are fitted to it together: two 1 mm chamfers on a 1.5 mm
+  // side are not each within 1.5, they are 2 mm in 1.5, and each gets its
+  // share. Then each is fitted to the edge it has to itself.
+  //
+  // "Past" allows for floating point: a 1 mm chamfer on a 1 mm edge reaches
+  // 1 / tan(45°), which is 1.0000000000000002, and fits.
+  const past = (reach: number, edge: number): boolean => reach > edge * (1 + 1e-9);
+  const side = distance(corners[1], corners[2]);
+  const wanted = (ends[1]?.reach ?? 0) + (ends[2]?.reach ?? 0);
+  const share = (reach: number): number => (past(wanted, side) ? (side * reach) / wanted : side);
+
+  const points: [number, number][] = [corners[0]];
+  for (const index of [1, 2] as const) {
+    const easing = ends[index];
+    if (!easing) {
+      points.push(corners[index]);
       continue;
     }
-
-    // How far back along each edge the arc meets it. Clamped to the shorter of
-    // the two edges, so a chamfer larger than the shape it is easing eats the
-    // whole edge rather than folding the profile inside out.
-    const reach = chamfer / Math.tan(angle / 2);
-    const limit = Math.min(distance(previous, corner), distance(next, corner));
-    const scale = reach > limit ? limit / reach : 1;
+    const { chamfer, corner, toPrevious, toNext, angle, reach } = easing;
+    const limit = Math.min(easing.own, share(reach));
+    const scale = past(reach, limit) ? limit / reach : 1;
     if (scale < 1) {
       interp.warn(
         `cylinder(): chamfer ${chamfer} does not fit this end; using ${round6(chamfer * scale)}.`,

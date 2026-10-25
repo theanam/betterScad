@@ -438,6 +438,34 @@ test('a chamfer larger than the end it eases is clamped, with a warning', async 
   );
 });
 
+test('a chamfer that exactly fits its end is not clamped, and not warned about', async () => {
+  // 1 / tan(45°) is 1.0000000000000002 in floating point: not past a 1 mm edge.
+  for (const source of [
+    'cylinder(h = 1, d = 30, chamfer1 = 1);',
+    'cylinder(h = 2, d = 30, chamfer = 1);',
+    'cylinder(h = 10, d = 2, chamfer = 1);',
+  ]) {
+    const result = await engine.render(source);
+    assert.deepEqual(
+      result.diagnostics.filter((d) => d.severity === 'warning').map((d) => d.message),
+      [],
+      source,
+    );
+  }
+});
+
+test('two chamfers share the side between them', async () => {
+  // Each 1 mm chamfer fits a 1.5 mm side on its own; together they do not.
+  const result = await engine.render('$fn = 64;\ncylinder(h = 1.5, d = 30, chamfer = 1);');
+  // Both ends are clamped the same way, and the same warning is reported once.
+  const clamped = result.diagnostics.filter((d) => d.code === 'eval.chamfer-clamped');
+  assert.equal(clamped.length, 1);
+  assert.match(clamped[0].message, /using 0\.75\./);
+  const expected = await measure('$fn = 64;\ncylinder(h = 1.5, d = 30, chamfer = 0.75);');
+  const { volume } = await measure('$fn = 64;\ncylinder(h = 1.5, d = 30, chamfer = 1);');
+  assert.ok(near(volume, expected.volume, 1e-9), `${volume} vs ${expected.volume}`);
+});
+
 test('centre still centres, with the chamfer on', async () => {
   const { bounds } = await measure('$fn = 64;\ncylinder(h = 20, r = 6, center = true, chamfer = 2);');
   assert.ok(near(bounds[2], -10, 0.02) && near(bounds[5], 10, 0.02), `expected -10..10, got ${bounds}`);
