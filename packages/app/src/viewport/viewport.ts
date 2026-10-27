@@ -36,6 +36,7 @@ import {
 } from 'three';
 
 import type { MeshPayload } from '../render/protocol.js';
+import { formatNumber } from '../ui/dom.js';
 import {
   OrbitCamera,
   viewDirection,
@@ -64,6 +65,12 @@ const GIZMO_DRAG_SLOP = 4;
 const SNAP_VERTEX_PX = 14;
 const SNAP_EDGE_PX = 9;
 
+/** How close, in screen pixels, the pointer has to be to a finished line to read it. */
+const MEASURE_LINE_PX = 8;
+
+/** Marker radius as a fraction of the camera's distance, so it is always the same size on screen. */
+const MARKER_SCALE = 0.006;
+
 /** Grid divisions drawn across the helper, matching `rebuildHelpers`. */
 const GRID_DIVISIONS = 20;
 
@@ -78,8 +85,15 @@ const FEATURE_EDGE_COS = Math.cos((20 * Math.PI) / 180);
 /** The ground, z = 0, which a click into empty space measures against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 0, 1), 0);
 
-/** What a measured point ended up snapping to, if anything. */
-export type SnapKind = 'vertex' | 'edge' | 'grid' | 'surface';
+/**
+ * What a measured point ended up snapping to, if anything.
+ *
+ * `axis` is a second point held to one axis of the first with Shift: it is
+ * where the pointer was, projected, and so no longer on anything.
+ */
+export type SnapKind = 'vertex' | 'edge' | 'grid' | 'surface' | 'axis';
+
+export type Axis = 'x' | 'y' | 'z';
 
 export interface Measurement {
   /** The clicked point, in model space. */
@@ -89,6 +103,20 @@ export interface Measurement {
   /** Distance from the previous measurement, if there is one. */
   distance?: number;
   delta?: Vector3;
+  /** The axis the point was held to, when `snap` is `axis`. */
+  axis?: Axis;
+  /**
+   * Set while the second point is still following the pointer: the reading
+   * is what a click would give, not what one gave.
+   */
+  live?: boolean;
+}
+
+/** A point the tool would measure, and why it is there. */
+interface Target {
+  point: Vector3;
+  snap: SnapKind;
+  axis?: Axis;
 }
 
 /** What an exported image shows, and how. */
@@ -121,6 +149,8 @@ const IMAGE_MARGIN = 0.08;
 
 export interface ViewportCallbacks {
   onMeasure(measurement: Measurement | null): void;
+  /** The measure tool was switched on or off — by its button, or by Escape. */
+  onMeasuring?(active: boolean): void;
   /**
    * Fired whenever the camera moves, by drag or by command.
    *
@@ -132,6 +162,35 @@ export interface ViewportCallbacks {
 }
 
 /** Reads a CSS custom property, so the viewport follows the app theme. */
+/**
+ * `to`, held to one axis of `from`: the axis it is furthest along.
+ *
+ * What Shift does to the second point. The pointer still chooses the
+ * distance; the other two components are dropped, so the line runs along X,
+ * Y or Z exactly, which is what a dimension on a drawing does.
+ */
+function lockToAxis(from: Vector3, to: Vector3): Target {
+  const delta = new Vector3().subVectors(to, from);
+  const axis: Axis =
+    Math.abs(delta.x) >= Math.abs(delta.y) && Math.abs(delta.x) >= Math.abs(delta.z)
+      ? 'x'
+      : Math.abs(delta.y) >= Math.abs(delta.z)
+        ? 'y'
+        : 'z';
+  const point = from.clone();
+  point[axis] += delta[axis];
+  return { point, snap: 'axis', axis };
+}
+
+/** Distance in pixels from a point to a screen segment. */
+function pointToSegment(x: number, y: number, a: [number, number], b: [number, number]): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq < 1e-9 ? 0 : Math.min(1, Math.max(0, ((x - a[0]) * dx + (y - a[1]) * dy) / lengthSq));
+  return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t));
+}
+
 function token(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
@@ -180,9 +239,26 @@ export class Viewport {
   private disposed = false;
   private resizeObserver?: ResizeObserver;
 
-  private measurePoints: Vector3[] = [];
-  /** What each measured point snapped to, parallel to `measurePoints`. */
-  private measureSnaps: SnapKind[] = [];
+  /** Finished measurements, each a line between two points, kept until the tool is left. */
+  private anchored: { a: Vector3; b: Vector3 }[] = [];
+  /** The first point of the measurement in progress, waiting for its second. */
+  private pending?: Target;
+  /** What the pointer is over right now: the point a click would take. */
+  private hover?: Target;
+  /** Index into `anchored` of the line under the pointer, or -1. */
+  private hoveredLine = -1;
+  /** Where the pointer last was over the canvas, in client pixels. */
+  private lastPointer?: { x: number; y: number };
+  /** Shift is down: the second point is held to one axis of the first. */
+  private shiftHeld = false;
+  /** Where the current press started, so a drag's trailing click can be told from a click. */
+  private press?: { x: number; y: number };
+  /**
+   * One length label per line, finished or being drawn, sitting on the line's
+   * midpoint. Made here rather than in the constructor because the camera's
+   * first `apply` places labels before the constructor body has run.
+   */
+  private readonly measureLabels = document.createElement('div');
   measuring = false;
   showGrid = true;
   showAxes = true;
@@ -213,6 +289,8 @@ export class Viewport {
     this.camera = new PerspectiveCamera(45, 1, 0.1, 10_000);
     this.controls = new OrbitCamera(this.camera, this.renderer.domElement, {
       onChange: () => {
+        this.scaleMarkers();
+        this.placeLabels();
         this.invalidate();
         this.callbacks.onCamera?.();
       },
@@ -224,6 +302,9 @@ export class Viewport {
     });
 
     this.gizmo = new ViewGizmo((view) => this.setView(view));
+
+    this.measureLabels.className = 'viewport__measure-labels';
+    this.container.appendChild(this.measureLabels);
 
     this.scene.add(
       this.modelGroup,
@@ -243,6 +324,9 @@ export class Viewport {
     this.renderer.domElement.addEventListener('pointerup', this.onGizmoPointerUp, true);
     this.renderer.domElement.addEventListener('pointercancel', this.onGizmoPointerUp, true);
     this.renderer.domElement.addEventListener('pointerleave', this.onGizmoPointerLeave);
+    this.renderer.domElement.addEventListener('pointerdown', this.onMeasurePress);
+    this.renderer.domElement.addEventListener('pointermove', this.onMeasureMove);
+    this.renderer.domElement.addEventListener('pointerleave', this.onMeasureLeave);
     this.observeResize();
     this.loop();
   }
@@ -282,6 +366,7 @@ export class Viewport {
     this.camera.updateProjectionMatrix();
     // Reshapes the orthographic frustum to the new aspect as well.
     this.controls.apply();
+    this.placeLabels();
     this.invalidate();
   }
 
@@ -315,6 +400,12 @@ export class Viewport {
     this.renderer.domElement.removeEventListener('pointerup', this.onGizmoPointerUp, true);
     this.renderer.domElement.removeEventListener('pointercancel', this.onGizmoPointerUp, true);
     this.renderer.domElement.removeEventListener('pointerleave', this.onGizmoPointerLeave);
+    this.renderer.domElement.removeEventListener('pointerdown', this.onMeasurePress);
+    this.renderer.domElement.removeEventListener('pointermove', this.onMeasureMove);
+    this.renderer.domElement.removeEventListener('pointerleave', this.onMeasureLeave);
+    window.removeEventListener('keydown', this.onMeasureKey);
+    window.removeEventListener('keyup', this.onMeasureKey);
+    this.measureLabels.remove();
     this.gizmo.dispose();
     this.resizeObserver?.disconnect();
     this.controls.dispose();
@@ -749,20 +840,43 @@ export class Viewport {
   };
 
   // -- measurement (spec feature 19) ----------------------------------------
+  //
+  // Two clicks make a line. The first point waits, with a line from it to
+  // wherever the pointer is, until the second click anchors it; then the next
+  // click starts another. Finished lines stay until the tool is left. Every
+  // line, finished or still following the pointer, carries its length on its
+  // midpoint. Shift holds the second point to one axis of the first; Escape
+  // drops a waiting point, and with none waiting leaves the tool.
 
   setMeasuring(active: boolean): void {
+    if (this.measuring === active) return;
     this.measuring = active;
-    if (!active) this.clearMeasurements();
+    if (active) {
+      window.addEventListener('keydown', this.onMeasureKey);
+      window.addEventListener('keyup', this.onMeasureKey);
+    } else {
+      window.removeEventListener('keydown', this.onMeasureKey);
+      window.removeEventListener('keyup', this.onMeasureKey);
+      this.clearMeasurements();
+    }
     this.renderer.domElement.style.cursor = active ? 'crosshair' : '';
+    this.callbacks.onMeasuring?.(active);
   }
 
   clearMeasurements(): void {
-    this.measurePoints = [];
-    this.measureSnaps = [];
+    this.anchored = [];
+    this.pending = undefined;
+    this.hover = undefined;
+    this.hoveredLine = -1;
     this.clearGroup(this.measureGroup);
+    this.measureLabels.replaceChildren();
     this.callbacks.onMeasure(null);
     this.invalidate();
   }
+
+  private onMeasurePress = (event: PointerEvent): void => {
+    this.press = { x: event.clientX, y: event.clientY };
+  };
 
   private onClick = (event: MouseEvent): void => {
     // A gesture the cube already consumed — a snap, or an orbit that happened
@@ -772,44 +886,191 @@ export class Viewport {
       return;
     }
     if (!this.measuring) return;
-    // A click that landed on the gizmo has already been handled as a view change.
-    const canvasRect = this.renderer.domElement.getBoundingClientRect();
-    if (
-      this.gizmo.pick(
-        event.clientX - canvasRect.left,
-        event.clientY - canvasRect.top,
-        canvasRect.width,
-        canvasRect.height,
-      )
-    ) {
+    // An orbit or a pan ends with a click too, wherever the drag let go, and
+    // that click used to drop a point there. Judged by the cube's slop: a
+    // press that travelled further than a steady hand does was a drag.
+    const press = this.press;
+    this.press = undefined;
+    if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > GIZMO_DRAG_SLOP) return;
+    if (this.overGizmo(event.clientX, event.clientY)) return;
+
+    const target = this.targetAt(event.clientX, event.clientY);
+    if (!target) return;
+
+    if (!this.pending) {
+      this.pending = target;
+      this.callbacks.onMeasure({ point: target.point, snap: target.snap });
+    } else {
+      const a = this.pending.point;
+      this.anchored.push({ a, b: target.point });
+      this.pending = undefined;
+      this.callbacks.onMeasure(this.reading(a, target));
+    }
+    this.hover = target;
+    this.hoveredLine = -1;
+    this.drawMeasurement();
+  };
+
+  private onMeasureMove = (event: PointerEvent): void => {
+    if (!this.measuring || this.gizmoDrag) return;
+    this.lastPointer = { x: event.clientX, y: event.clientY };
+    // Mid-drag the view is moving under the pointer; the rubber band would
+    // only chase it. It catches up on release, from the next move.
+    if (event.buttons !== 0) return;
+    this.shiftHeld = event.shiftKey;
+    this.updateHover();
+  };
+
+  private onMeasureLeave = (): void => {
+    if (!this.measuring) return;
+    this.lastPointer = undefined;
+    this.hover = undefined;
+    this.hoveredLine = -1;
+    this.drawMeasurement();
+  };
+
+  private onMeasureKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Shift') {
+      const held = event.type === 'keydown';
+      if (held !== this.shiftHeld) {
+        this.shiftHeld = held;
+        this.updateHover();
+      }
       return;
     }
-
-    const hit = this.hitModel(event.clientX, event.clientY);
-    const snapped = hit ? this.snap(hit) : this.snapToGroundGrid();
-    if (!snapped) return;
-
-    this.measurePoints.push(snapped.point);
-    this.measureSnaps.push(snapped.kind);
-    if (this.measurePoints.length > 2) {
-      this.measurePoints = [snapped.point];
-      this.measureSnaps = [snapped.kind];
+    if (event.type !== 'keydown' || event.key !== 'Escape') return;
+    // Typing somewhere: that field's Escape, not this one.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable]')) return;
+    if (this.pending) {
+      this.pending = undefined;
+      const last = this.anchored.at(-1);
+      this.callbacks.onMeasure(last ? this.reading(last.a, { point: last.b, snap: 'surface' }) : null);
+      this.updateHover();
+    } else {
+      this.setMeasuring(false);
     }
-
-    this.drawMeasurement();
-
-    const [a, b] = this.measurePoints;
-    this.callbacks.onMeasure(
-      b
-        ? {
-            point: b,
-            snap: this.measureSnaps[1],
-            distance: a.distanceTo(b),
-            delta: new Vector3().subVectors(b, a),
-          }
-        : { point: a, snap: this.measureSnaps[0] },
-    );
   };
+
+  /** Re-reads what is under the pointer and redraws the preview from it. */
+  private updateHover(): void {
+    const at = this.lastPointer;
+    if (!at || !this.measuring) return;
+    if (this.overGizmo(at.x, at.y)) {
+      this.hover = undefined;
+      this.hoveredLine = -1;
+    } else {
+      this.hover = this.targetAt(at.x, at.y);
+      // Finished lines are only read when nothing is being drawn: mid-line,
+      // the pointer crossing an old line is on its way somewhere else.
+      this.hoveredLine = this.pending ? -1 : this.lineAt(at.x, at.y);
+    }
+    if (this.pending && this.hover) {
+      this.callbacks.onMeasure({ ...this.reading(this.pending.point, this.hover), live: true });
+    }
+    this.drawMeasurement();
+  }
+
+  /** The measurement from `a` to `target`, as the readout shows it. */
+  private reading(a: Vector3, target: Target): Measurement {
+    return {
+      point: target.point,
+      snap: target.snap,
+      axis: target.axis,
+      distance: a.distanceTo(target.point),
+      delta: new Vector3().subVectors(target.point, a),
+    };
+  }
+
+  private overGizmo(clientX: number, clientY: number): boolean {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return (
+      this.gizmo.pick(clientX - rect.left, clientY - rect.top, rect.width, rect.height) !== undefined
+    );
+  }
+
+  /**
+   * The point a click at a screen position takes.
+   *
+   * Snapped to the model where the pointer is over it, to the ground grid
+   * where it is not, and then — with Shift down and a first point waiting —
+   * held to the axis of the first point it is furthest along.
+   */
+  private targetAt(clientX: number, clientY: number): Target | undefined {
+    const hit = this.hitModel(clientX, clientY);
+    const snapped = hit ? this.snap(hit) : this.snapToGroundGrid();
+    if (!snapped) return undefined;
+    if (this.shiftHeld && this.pending) return lockToAxis(this.pending.point, snapped.point);
+    return snapped;
+  }
+
+  /** The finished line within reach of a screen position, nearest first. */
+  private lineAt(clientX: number, clientY: number): number {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    let best = -1;
+    let bestDistance = MEASURE_LINE_PX;
+    this.anchored.forEach(({ a, b }, index) => {
+      const pa = this.toScreen(a, rect);
+      const pb = this.toScreen(b, rect);
+      if (!pa || !pb) return;
+      const distance = pointToSegment(x, y, pa, pb);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+    return best;
+  }
+
+  /** A world point in canvas pixels, or undefined behind the camera. */
+  private toScreen(point: Vector3, rect: DOMRect): [number, number] | undefined {
+    const ndc = point.clone().project(this.controls.active);
+    if (ndc.z > 1) return undefined;
+    return [((ndc.x + 1) / 2) * rect.width, ((1 - ndc.y) / 2) * rect.height];
+  }
+
+  /** Every line on screen, finished ones first and then the one being drawn. */
+  private lines(): { a: Vector3; b: Vector3; live: boolean }[] {
+    const all: { a: Vector3; b: Vector3; live: boolean }[] = this.anchored.map((l) => ({ ...l, live: false }));
+    if (this.pending && this.hover) all.push({ a: this.pending.point, b: this.hover.point, live: true });
+    return all;
+  }
+
+  /**
+   * One label per line, remade with the lines. `placeLabels` puts them on
+   * screen, and keeps them there as the camera moves.
+   */
+  private buildLabels(): void {
+    this.measureLabels.replaceChildren(
+      ...this.lines().map(({ a, b, live }, index) => {
+        const label = document.createElement('div');
+        label.className = 'viewport__measure-label';
+        if (live) label.classList.add('viewport__measure-label--live');
+        if (index === this.hoveredLine) label.classList.add('viewport__measure-label--hovered');
+        label.textContent = formatNumber(a.distanceTo(b), 3);
+        return label;
+      }),
+    );
+    this.placeLabels();
+  }
+
+  /** Puts each label on its line's midpoint, or hides it behind the camera. */
+  private placeLabels(): void {
+    const labels = this.measureLabels.children;
+    if (labels.length === 0) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.lines().forEach(({ a, b }, index) => {
+      const label = labels[index] as HTMLElement | undefined;
+      if (!label) return;
+      const at = this.toScreen(new Vector3().addVectors(a, b).multiplyScalar(0.5), rect);
+      label.hidden = !at;
+      if (!at) return;
+      label.style.left = `${at[0]}px`;
+      label.style.top = `${at[1]}px`;
+    });
+  }
 
   /**
    * How far, in world units, a pixel covers at a given depth.
@@ -830,20 +1091,32 @@ export class Viewport {
    * aiming near it meant. Each has its own pixel radius: corners grab from
    * furthest away, being the most useful and the hardest to hit exactly.
    */
-  private snap(hit: Intersection): { point: Vector3; kind: SnapKind } | undefined {
+  private snap(hit: Intersection): Target | undefined {
     const surface = hit.point.clone();
     const scale = this.worldPerPixel(hit.distance);
     const mesh = hit.object as Mesh;
 
-    const vertex = this.nearestVertex(mesh, surface, hit.face);
-    if (vertex && vertex.distanceTo(surface) < SNAP_VERTEX_PX * scale) {
-      return { point: vertex, kind: 'vertex' };
-    }
+    const vertex = this.nearestCorner(mesh, surface, hit, SNAP_VERTEX_PX * scale);
+    if (vertex) return { point: vertex, snap: 'vertex' };
 
-    const edge = this.nearestFeatureEdgePoint(surface, SNAP_EDGE_PX * scale);
-    if (edge) return { point: edge, kind: 'edge' };
+    const edge = this.nearestFeatureEdgePoint(surface, SNAP_EDGE_PX * scale, hit);
+    if (edge) return { point: edge, snap: 'edge' };
 
-    return { point: surface, kind: 'surface' };
+    return { point: surface, snap: 'surface' };
+  }
+
+  /**
+   * Whether a candidate point sits behind the surface the pointer is on.
+   *
+   * Every candidate is within a few pixels' worth of the hit, but on a part
+   * thinner than that the far edge is within reach too, and it is not what
+   * anyone pointing at the near face meant. Depth is along the pick ray,
+   * which `hitModel` left in `raycaster`.
+   */
+  private behindSurface(candidate: Vector3, hit: Intersection, slack: number): boolean {
+    const { origin, direction } = this.raycaster.ray;
+    const depth = candidate.clone().sub(origin).dot(direction);
+    return depth > hit.distance + slack;
   }
 
   /**
@@ -874,14 +1147,14 @@ export class Viewport {
    * half of what the tool is for, and before this a click into empty space
    * simply did nothing.
    */
-  private snapToGroundGrid(): { point: Vector3; kind: SnapKind } | undefined {
+  private snapToGroundGrid(): Target | undefined {
     const target = new Vector3();
     if (!this.raycaster.ray.intersectPlane(GROUND_PLANE, target)) return undefined;
 
     const step = this.gridStep();
     return {
       point: new Vector3(Math.round(target.x / step) * step, Math.round(target.y / step) * step, 0),
-      kind: 'grid',
+      snap: 'grid',
     };
   }
 
@@ -890,30 +1163,49 @@ export class Viewport {
     return (this.helperSize * 2) / GRID_DIVISIONS;
   }
 
-  private nearestVertex(mesh: Mesh, point: Vector3, face: Intersection['face']): Vector3 | undefined {
-    if (!face) return undefined;
-    const positions = mesh.geometry.getAttribute('position');
-    if (!positions) return undefined;
-
+  /**
+   * The nearest corner of the shape within `radius` of the hit.
+   *
+   * Two sources: the corners of the triangle hit, which cover a corner on the
+   * face being pointed at, and the ends of the model's feature edges, which
+   * cover a corner on the next face over — a box's corner is a corner of six
+   * triangles, and the pointer is on only one of them.
+   */
+  private nearestCorner(mesh: Mesh, point: Vector3, hit: Intersection, radius: number): Vector3 | undefined {
     let best: Vector3 | undefined;
-    let bestDistance = Infinity;
-    for (const index of [face.a, face.b, face.c]) {
-      const vertex = new Vector3(
-        positions.getX(index),
-        positions.getY(index),
-        positions.getZ(index),
-      ).applyMatrix4(mesh.matrixWorld);
+    let bestDistance = radius;
+    const consider = (vertex: Vector3): void => {
       const distance = vertex.distanceTo(point);
-      if (distance < bestDistance) {
+      if (distance < bestDistance && !this.behindSurface(vertex, hit, radius)) {
         bestDistance = distance;
-        best = vertex;
+        best = vertex.clone();
       }
+    };
+
+    const positions = mesh.geometry.getAttribute('position');
+    if (hit.face && positions) {
+      for (const index of [hit.face.a, hit.face.b, hit.face.c]) {
+        consider(
+          new Vector3(positions.getX(index), positions.getY(index), positions.getZ(index)).applyMatrix4(
+            mesh.matrixWorld,
+          ),
+        );
+      }
+    }
+
+    const edges = this.ensureFeatureEdges();
+    const end = new Vector3();
+    for (let i = 0; i < edges.length; i += 3) {
+      end.set(edges[i], edges[i + 1], edges[i + 2]);
+      // Cheap reject before the square root: most ends are nowhere near.
+      if (Math.abs(end.x - point.x) > radius || Math.abs(end.y - point.y) > radius || Math.abs(end.z - point.z) > radius) continue;
+      consider(end);
     }
     return best;
   }
 
-  /** The closest point on any feature edge, if one is within `radius`. */
-  private nearestFeatureEdgePoint(point: Vector3, radius: number): Vector3 | undefined {
+  /** The closest point on any feature edge, if one is within `radius` and not behind the surface. */
+  private nearestFeatureEdgePoint(point: Vector3, radius: number, hit: Intersection): Vector3 | undefined {
     const edges = this.ensureFeatureEdges();
     if (edges.length === 0) return undefined;
 
@@ -940,7 +1232,7 @@ export class Viewport {
       candidate.copy(a).addScaledVector(ab, t);
 
       const distance = candidate.distanceTo(point);
-      if (distance < bestDistance) {
+      if (distance < bestDistance && !this.behindSurface(candidate, hit, radius)) {
         bestDistance = distance;
         best = candidate.clone();
       }
@@ -1011,38 +1303,82 @@ export class Viewport {
     return this.featureEdges;
   }
 
+  /**
+   * Redraws every measurement from scratch: the finished lines with their
+   * end markers, the waiting point, and the line from it to the pointer.
+   *
+   * Everything is drawn over the model rather than in it, because a point on
+   * the far side of a part is still a point you placed. The marker spheres
+   * are unit spheres scaled to the camera, so `scaleMarkers` can keep them
+   * the same size on screen through a zoom without rebuilding.
+   */
   private drawMeasurement(): void {
     this.clearGroup(this.measureGroup);
-    const markerRadius = this.controls.distance * 0.006;
+    const cut = new Color(token('--bs-cut-300', '#5cd3e0'));
+    const lit = new Color(token('--bs-cut-100', '#cdeef2'));
+    const axisColor: Record<Axis, Color> = {
+      x: new Color(token('--bs-viewport-axis-x', '#d64545')),
+      y: new Color(token('--bs-viewport-axis-y', '#2f9e63')),
+      z: new Color(token('--bs-viewport-axis-z', '#3b82f6')),
+    };
 
-    for (const point of this.measurePoints) {
-      const marker = new Mesh(
-        new SphereGeometry(markerRadius, 12, 8),
+    const marker = (point: Vector3, color: Color, opacity = 1): void => {
+      const sphere = new Mesh(
+        new SphereGeometry(1, 12, 8),
         new MeshStandardMaterial({
-          color: new Color(token('--bs-cut-300', '#5cd3e0')),
-          emissive: new Color(token('--bs-cut-300', '#5cd3e0')),
+          color,
+          emissive: color,
           emissiveIntensity: 0.6,
           depthTest: false,
+          transparent: opacity < 1,
+          opacity,
         }),
       );
-      marker.position.copy(point);
-      marker.renderOrder = 10;
-      this.measureGroup.add(marker);
-    }
+      sphere.position.copy(point);
+      sphere.renderOrder = 10;
+      sphere.userData.marker = true;
+      this.measureGroup.add(sphere);
+    };
+    const line = (a: Vector3, b: Vector3, color: Color, opacity = 1): void => {
+      const segment = new Line(
+        new BufferGeometry().setFromPoints([a, b]),
+        new LineBasicMaterial({ color, depthTest: false, transparent: opacity < 1, opacity }),
+      );
+      segment.renderOrder = 10;
+      this.measureGroup.add(segment);
+    };
 
-    if (this.measurePoints.length === 2) {
-      const geometry = new BufferGeometry().setFromPoints(this.measurePoints);
-      const line = new Line(
-        geometry,
-        new LineBasicMaterial({
-          color: new Color(token('--bs-cut-300', '#5cd3e0')),
-          depthTest: false,
-        }),
-      );
-      line.renderOrder = 10;
-      this.measureGroup.add(line);
+    this.anchored.forEach(({ a, b }, index) => {
+      const color = index === this.hoveredLine ? lit : cut;
+      marker(a, color);
+      marker(b, color);
+      line(a, b, color);
+    });
+
+    if (this.pending) {
+      marker(this.pending.point, cut);
+      if (this.hover) {
+        const color = this.hover.axis ? axisColor[this.hover.axis] : cut;
+        line(this.pending.point, this.hover.point, color, 0.75);
+      }
     }
+    // The point a click would take, drawn a shade lighter than one it did.
+    if (this.hover) marker(this.hover.point, lit, 0.7);
+
+    this.scaleMarkers();
+    this.buildLabels();
     this.invalidate();
+  }
+
+  /** Keeps the markers the same size on screen as the camera moves. */
+  private scaleMarkers(): void {
+    // Also runs from the camera's first `apply`, in the constructor, before
+    // `controls` is assigned; there are no markers then, so nothing is read.
+    if (this.measureGroup.children.length === 0) return;
+    const radius = this.controls.distance * MARKER_SCALE;
+    for (const child of this.measureGroup.children) {
+      if (child.userData.marker) child.scale.setScalar(radius);
+    }
   }
 
   // -- capture (spec feature 20) --------------------------------------------

@@ -1295,6 +1295,49 @@ textarea {
   margin: 0;
 }
 
+/* A reading that is still following the pointer: the number a click would
+   give, not one it gave, and shown a shade lighter to say so. */
+.viewport__measure--live dd:not(.measure__hint) {
+  color: var(--bs-text-muted);
+}
+
+.measure__hint {
+  color: var(--bs-text-muted);
+  font-family: var(--bs-font-ui);
+}
+
+/* Each measured line carries its length on its midpoint, finished or still
+   following the pointer. The same card as the readout, shrunk to one number,
+   and never in the way: no pointer events, and lifted just clear of the line. */
+.viewport__measure-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.viewport__measure-label {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 6px));
+  padding: 1px 6px;
+  border-radius: var(--bs-radius-sm);
+  background: color-mix(in srgb, var(--bs-surface) 92%, transparent);
+  border: 1px solid var(--bs-border);
+  color: var(--bs-text);
+  font-family: var(--bs-font-mono);
+  font-size: var(--bs-font-size-sm);
+  white-space: nowrap;
+}
+
+/* Still following the pointer: the number a click would give. */
+.viewport__measure-label--live {
+  color: var(--bs-text-muted);
+}
+
+.viewport__measure-label--hovered {
+  border-color: var(--bs-cut-300);
+}
+
 /* Which feature a measured point landed on. Muted and small: it qualifies the
    number beside it rather than competing with it. */
 .measure__snap {

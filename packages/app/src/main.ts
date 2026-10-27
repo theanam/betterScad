@@ -146,6 +146,7 @@ class App {
   private animationHost!: HTMLElement;
   private busyBadge!: HTMLElement;
   private measureReadout!: HTMLElement;
+  private measureButton!: HTMLButtonElement;
 
   private cursor = { line: 1, column: 1 };
   private lastStats: RenderStats | undefined;
@@ -470,6 +471,7 @@ class App {
 
     this.viewport = new Viewport(viewportHost, {
       onMeasure: (measurement) => this.showMeasurement(measurement),
+      onMeasuring: (active) => this.showMeasuring(active),
       // Guarded: the Viewport constructor applies the camera once, before
       // `paintHud` below has been assigned.
       onCamera: () => {
@@ -543,18 +545,15 @@ class App {
 
     const measureButton = button({
       iconName: 'ruler',
-      hint: 'Measure — click two points on the model for the distance between them',
+      hint: 'Measure — click two points for the distance between them; Shift holds the line to an axis, Esc leaves',
       title: 'Measure',
-      onClick: () => {
-        const active = !this.viewport.measuring;
-        this.viewport.setMeasuring(active);
-        measureButton.classList.toggle('btn--active', active);
-        measureButton.setAttribute('aria-pressed', String(active));
-        if (!active) this.measureReadout.style.display = 'none';
-      },
+      // The viewport reports the change back through `onMeasuring`, which is
+      // what paints the button: Escape switches the tool off from in there too.
+      onClick: () => this.viewport.setMeasuring(!this.viewport.measuring),
     });
     measureButton.classList.add('viewport__control', 'viewport__control--round');
     measureButton.setAttribute('aria-pressed', 'false');
+    this.measureButton = measureButton;
 
     const colorsButton = button({
       iconName: 'colors',
@@ -1852,19 +1851,40 @@ class App {
     }
   }
 
-  private showMeasurement(measurement: Parameters<ConstructorParameters<typeof Viewport>[1]['onMeasure']>[0]): void {
-    if (!measurement) {
+  /** The measure button and readout follow the tool, however it was switched. */
+  private showMeasuring(active: boolean): void {
+    this.measureButton.classList.toggle('btn--active', active);
+    this.measureButton.setAttribute('aria-pressed', String(active));
+    if (!active) {
       this.measureReadout.style.display = 'none';
       return;
     }
-    const { point, distance, delta, snap } = measurement;
+    this.measureReadout.style.display = '';
+    this.measureReadout.replaceChildren(
+      el('dl', {}, [
+        el('dt', { text: '' }),
+        el('dd', { class: 'measure__hint', text: 'Click a point on the model, or on the grid · Esc leaves' }),
+      ]),
+    );
+  }
+
+  private showMeasurement(measurement: Parameters<ConstructorParameters<typeof Viewport>[1]['onMeasure']>[0]): void {
+    if (!measurement) {
+      // The tool is still on: back to the opening hint rather than to nothing.
+      if (this.viewport.measuring) this.showMeasuring(true);
+      else this.measureReadout.style.display = 'none';
+      return;
+    }
+    const { point, distance, delta, snap, axis, live } = measurement;
     const SNAP_LABEL: Record<typeof snap, string> = {
       vertex: 'corner',
       edge: 'edge',
       grid: 'grid',
       surface: 'surface',
+      axis: 'axis',
     };
     this.measureReadout.style.display = '';
+    this.measureReadout.classList.toggle('viewport__measure--live', live === true);
     this.measureReadout.replaceChildren(
       el('dl', {}, [
         el('dt', { text: 'Point' }),
@@ -1874,7 +1894,7 @@ class App {
           }),
           // Which feature it landed on: a distance taken from a corner means
           // something a distance taken from mid-surface does not.
-          el('span', { class: 'measure__snap', text: SNAP_LABEL[snap] }),
+          el('span', { class: 'measure__snap', text: axis ? `along ${axis.toUpperCase()}` : SNAP_LABEL[snap] }),
         ]),
         ...(distance !== undefined && delta
           ? [
@@ -1885,7 +1905,16 @@ class App {
                 text: `[${formatNumber(delta.x, 3)}, ${formatNumber(delta.y, 3)}, ${formatNumber(delta.z, 3)}]`,
               }),
             ]
-          : [el('dt', { text: '' }), el('dd', { text: 'Click a second point' })]),
+          : []),
+        ...(distance === undefined || live
+          ? [
+              el('dt', { text: '' }),
+              el('dd', {
+                class: 'measure__hint',
+                text: 'Click the second point · Shift holds it to an axis · Esc drops the first',
+              }),
+            ]
+          : []),
       ]),
     );
   }

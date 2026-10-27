@@ -56,7 +56,7 @@ you.
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
 | **Orthographic view** | One click flattens the view: no perspective, parallel edges stay parallel and sizes read true at any depth — what front and top views are for. Remembered across reloads. |
 | **Arrange the panels** | Drag any panel — code, viewport, console, Customizer, Files — to either column, resize them, hide the code, or maximize one panel to fill the window. The Settings menu's Layout section has presets (model focus, code focus, tune parameters, mirrored) and a reset to default. Remembered across reloads. |
-| **Measurement** | Click points in the viewport for coordinates and distances. |
+| **Measurement** | Click two points in the viewport for the distance between them. Points snap to corners, edges and faces, the line follows the pointer until the second click, Shift holds it to an axis, and every line carries its length. Esc leaves. |
 | **Vary colours** | One click paints every item its own colour, so touching parts are easy to tell apart. Everything in one `union()` stays one colour; colours set with `color()` are kept. |
 | **Animation** | `$t` playback in the app, frame export from the CLI. |
 | **Works offline** | Installable, and fully functional with no network. |
