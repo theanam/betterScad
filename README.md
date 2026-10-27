@@ -54,6 +54,7 @@ you.
 | **Project files** | Add images, drawings, meshes, fonts and libraries once; every tab reaches them by name, as though they sat in the same folder. |
 | **Fonts for `text()`** | Name a font and it loads itself — ~50 Google Fonts, the ones installed on your machine, or a file of your own. Every one previewed in its own typeface. |
 | **CAD navigation** | Turntable orbit with a corner view cube — click a face to snap to it, or drag it to orbit. |
+| **Auto fit** | A toggle keeps the model fitted in view as it grows or shrinks, without touching the orientation. Off by default, remembered across reloads. |
 | **Orthographic view** | One click flattens the view: no perspective, parallel edges stay parallel and sizes read true at any depth — what front and top views are for. Remembered across reloads. |
 | **Arrange the panels** | Drag any panel — code, viewport, console, Customizer, Files — to either column, resize them, hide the code, or maximize one panel to fill the window. The Settings menu's Layout section has presets (model focus, code focus, tune parameters, mirrored) and a reset to default. Remembered across reloads. |
 | **Measurement** | Click two points in the viewport for the distance between them. Points snap to corners, edges and faces, the line follows the pointer until the second click, Shift holds it to an axis, and every line carries its length. Esc leaves. |

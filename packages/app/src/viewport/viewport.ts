@@ -265,6 +265,15 @@ export class Viewport {
   showEdges = false;
 
   private lastBounds: { min: Vector3; max: Vector3 } | null = null;
+  /**
+   * Refit the camera whenever the model's extent changes.
+   *
+   * Only the extent: a render that leaves the model the same size keeps the
+   * camera exactly where it was, so typing inside a model does not nudge the
+   * view, and an orbit survives a re-render. The orientation is kept either
+   * way; a fit only moves the target and the distance.
+   */
+  private autoFit = false;
   /** The two halves of `lastBounds`, kept apart because they arrive apart. */
   private meshBounds: { min: Vector3; max: Vector3 } | null = null;
   private contourBounds: { min: Vector3; max: Vector3 } | null = null;
@@ -561,8 +570,10 @@ export class Viewport {
       min.min(half.min);
       max.max(half.max);
     }
+    const changed = !this.lastBounds || !this.lastBounds.min.equals(min) || !this.lastBounds.max.equals(max);
     this.lastBounds = { min, max };
     this.scaleHelpersTo(this.lastBounds);
+    if (this.autoFit && changed) this.frameAll();
     this.invalidate();
   }
 
@@ -703,6 +714,13 @@ export class Viewport {
   }
 
   // -- framing --------------------------------------------------------------
+
+  /** Switching auto fit on fits the model at once: a setting that waits for the next render looks broken. */
+  setAutoFit(on: boolean): void {
+    if (on === this.autoFit) return;
+    this.autoFit = on;
+    if (on && this.lastBounds) this.frameAll();
+  }
 
   frameAll(): void {
     if (this.lastBounds) {

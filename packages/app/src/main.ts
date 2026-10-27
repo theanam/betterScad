@@ -490,6 +490,7 @@ class App {
       axes: this.workspace.layout.showAxes,
     });
     this.viewport.projection = this.workspace.layout.orthographic ? 'orthographic' : 'perspective';
+    this.viewport.setAutoFit(this.workspace.layout.autoFit);
 
     // The HUD tracks the camera, which changes far more often than anything
     // else on screen, so it updates directly rather than through refreshChrome.
@@ -514,7 +515,7 @@ class App {
    * Named views used to live in a button stack; the view cube replaces them and
    * shows the current orientation besides. What is left are the two things the
    * cube cannot express — reset, fit and the projection — tucked directly
-   * beneath it, and the display toggles (grid, measure, colours), moved out of
+   * beneath it, and the display toggles (grid, measure, colours, auto fit), moved out of
    * the way to the opposite corner. Every named view is still reachable from the
    * command palette.
    */
@@ -590,10 +591,31 @@ class App {
     };
     this.setOrthographicState(this.workspace.layout.orthographic);
 
+    // A standing mode rather than a one-off camera move, so it sits with the
+    // other toggles and not in the camera row, which has no room for a fifth.
+    const autoFitButton = button({
+      iconName: 'autofit',
+      title: 'Auto fit',
+      hint: 'Auto fit — keep the model fitted in view as it changes size',
+      onClick: () => this.toggleAutoFit(),
+    });
+    autoFitButton.classList.add('viewport__control', 'viewport__control--round');
+    this.setAutoFitState = (on: boolean): void => {
+      autoFitButton.classList.toggle('btn--active', on);
+      autoFitButton.setAttribute('aria-pressed', String(on));
+      setHint(
+        autoFitButton,
+        on ? 'Auto fit is on — the view refits whenever the model changes size' : 'Auto fit — keep the model fitted in view as it changes size',
+      );
+      autoFitButton.setAttribute('aria-label', 'Auto fit');
+    };
+    this.setAutoFitState(this.workspace.layout.autoFit);
+
     const displayTools = el('div', { class: 'viewport__tools viewport__tools--topleft' }, [
       gridButton,
       measureButton,
       colorsButton,
+      autoFitButton,
     ]);
 
     // --- camera, under the view cube ---
@@ -628,6 +650,18 @@ class App {
     this.workspace.layout.orthographic = on;
     this.viewport.projection = on ? 'orthographic' : 'perspective';
     this.setOrthographicState(on);
+    this.workspace.persist();
+  }
+
+  /** Set by `buildViewTools`, so the command palette can keep the button honest. */
+  private setAutoFitState: (on: boolean) => void = () => {};
+
+  /** Keep the model fitted as it changes size, for the whole app, remembered across reloads. */
+  private toggleAutoFit(): void {
+    const on = !this.workspace.layout.autoFit;
+    this.workspace.layout.autoFit = on;
+    this.viewport.setAutoFit(on);
+    this.setAutoFitState(on);
     this.workspace.persist();
   }
 
@@ -2176,6 +2210,7 @@ class App {
       },
 
       { id: 'view.fit', category: 'View', title: 'Fit model in view', run: () => this.viewport.frameAll() },
+      { id: 'view.autoFit', category: 'View', title: 'Toggle auto fit', run: () => this.toggleAutoFit() },
       { id: 'view.iso', category: 'View', title: 'Isometric view', run: () => this.viewport.setView('iso') },
       { id: 'view.top', category: 'View', title: 'Top view', run: () => this.viewport.setView('top') },
       { id: 'view.bottom', category: 'View', title: 'Bottom view', run: () => this.viewport.setView('bottom') },

@@ -74,6 +74,15 @@ export interface LayoutState {
    */
   orthographic: boolean;
   /**
+   * Keep the model fitted in the viewport as it changes size.
+   *
+   * Off by default: after the opening view the camera belongs to the user,
+   * and a model that is refitted on every keystroke is one you cannot zoom in
+   * on. Switched on, every render whose extent differs from the last one is
+   * refitted, keeping the orientation.
+   */
+  autoFit: boolean;
+  /**
    * Which measurement of a circle the editor offers first.
    *
    * Radius and diameter are both right, and people are firmly one or the
@@ -99,6 +108,7 @@ export const DEFAULT_LAYOUT: LayoutState = {
   showAxes: true,
   varyColors: false,
   orthographic: false,
+  autoFit: false,
   roundMeasure: 'diameter',
   inchEntry: true,
   indentWidth: 2,
