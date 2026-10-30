@@ -133,7 +133,8 @@ out, exactly as in OpenSCAD.
 | `cylinder(…, chamfer)`<br>`chamfer1`, `chamfer2`, `edge_style` | Takes the rim off either end — cut flat by default, or `edge_style = "round"`. `1` is the bottom and `2` the top, as with `r1`/`r2` | A revolve of the same profile |
 | `linear_extrude(…, scale, ease)` | Curves a tapered extrusion into its ends instead of running dead straight. `ease = 0` is the stock shape; `[bottom, top]` eases each end on its own | A generated module stacking the same short extrusions |
 | `text(…, radius)`<br>`start`, `facing` | Runs the writing around a circle instead of a straight line, spaced by real letter widths | Per-glyph `text()` calls, with the widths measured into the file |
-| `regular_polygon(sides, length)` | An equilateral polygon — say the side length, not the radius | `circle()` at the matching radius, with `$fn = sides` |
+| `polygon(points, paths, convexity, r)` | Rounds every corner of a polygon; a corner the radius does not fit takes the largest that does | A generated module building the same arcs |
+| `regular_polygon(sides, length, r)` | An equilateral polygon — say the side length, not the radius; `r` rounds its corners | `circle()` at the matching radius, with `$fn = sides` |
 | `thread(d, pitch, h)` | A screw thread. Add `internal = true` for the hole the same bolt screws into; `profile = "trapezoid"` or `"square"` and `crest = "round"` change the tooth | A generated module sweeping the profile up a twisted extrusion |
 | `gear(m, teeth, h)` | An involute gear. Any two sharing a module mesh. Add `internal = true` for a ring gear, `helix` for a helical one | A generated module building the same involute profile |
 | `translate(x, y, z)`<br>`rotate(x, y, z)`<br>`mirror(x, y, z)` | Loose numbers, for when the brackets are just noise | `translate([x, y, z])`, and so on |

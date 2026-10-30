@@ -49,6 +49,8 @@ const CALLS = {
   rotate_extrude: 'rotate_extrude($fn = 16%) translate([6, 0]) square(3);',
   projection: 'linear_extrude(2) projection(%) translate([0, 0, -1]) cube(6);',
   linear_extrude: 'linear_extrude(%) square(8);',
+  polygon: 'linear_extrude(2) polygon([[0, 0], [10, 0], [5, 8]]%);',
+  regular_polygon: 'linear_extrude(2) regular_polygon(6, 4%);',
   // These three need a file on disk, and `text` a font. Listed so the coverage
   // test below can see them, skipped by the loop above.
   surface: undefined,

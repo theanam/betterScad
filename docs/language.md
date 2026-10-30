@@ -206,7 +206,8 @@ numbered suffix rather than shadowing it.
 | [`cylinder(chamfer)`](#cylinderchamfer) | module: a revolve of the same profile |
 | [`linear_extrude(ease)`](#linear_extrudeease) | module: a stack of short straight extrusions |
 | [`text(radius)`](#textradius) | module: per-glyph `text()`, with the widths measured in |
-| [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides` |
+| [`polygon(r)`](#polygonr) | module: the same points with each corner replaced by an arc |
+| [`regular_polygon()`](#regular_polygon) | module: `circle()` with `$fn = sides`, or the same arcs when rounded |
 | [`thread()`](#thread) | module: the same profile swept up a twisted extrusion |
 | [`gear()`](#gear) | module: the same involute profile, extruded |
 | [Loose-number transforms](#loose-number-transforms) | components collected into a vector |
@@ -505,20 +506,59 @@ Because it needs measuring, **saving as `.scad` needs the font loaded**. Without
 it the export refuses and says so, rather than writing the text in the wrong
 places. The command line takes `--font` as it already does for rendering.
 
-### `regular_polygon()`
+### `polygon(r)`
 
-`regular_polygon(sides, length)` — an equilateral polygon described the way you
-would measure one, by the length of a side rather than by a radius:
+`polygon(points, paths, convexity, r)` is the stock `polygon()` with one
+argument added: a radius for its corners, so that not every polygon has to be
+sharp.
 
 ```scad
-regular_polygon(6, 10);   // a hexagon whose every side is 10
+polygon([[0, 0], [40, 0], [20, 25]], r = 4);        // a triangle, corners eased
+polygon(outline, holes, r = 1.5);                   // every path rounded, holes too
+```
+
+**`r` is the fourth argument, after `convexity`.** Named is clearer.
+
+Every corner is replaced by an arc tangent to both of its sides. A reflex
+corner is rounded the other way, as a fillet; a straight-through vertex has no
+corner and is left where it is; a repeated point is dropped.
+
+**Where the radius does not fit, the corner takes the largest that does.** Two
+neighbouring corners share the side between them, and a side is split between
+the two in proportion to what each asks for — a sharp corner next to a blunt
+one gets most of it rather than half. Each corner still meets both of its sides
+tangentially; it is only smaller. One warning names the smallest radius any
+corner was reduced to. For a rectangle this is the same rule `square(r)` uses:
+half the shortest side.
+
+`r` defaults to `0`, and at `0` this *is* the stock primitive: nothing is
+reported as an extension and the file exports byte for byte. The resolution of
+the arcs follows `$fn`/`$fa`/`$fs` as a circle's does.
+
+**Downgrade:** a generated module that builds the same points — the same
+corner arithmetic, written in OpenSCAD — and calls `polygon()` on them.
+
+### `regular_polygon()`
+
+`regular_polygon(sides, length, r)` — an equilateral polygon described the way
+you would measure one, by the length of a side rather than by a radius:
+
+```scad
+regular_polygon(6, 10);          // a hexagon whose every side is 10
+regular_polygon(6, 10, r = 2);   // the same hexagon with its corners rounded
 ```
 
 Fewer than three sides cannot close a shape, and a side length of zero or less
 has no shape to describe; both are errors rather than an empty result.
 
+`r` rounds the corners exactly as [`polygon(r)`](#polygonr) does. Every corner
+is alike, so the largest radius that fits is the apothem, where the straight
+sides vanish and the shape is a circle; anything past it is clamped there with
+a warning.
+
 **Downgrade:** a generated module wrapping `circle($fn = sides)` at the
-circumradius `length / (2 * sin(180 / sides))`.
+circumradius `length / (2 * sin(180 / sides))`, or, with `r`, handing the same
+vertices to the `polygon(r)` module.
 
 ### `thread()`
 

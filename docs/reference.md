@@ -8,7 +8,7 @@ This is the same content as the app’s **Help & Reference** view — the button
 
 Screenshots are rendered by the engine itself, from the code shown beside them. Where a faint grey ghost appears, that is the "before" — a `%` shape marking where the solid started.
 
-**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 21 entries, each saying what it becomes when you save as plain `.scad`.
+**Only want what BetterSCAD adds?** Jump to [BetterSCAD additions](#betterscad-additions) — 22 entries, each saying what it becomes when you save as plain `.scad`.
 
 **OpenSCAD** — [3D shapes](#3d-shapes) · [2D shapes](#2d-shapes) · [Moving and changing shapes](#moving-and-changing-shapes) · [Combining shapes](#combining-shapes) · [Between 2D and 3D](#between-2d-and-3d) · [Writing a model](#writing-a-model) · [Repeating and choosing](#repeating-and-choosing) · [Modifier characters](#modifier-characters) · [Special variables](#special-variables) · [Maths](#maths) · [Lists and text](#lists-and-text) · [Checking types](#checking-types) · [Output and checks](#output-and-checks)
 
@@ -2858,12 +2858,69 @@ Values outside `0` to `1` are clamped, with a warning. Past `1` the profile woul
 
 See also: [`linear_extrude()`](#entry-linear_extrude) · [`cylinder(chamfer)`](#entry-cylinder-chamfer) · [`rotate_extrude()`](#entry-rotate_extrude) · [`hull()`](#entry-hull)
 
+<a id="entry-polygon-radius"></a>
+
+### polygon(r)
+
+```
+polygon(points, paths, convexity, r)
+```
+
+The same `polygon()` you already use, with one more number on the end: a radius for its corners, so that not every polygon has to be sharp.
+
+```scad
+polygon([[0, 0], [40, 0], [20, 25]], r = 4);
+```
+
+<img src="images/reference/polygon-radius.png" alt="A triangle with every corner eased to a radius of 4." width="420">
+
+*A triangle with every corner eased to a radius of 4.*
+
+```scad
+polygon([[0, 0], [40, 0], [40, 14], [16, 14], [16, 30], [0, 30]],
+        r = 4);
+```
+
+<img src="images/reference/polygon-radius-reflex.png" alt="An L: the outer corners rounded, the inner one filleted." width="420">
+
+*An L: the outer corners rounded, the inner one filleted.*
+
+```scad
+polygon([[0, 0], [40, 0], [40, 30], [32, 30], [32, 8], [0, 8]],
+        r = 8);
+```
+
+<img src="images/reference/polygon-radius-clamped.png" alt="A radius that does not fit everywhere. The post and the bar are 8 wide, so the corners at their ends meet at a radius of 4; the outer corner and the inner fillet take the full 8. The console says how small the rest went." width="420">
+
+*A radius that does not fit everywhere. The post and the bar are 8 wide, so the corners at their ends meet at a radius of 4; the outer corner and the inner fillet take the full 8. The console says how small the rest went.*
+
+| Argument | |
+| --- | --- |
+| `points` | As always: the corners, in order. |
+| `paths` | As always: which points make each outline. Optional. |
+| `convexity` | As always. Default `1`. |
+| `r` | Corner radius; each corner takes as much of it as fits. Default `0`. |
+
+Every corner is replaced by an arc that meets both of its sides tangentially. A corner that bends inwards is rounded the other way, as a fillet. A point on a straight line has no corner and stays where it is.
+
+**A corner the radius does not fit takes the largest that does.** Two neighbouring corners share the side between them; it is split in proportion to what each asks for, so a sharp corner next to a blunt one gets most of it. Each corner is still tangent to both of its sides — it is only smaller — and one warning names the smallest radius any corner was reduced to.
+
+With `paths`, every path is rounded, holes included.
+
+`r` is the **fourth** argument, after `convexity`. Named — `r = 3` — is clearer. Leave it out, or set it to `0`, and this is the stock `polygon()`: nothing is reported as an extension and the file exports byte for byte.
+
+The arcs follow `$fn`/`$fa`/`$fs` as a circle does.
+
+**Saved as OpenSCAD `.scad`:** A generated module that builds the same points — the same corner arithmetic, written in OpenSCAD — and hands them to `polygon()`.
+
+See also: [`polygon()`](#entry-polygon) · [`regular_polygon()`](#entry-regular_polygon) · [`cube(r), square(r)`](#entry-shape-radius) · [`offset()`](#entry-offset) · [`$fn`](#entry-fn)
+
 <a id="entry-regular_polygon"></a>
 
 ### regular_polygon()
 
 ```
-regular_polygon(sides, length)
+regular_polygon(sides, length, r)
 ```
 
 A flat shape with any number of equal sides — a hexagon, a pentagon — described the way you would measure one: by how long a side is.
@@ -2877,6 +2934,14 @@ regular_polygon(6, 20);
 *A hexagon whose every side is exactly 20 long.*
 
 ```scad
+regular_polygon(6, 20, r = 4);
+```
+
+<img src="images/reference/regular-polygon-rounded.png" alt="The same hexagon with its corners rounded to a radius of 4." width="420">
+
+*The same hexagon with its corners rounded to a radius of 4.*
+
+```scad
 linear_extrude(6) regular_polygon(5, 18);
 ```
 
@@ -2888,6 +2953,7 @@ linear_extrude(6) regular_polygon(5, 18);
 | --- | --- |
 | `sides` | Number of sides. Three or more. |
 | `length` | Length of one side. Greater than zero. |
+| `r` | Corner radius, up to the apothem. Default `0`. |
 
 `circle($fn = 6)` already gives a hexagon, but you have to work out the radius that produces the side length you actually want. This does that arithmetic for you.
 
@@ -2897,9 +2963,11 @@ Fewer than three sides cannot close a shape, and a side length of zero or less h
 
 The polygon is centred on the origin, with a vertex on the +X axis.
 
-**Saved as OpenSCAD `.scad`:** A generated module wrapping `circle($fn = sides)` at the matching circumradius.
+`r` rounds the corners, exactly as `polygon(r)` does. Every corner is alike, so the largest radius that fits is the apothem — the distance from the centre to a side — where the straight sides vanish and the shape is a circle. Anything past it is clamped there, with a warning.
 
-See also: [`circle()`](#entry-circle) · [`polygon()`](#entry-polygon) · [`$fn`](#entry-fn)
+**Saved as OpenSCAD `.scad`:** A generated module wrapping `circle($fn = sides)` at the matching circumradius, or, with `r`, handing the same vertices to the `polygon(r)` module.
+
+See also: [`circle()`](#entry-circle) · [`polygon()`](#entry-polygon) · [`polygon(r)`](#entry-polygon-radius) · [`$fn`](#entry-fn)
 
 <a id="entry-thread"></a>
 

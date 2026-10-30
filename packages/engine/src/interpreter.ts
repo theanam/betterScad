@@ -1861,6 +1861,158 @@ export function circumradius(sides: number, length: number): number {
 }
 
 /**
+ * A closed loop with every corner replaced by an arc of radius `r`
+ * (`polygon(r)` and `regular_polygon(r)`, BetterSCAD extensions).
+ *
+ * Each arc is tangent to both sides of its corner, meeting them at `t = r /
+ * tan(θ / 2)` from the vertex, where θ is the angle between the sides. The
+ * arc's centre sits on the bisector, `r / sin(θ / 2)` in; the sweep is `180° -
+ * θ`. A reflex corner uses the same arithmetic, and comes out rounded the
+ * other way, because the bisector points out of the shape there.
+ *
+ * **Where the radius does not fit, the corner takes the largest that does.**
+ * Two neighbouring corners share the side between them, and together they
+ * can use no more of it than its length; a side is split between the two in
+ * proportion to what each asks for, so a sharp corner next to a blunt one gets
+ * most of it rather than half. The radius a corner ends up with is `t · tan(θ
+ * / 2)` for the `t` it was allowed, which is the radius whose arc meets the
+ * sides exactly there — every corner is still tangent to both of its sides.
+ * For a rectangle this is the same rule `square(r)` uses: half the shortest
+ * side. A straight-through vertex and a spike doubling back on itself have no
+ * corner to round, and are kept as they are; a repeated point is dropped.
+ *
+ * The generated export module `rounded_polygon` in transpile.ts is the same
+ * arithmetic in OpenSCAD, step for step; change one and change the other.
+ */
+export function roundCorners(
+  loop: [number, number][],
+  r: number,
+  resolution: Resolution,
+): { points: [number, number][]; smallest: number | undefined } {
+  // A repeated point is a zero-length side, which would leave the corner
+  // beside it looking like no corner at all; a loop closed by repeating its
+  // first point is the same thing across the wrap.
+  loop = dedupe(loop);
+  if (loop.length > 1 && distance(loop[0], loop[loop.length - 1]) < 1e-9) loop = loop.slice(0, -1);
+  const n = loop.length;
+  if (n < 3 || !(r > 0)) return { points: loop, smallest: undefined };
+
+  const prev = (i: number): [number, number] => loop[(i + n - 1) % n];
+  const next = (i: number): [number, number] => loop[(i + 1) % n];
+  const sides = (i: number): { u: [number, number]; v: [number, number]; angle: number } | undefined => {
+    const u = unit(prev(i), loop[i]);
+    const v = unit(next(i), loop[i]);
+    if (!u || !v) return undefined;
+    const angle = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
+    if (angle < 1e-9 || angle > Math.PI - 1e-9) return undefined;
+    return { u, v, angle };
+  };
+
+  // What each corner asks for, as a distance along its sides.
+  const wants = loop.map((_, i) => {
+    const s = sides(i);
+    return s ? r / Math.tan(s.angle / 2) : 0;
+  });
+  // What it gets: no more than its share of either side.
+  const share = (i: number, j: number, side: number): number =>
+    wants[i] + wants[j] > 0 ? (side * wants[i]) / (wants[i] + wants[j]) : 0;
+  const gets = loop.map((p, i) =>
+    Math.min(
+      wants[i],
+      share(i, (i + n - 1) % n, distance(prev(i), p)),
+      share(i, (i + 1) % n, distance(p, next(i))),
+    ),
+  );
+
+  const points: [number, number][] = [];
+  let smallest: number | undefined;
+  loop.forEach((p, i) => {
+    const s = sides(i);
+    const t = gets[i];
+    if (!s || !(t > 0)) {
+      points.push(p);
+      return;
+    }
+    const half = s.angle / 2;
+    const radius = t * Math.tan(half);
+    if (radius < r * (1 - 1e-9)) smallest = smallest === undefined ? radius : Math.min(smallest, radius);
+
+    const [u, v] = [s.u, s.v];
+    const bisector = unit([p[0] + u[0] + v[0], p[1] + u[1] + v[1]], p)!;
+    const away = radius / Math.sin(half);
+    const centre: [number, number] = [p[0] + bisector[0] * away, p[1] + bisector[1] * away];
+    const start: [number, number] = [p[0] + u[0] * t, p[1] + u[1] * t];
+    const end: [number, number] = [p[0] + v[0] * t, p[1] + v[1] * t];
+
+    // From one tangent point to the other, the short way round; which way
+    // that is comes from the two radii, not from the loop's winding.
+    const sweep = Math.PI - s.angle;
+    const turn =
+      (start[0] - centre[0]) * (end[1] - centre[1]) - (start[1] - centre[1]) * (end[0] - centre[0]) >= 0
+        ? 1
+        : -1;
+    const from = Math.atan2(start[1] - centre[1], start[0] - centre[0]);
+    // Nudged before the ceil: a sweep that is exactly a whole number of
+    // fragments must not pick up an extra step from floating-point noise, and
+    // the export module makes the same nudge so the two agree point for point.
+    const steps = Math.max(1, Math.ceil((fragments(radius, resolution) * sweep) / (2 * Math.PI) - 1e-9));
+    for (let k = 0; k <= steps; k++) {
+      const at = from + (turn * sweep * k) / steps;
+      points.push([centre[0] + radius * Math.cos(at), centre[1] + radius * Math.sin(at)]);
+    }
+  });
+  return { points, smallest };
+}
+
+/**
+ * Rounds every loop of a polygon, reporting once if any corner had to settle
+ * for less. Loops are re-indexed into one point list, as `polygon()` takes.
+ */
+function roundPolygon(
+  loops: [number, number][][],
+  r: number,
+  resolution: Resolution,
+  what: string,
+  interp: Interpreter,
+  span: SourceSpan,
+): { points: [number, number][]; paths: number[][] } {
+  if (!Number.isFinite(r) || r === 0) return flattenLoops(loops);
+  if (r < 0) {
+    interp.warn(`${what}(): r = ${r} is negative, so nothing is rounded.`, span, 'eval.radius-negative');
+    return flattenLoops(loops);
+  }
+  let smallest: number | undefined;
+  const rounded = loops.map((loop) => {
+    const result = roundCorners(loop, r, resolution);
+    if (result.smallest !== undefined) smallest = Math.min(smallest ?? Infinity, result.smallest);
+    return result.points;
+  });
+  if (smallest !== undefined) {
+    interp.warn(
+      `${what}(): r = ${r} does not fit every corner; each takes the largest that fits, down to ${roundTo(smallest, 4)}.`,
+      span,
+      'eval.radius-clamped',
+    );
+  }
+  return flattenLoops(rounded);
+}
+
+function flattenLoops(loops: [number, number][][]): { points: [number, number][]; paths: number[][] } {
+  const points: [number, number][] = [];
+  const paths: number[][] = [];
+  for (const loop of loops) {
+    paths.push(loop.map((_, i) => points.length + i));
+    points.push(...loop);
+  }
+  return { points, paths };
+}
+
+function roundTo(value: number, places: number): number {
+  const scale = 10 ** places;
+  return Math.round(value * scale) / scale;
+}
+
+/**
  * Segments per turn never drops below this, whatever `$fn` says.
  *
  * A thread is a helix sampled in the same plane a circle is, but a coarse
@@ -3295,10 +3447,12 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
    * work here is turning a side length into the circumradius that produces it.
    */
   regular_polygon: {
-    params: ['sides', 'length'],
-    build: (args, _children, _scope, interp, span) => {
+    params: ['sides', 'length', 'r'],
+    defaults: { r: '0' },
+    build: (args, _children, scope, interp, span) => {
       const sides = Math.round(asNumber(args.get('sides'), 0));
       const length = asNumber(args.get('length'), 0);
+      const r = asNumber(args.get('r'), 0);
 
       if (!Number.isFinite(sides) || sides < 3) {
         interp.error(
@@ -3317,13 +3471,21 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
         return undefined;
       }
 
-      return node(
-        'circle',
-        { r: circumradius(sides, length), resolution: { fn: sides, fa: 12, fs: 2 } },
-        [],
-        [],
-        span,
-      );
+      const radius = circumradius(sides, length);
+      if (!Number.isFinite(r) || r === 0) {
+        return node('circle', { r: radius, resolution: { fn: sides, fa: 12, fs: 2 } }, [], [], span);
+      }
+
+      // The same vertices the circle would have, first one on +X, each corner
+      // then rounded. Every corner is alike, so the largest radius that fits
+      // is the apothem, where the sides vanish and the shape is a circle.
+      const corners: [number, number][] = [];
+      for (let i = 0; i < sides; i++) {
+        const angle = (2 * Math.PI * i) / sides;
+        corners.push([radius * Math.cos(angle), radius * Math.sin(angle)]);
+      }
+      const rounded = roundPolygon([corners], r, resolutionFor(args, scope), 'regular_polygon', interp, span);
+      return node('polygon', { points: rounded.points, paths: undefined }, [], [], span);
     },
   },
 
@@ -3338,8 +3500,10 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
   },
 
   polygon: {
-    params: ['points', 'paths', 'convexity'],
-    build: (args, _children, _scope, interp, span) => {
+    // `r` (BetterSCAD) rounds every corner; see `roundCorners`.
+    params: ['points', 'paths', 'convexity', 'r'],
+    defaults: { r: '0' },
+    build: (args, _children, scope, interp, span) => {
       const points: [number, number][] = [];
       for (const p of toList(args.get('points'))) {
         const v = asVector(p, 2);
@@ -3361,7 +3525,16 @@ export const BUILTIN_MODULES: Record<string, BuiltinModule> = {
           );
         }
       }
-      return node('polygon', { points, paths }, [], [], span);
+      const r = asNumber(args.get('r'), 0);
+      if (r === 0 || !Number.isFinite(r)) return node('polygon', { points, paths }, [], [], span);
+
+      // Each path is its own loop with its own corners; with none given, the
+      // points are one loop, as `polygon()` reads them.
+      const loops = paths
+        ? paths.map((path) => path.filter((i) => i >= 0 && i < points.length).map((i) => points[i]))
+        : [points];
+      const rounded = roundPolygon(loops, r, resolutionFor(args, scope), 'polygon', interp, span);
+      return node('polygon', { points: rounded.points, paths: paths ? rounded.paths : undefined }, [], [], span);
     },
   },
 

@@ -411,9 +411,70 @@ translatez(6) cube([20, 14, 10], centerxy = true);`,
       ],
     },
     {
+      id: 'polygon-radius',
+      name: 'polygon(r)',
+      signature: 'polygon(points, paths, convexity, r)',
+      extension: true,
+      plain:
+        'The same `polygon()` you already use, with one more number on the end: a radius for ' +
+        'its corners, so that not every polygon has to be sharp.',
+      details: [
+        'Every corner is replaced by an arc that meets both of its sides tangentially. A corner ' +
+          'that bends inwards is rounded the other way, as a fillet. A point on a straight line ' +
+          'has no corner and stays where it is.',
+        '**A corner the radius does not fit takes the largest that does.** Two neighbouring ' +
+          'corners share the side between them; it is split in proportion to what each asks ' +
+          'for, so a sharp corner next to a blunt one gets most of it. Each corner is still ' +
+          'tangent to both of its sides — it is only smaller — and one warning names the ' +
+          'smallest radius any corner was reduced to.',
+        'With `paths`, every path is rounded, holes included.',
+        '`r` is the **fourth** argument, after `convexity`. Named — `r = 3` — is clearer. Leave ' +
+          'it out, or set it to `0`, and this is the stock `polygon()`: nothing is reported as ' +
+          'an extension and the file exports byte for byte.',
+        'The arcs follow `$fn`/`$fa`/`$fs` as a circle does.',
+      ],
+      params: [
+        { name: 'points', description: 'As always: the corners, in order.' },
+        { name: 'paths', description: 'As always: which points make each outline. Optional.' },
+        { name: 'convexity', description: 'As always. Default `1`.' },
+        { name: 'r', description: 'Corner radius; each corner takes as much of it as fits. Default `0`.' },
+      ],
+      downgrade:
+        'A generated module that builds the same points — the same corner arithmetic, written in ' +
+        'OpenSCAD — and hands them to `polygon()`.',
+      examples: [
+        {
+          code: 'polygon([[0, 0], [40, 0], [20, 25]], r = 4);',
+          image: 'polygon-radius',
+          caption: 'A triangle with every corner eased to a radius of 4.',
+        },
+        {
+          code: [
+            'polygon([[0, 0], [40, 0], [40, 14], [16, 14], [16, 30], [0, 30]],',
+            '        r = 4);',
+          ].join('\n'),
+          image: 'polygon-radius-reflex',
+          caption: 'An L: the outer corners rounded, the inner one filleted.',
+        },
+        {
+          code: [
+            'polygon([[0, 0], [40, 0], [40, 30], [32, 30], [32, 8], [0, 8]],',
+            '        r = 8);',
+          ].join('\n'),
+          image: 'polygon-radius-clamped',
+          caption:
+            'A radius that does not fit everywhere. The post and the bar are 8 wide, so the ' +
+            'corners at their ends meet at a radius of 4; the outer corner and the inner fillet ' +
+            'take the full 8. The console says how small the rest went.',
+        },
+      ],
+      see: ['polygon', 'regular_polygon', 'shape-radius', 'offset', 'fn'],
+      keywords: ['rounded', 'corners', 'radius', 'fillet', 'polygon', 'smooth', 'ease', 'soft'],
+    },
+    {
       id: 'regular_polygon',
       name: 'regular_polygon()',
-      signature: 'regular_polygon(sides, length)',
+      signature: 'regular_polygon(sides, length, r)',
       extension: true,
       plain:
         'A flat shape with any number of equal sides — a hexagon, a pentagon — described the way ' +
@@ -425,12 +486,19 @@ translatez(6) cube([20, 14, 10], centerxy = true);`,
         'Fewer than three sides cannot close a shape, and a side length of zero or less has no ' +
           'shape to describe. Both are errors rather than an empty result.',
         'The polygon is centred on the origin, with a vertex on the +X axis.',
+        '`r` rounds the corners, exactly as `polygon(r)` does. Every corner is alike, so the ' +
+          'largest radius that fits is the apothem — the distance from the centre to a side — ' +
+          'where the straight sides vanish and the shape is a circle. Anything past it is ' +
+          'clamped there, with a warning.',
       ],
       params: [
         { name: 'sides', description: 'Number of sides. Three or more.' },
         { name: 'length', description: 'Length of one side. Greater than zero.' },
+        { name: 'r', description: 'Corner radius, up to the apothem. Default `0`.' },
       ],
-      downgrade: 'A generated module wrapping `circle($fn = sides)` at the matching circumradius.',
+      downgrade:
+        'A generated module wrapping `circle($fn = sides)` at the matching circumradius, or, ' +
+        'with `r`, handing the same vertices to the `polygon(r)` module.',
       examples: [
         {
           code: 'regular_polygon(6, 20);',
@@ -438,12 +506,17 @@ translatez(6) cube([20, 14, 10], centerxy = true);`,
           caption: 'A hexagon whose every side is exactly 20 long.',
         },
         {
+          code: 'regular_polygon(6, 20, r = 4);',
+          image: 'regular-polygon-rounded',
+          caption: 'The same hexagon with its corners rounded to a radius of 4.',
+        },
+        {
           code: 'linear_extrude(6) regular_polygon(5, 18);',
           image: 'regular-polygon-extruded',
           caption: 'A pentagon, extruded.',
         },
       ],
-      see: ['circle', 'polygon', 'fn'],
+      see: ['circle', 'polygon', 'polygon-radius', 'fn'],
       keywords: ['hexagon', 'pentagon', 'octagon', 'equilateral', 'nut', 'side length'],
     },
     {

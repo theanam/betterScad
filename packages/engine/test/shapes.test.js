@@ -1,6 +1,6 @@
 /**
  * The added shape arguments and shapes: `square(r)`, `cube(r)`,
- * `cylinder(chamfer)`, `regular_polygon`.
+ * `cylinder(chamfer)`, `polygon(r)`, `regular_polygon`.
  *
  * Each is defined in the interpreter as the scene subtree its legacy export
  * prints, so the downgrade is equivalent by construction rather than by two
@@ -506,6 +506,145 @@ test('a shape that cannot close is an error, not a guess', async () => {
       `expected an error for ${source}`,
     );
   }
+});
+
+// --- polygon(r) ---------------------------------------------------------------
+
+/** The export builds the same points the evaluator did. */
+async function exportMatches(source) {
+  const own = await measure(source);
+  const legacy = transpileToLegacyScad(parse(source).file, { header: false }).source;
+  const exported = await measure(legacy);
+  assert.ok(
+    own.bounds.every((v, i) => near(v, exported.bounds[i], 1e-6)) && near(own.area, exported.area, 1e-6),
+    `the export of ${source} differs:\n  ${exported.bounds} area ${exported.area}\n  own ${own.bounds} area ${own.area}\n${legacy}`,
+  );
+}
+
+test('polygon(r) rounds a rectangle exactly as square(r) does', async () => {
+  await equivalent(
+    '$fn = 32;\npolygon([[0, 0], [30, 0], [30, 20], [0, 20]], r = 5);',
+    '$fn = 32;\nsquare([30, 20], r = 5);',
+  );
+});
+
+test('r is the fourth argument, after points, paths and convexity', async () => {
+  await equivalent(
+    '$fn = 32;\npolygon([[0, 0], [30, 0], [30, 20], [0, 20]], undef, 1, 5);',
+    '$fn = 32;\nsquare([30, 20], r = 5);',
+  );
+});
+
+test('a reflex corner is rounded the other way', async () => {
+  // An L: five convex corners each lose (1 - PI/4) r², the reflex one gives
+  // the same back, so the shape loses exactly four corners' worth.
+  const source = '$fn = 256;\npolygon([[0, 0], [20, 0], [20, 10], [10, 10], [10, 20], [0, 20]], r = 2);';
+  const { area, bounds } = await measure(source);
+  const expected = 300 - 4 * (1 - Math.PI / 4) * 4;
+  assert.ok(Math.abs(area - expected) / expected < 1e-3, `area ${area}, expected ${expected}`);
+  // The arcs are tangent to the sides, so nothing pokes past the outline.
+  assert.ok(bounds.slice(0, 2).every((v) => near(v, 0)) && near(bounds[3], 20) && near(bounds[4], 20), `${bounds}`);
+  await exportMatches(source);
+});
+
+test('every path is rounded, holes included', async () => {
+  // A 20-square with a 10-square hole: the outer corners lose what the
+  // hole's corners gain, so the area is the plain 300.
+  const source =
+    '$fn = 64;\npolygon([[0, 0], [20, 0], [20, 20], [0, 20], [5, 5], [15, 5], [15, 15], [5, 15]], ' +
+    'paths = [[0, 1, 2, 3], [4, 5, 6, 7]], r = 2);';
+  const { area } = await measure(source);
+  assert.ok(near(area, 300, 1e-6), `area ${area}`);
+  await exportMatches(source);
+});
+
+test('a corner that cannot take the radius takes the largest that fits', async () => {
+  const source = '$fn = 64;\npolygon([[0, 0], [10, 0], [5, 8]], r = 100);';
+  const { warnings } = await render(source);
+  assert.ok(
+    warnings.some((w) => /polygon\(\): r = 100 does not fit every corner; each takes the largest that fits/.test(w)),
+    `expected a clamp warning, got ${JSON.stringify(warnings)}`,
+  );
+  const { area, bounds } = await measure(source);
+  // Still a shape, still inside the triangle it came from.
+  assert.ok(area > 10 && area < 40, `area ${area}`);
+  assert.ok(bounds[0] >= -1e-9 && bounds[1] >= -1e-9 && bounds[3] <= 10 + 1e-9 && bounds[4] <= 8 + 1e-9, `${bounds}`);
+  await exportMatches(source);
+});
+
+test('a sharp corner next to a blunt one gets most of their shared side', async () => {
+  // A 20° corner wants far more of the side than its 80° neighbours do; split
+  // in proportion, it gets more than half, which the warning's number shows.
+  const source = 'polygon([[0, 0], [20, 0], [10, 56.7]], r = 12);';
+  const { warnings } = await render(source);
+  const limit = warnings.map((w) => /down to (\d+(?:\.\d+)?)/.exec(w)?.[1]).find(Boolean);
+  assert.ok(limit !== undefined, `expected a clamp warning, got ${JSON.stringify(warnings)}`);
+  // Half of each long side would allow r = (side / 2) · tan(10°) at the apex;
+  // sharing in proportion allows more.
+  const halfSplit = (Math.hypot(10, 56.7) / 2) * Math.tan(Math.PI / 18);
+  assert.ok(Number(limit) > halfSplit * 1.2, `apex radius ${limit} is no better than a half split (${halfSplit})`);
+  await exportMatches(source);
+});
+
+test('a straight-through vertex is kept and a repeated point dropped', async () => {
+  await equivalent(
+    '$fn = 32;\npolygon([[0, 0], [15, 0], [30, 0], [30, 20], [30, 20], [0, 20]], r = 5);',
+    '$fn = 32;\nsquare([30, 20], r = 5);',
+  );
+});
+
+test('a negative r rounds nothing, and says so', async () => {
+  const { warnings } = await render('polygon([[0, 0], [10, 0], [5, 8]], r = -2);');
+  assert.ok(warnings.some((w) => /r = -2 is negative, so nothing is rounded/.test(w)), JSON.stringify(warnings));
+  await equivalent('polygon([[0, 0], [10, 0], [5, 8]], r = -2);', 'polygon([[0, 0], [10, 0], [5, 8]]);');
+});
+
+test('polygon() without r is stock', async () => {
+  const plain = 'polygon([[0, 0], [10, 0], [5, 8]]);';
+  assert.deepEqual(describeExtensions(parse(plain).file), []);
+  const legacy = transpileToLegacyScad(parse(plain).file, { header: false }).source;
+  assert.ok(!/__rounded_polygon/.test(legacy), `rewrote a stock call:\n${legacy}`);
+
+  const rounded = 'polygon([[0, 0], [10, 0], [5, 8]], r = 1);';
+  assert.deepEqual(describeExtensions(parse(rounded).file).map((e) => e.name), ['polygon(r = …)']);
+});
+
+test('regular_polygon(r) rounds every corner alike', async () => {
+  // Each 120° corner of a hexagon loses t·r - r²·(60°)/2 with t = r / tan(60°).
+  const source = '$fn = 256;\nregular_polygon(6, 10, r = 2);';
+  const { area } = await measure(source);
+  const hexagon = (6 * 100) / (4 * Math.tan(Math.PI / 6));
+  const corner = (4 / Math.tan(Math.PI / 3)) - (4 * (Math.PI / 3)) / 2;
+  const expected = hexagon - 6 * corner;
+  assert.ok(Math.abs(area - expected) / expected < 1e-3, `area ${area}, expected ${expected}`);
+  await exportMatches(source);
+});
+
+test('a radius past the apothem makes a circle', async () => {
+  const source = '$fn = 256;\nregular_polygon(6, 10, r = 20);';
+  const { warnings } = await render(source);
+  assert.ok(warnings.some((w) => /regular_polygon\(\): r = 20 does not fit every corner/.test(w)), JSON.stringify(warnings));
+  const { area } = await measure(source);
+  const apothem = 5 / Math.tan(Math.PI / 6);
+  const expected = Math.PI * apothem * apothem;
+  assert.ok(Math.abs(area - expected) / expected < 1e-3, `area ${area}, expected ${expected}`);
+  await exportMatches(source);
+});
+
+test('a rounded regular_polygon defines both of its helpers once', async () => {
+  const source = 'regular_polygon(6, 10, r = 2);\nregular_polygon(5, 8, r = 1);\npolygon([[0, 0], [10, 0], [5, 8]], r = 1);';
+  const legacy = transpileToLegacyScad(parse(source).file, { header: false }).source;
+  assert.equal(legacy.match(/module __regular_polygon\(/g)?.length, 1, legacy);
+  assert.equal(legacy.match(/module __rounded_polygon\(/g)?.length, 1, legacy);
+  assert.ok(/^\s*__rounded_polygon\(\[for/m.test(legacy), `regular_polygon does not call the rounding helper:\n${legacy}`);
+  assert.deepEqual(describeExtensions(parse(legacy).file), []);
+});
+
+test('a plain regular_polygon does not drag the rounding helper in', async () => {
+  const legacy = transpileToLegacyScad(parse('regular_polygon(6, 10);').file, { header: false }).source;
+  // Referenced by the module body, so it is defined, but defined once and
+  // only because regular_polygon needs it there.
+  assert.equal(legacy.match(/module __rounded_polygon\(/g)?.length, 1, legacy);
 });
 
 // --- what the export looks like ---------------------------------------------

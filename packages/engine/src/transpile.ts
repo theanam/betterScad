@@ -163,6 +163,13 @@ const SUGARED_SHAPES: Record<string, SugaredShape> = {
     describe: 'square(r = …)',
     describeFor: (args) => describeUsed('square', ['r', 'chamfer'], 2, args),
   },
+  polygon: {
+    helper: 'rounded_polygon',
+    triggers: ['r'],
+    // Past points, paths and convexity.
+    positional: 3,
+    describe: 'polygon(r = …)',
+  },
   text: {
     helper: 'text_arc',
     // `start` and `facing` do nothing without a circle to put the text on, so
@@ -209,7 +216,14 @@ function usesSugar(shape: SugaredShape, args: Argument[]): boolean {
   return positional > shape.positional;
 }
 
-const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
+/**
+ * The generated modules, in the OpenSCAD they are written out as.
+ *
+ * A body may call another helper by writing its key between `{{` and `}}`;
+ * the printer defines that one too and fills in whatever name it was given,
+ * which is not always `__key`: the file may already declare that.
+ */
+const SHAPE_MODULES: Record<string, { params: string; body: string[]; uses?: string[] }> = {
   eased_extrude: {
     params: 'height, scale = 1, ease = 0, slices = 48, twist = 0, center = false, shear = [0, 0]',
     body: [
@@ -594,11 +608,69 @@ const SHAPE_MODULES: Record<string, { params: string; body: string[] }> = {
     ],
   },
   regular_polygon: {
-    params: 'sides, length',
+    params: 'sides, length, r = 0',
+    uses: ['rounded_polygon'],
     body: [
       '// A circle forced to $fn = sides is already a regular polygon; the only',
       '// work is turning one side length into the circumradius that gives it.',
-      'circle(r = length / (2 * sin(180 / sides)), $fn = sides);',
+      'R = length / (2 * sin(180 / sides));',
+      'if (r > 0)',
+      '  // Rounded: the same vertices, first one on +X, with each corner eased.',
+      '  {{rounded_polygon}}([for (i = [0 : sides - 1]) R * [cos(i * 360 / sides), sin(i * 360 / sides)]], r = r);',
+      'else',
+      '  circle(r = R, $fn = sides);',
+    ],
+  },
+  rounded_polygon: {
+    params: 'points, paths = undef, convexity = 1, r = 0',
+    body: [
+      '// Every corner replaced by an arc tangent to both of its sides, meeting',
+      '// them t = r / tan(angle / 2) from the vertex. Where r does not fit, the',
+      '// corner takes the largest radius that does: the side between two corners',
+      '// is split between them in proportion to what each asks for, so a sharp',
+      '// corner next to a blunt one gets most of it. A straight-through vertex',
+      '// and a spike have no corner to round and are kept; a repeated point is',
+      '// dropped, so that the corner beside it still counts as one.',
+      'function unit(v) = let (l = norm(v)) l > 1e-12 ? v / l : [0, 0];',
+      'function dedupe(loop) = [for (i = [0 : len(loop) - 1]) if (norm(loop[i] - loop[(i + 1) % len(loop)]) > 1e-9) loop[i]];',
+      'function frags(rr) = $fn > 0 ? max($fn, 3) : ceil(max(min(360 / $fa, rr * 2 * PI / $fs), 5));',
+      'function prev(loop, i) = loop[(i + len(loop) - 1) % len(loop)];',
+      'function next(loop, i) = loop[(i + 1) % len(loop)];',
+      '// The angle at a corner, or undef where there is none.',
+      'function corner(loop, i) = let (',
+      '    u = unit(prev(loop, i) - loop[i]), v = unit(next(loop, i) - loop[i]),',
+      '    a = acos(max(-1, min(1, u * v))))',
+      '  norm(u) == 0 || norm(v) == 0 || a < 1e-7 || a > 180 - 1e-7 ? undef : a;',
+      'function wants(loop, i) = let (a = corner(loop, i)) a == undef ? 0 : r / tan(a / 2);',
+      'function share(w, i, j, side) = w[i] + w[j] > 0 ? side * w[i] / (w[i] + w[j]) : 0;',
+      'function gets(loop, w, i) = let (n = len(loop))',
+      '  min(w[i], share(w, i, (i + n - 1) % n, norm(loop[i] - prev(loop, i))),',
+      '      share(w, i, (i + 1) % n, norm(next(loop, i) - loop[i])));',
+      'function arc(loop, i, t) = let (',
+      '    p = loop[i], u = unit(prev(loop, i) - p), v = unit(next(loop, i) - p),',
+      '    a = corner(loop, i), rr = t * tan(a / 2),',
+      '    c = p + unit(u + v) * rr / sin(a / 2),',
+      '    s = p + u * t - c, e = p + v * t - c,',
+      '    // The short way round from one tangent point to the other.',
+      '    turn = s[0] * e[1] - s[1] * e[0] >= 0 ? 1 : -1,',
+      '    from = atan2(s[1], s[0]), steps = max(1, ceil(frags(rr) * (180 - a) / 360 - 1e-9)))',
+      '  [for (k = [0 : steps]) let (at = from + turn * (180 - a) * k / steps) c + rr * [cos(at), sin(at)]];',
+      'function rounded(raw) = let (loop = dedupe(raw)) len(loop) < 3 ? loop :',
+      '  let (w = [for (i = [0 : len(loop) - 1]) wants(loop, i)])',
+      '  [for (i = [0 : len(loop) - 1]) let (t = gets(loop, w, i)) each t > 0 ? arc(loop, i, t) : [loop[i]]];',
+      '// Each path is its own loop; the rounded loops are strung back into one',
+      '// point list with the paths re-numbered to match.',
+      'function offsets(loops, i = 0, at = 0) =',
+      '  i == len(loops) ? [] : concat([at], offsets(loops, i + 1, at + len(loops[i])));',
+      'if (!(r > 0))',
+      '  polygon(points, paths, convexity);',
+      'else if (paths == undef)',
+      '  polygon(rounded(points), convexity = convexity);',
+      'else',
+      '  let (loops = [for (path = paths) rounded([for (i = path) points[i]])], at = offsets(loops))',
+      '    polygon([for (loop = loops) each loop],',
+      '            [for (j = [0 : len(loops) - 1]) [for (k = [0 : len(loops[j]) - 1]) at[j] + k]],',
+      '            convexity);',
     ],
   },
 };
@@ -668,6 +740,7 @@ class Printer {
     for (let n = 2; this.taken.has(name); n++) name = `__${shape}_${n}`;
     this.taken.add(name);
     this.helpers.set(shape, name);
+    for (const used of SHAPE_MODULES[shape]?.uses ?? []) this.helperFor(used);
     return name;
   }
 
@@ -712,7 +785,8 @@ class Printer {
     for (const [shape, name] of this.helpers) {
       const { params, body } = SHAPE_MODULES[shape];
       const indent = ' '.repeat(this.indentWidth);
-      blocks.push(`module ${name}(${params}) {\n${body.map((l) => indent + l).join('\n')}\n}`);
+      const lines = body.map((l) => l.replace(/\{\{(\w+)\}\}/g, (_, used: string) => this.helpers.get(used) ?? `__${used}`));
+      blocks.push(`module ${name}(${params}) {\n${lines.map((l) => indent + l).join('\n')}\n}`);
     }
     return blocks.join('\n\n') + '\n\n';
   }

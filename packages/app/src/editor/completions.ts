@@ -184,10 +184,11 @@ const MODULES: BuiltinDoc[] = [
     label: 'polygon',
     template: 'polygon(points = [${}])',
     detail: 'polygon(points)',
-    info: '2D polygon. With `paths`, extra contours become holes.',
+    info: '2D polygon. With `paths`, extra contours become holes.\n\n`r` (BetterSCAD) rounds every corner; a corner the radius does not fit takes the largest that does.',
     type: 'class',
     forms: [
       { template: 'polygon(points = [${}], paths = [[${}]])', detail: 'polygon(points, paths)' },
+      { template: 'polygon(points = [${}], r = ${1:2})', detail: 'polygon(points, r)  — BetterSCAD' },
     ],
   },
   {
@@ -342,7 +343,7 @@ const MODULES: BuiltinDoc[] = [
       },
     ],
   },
-  { label: 'regular_polygon', template: 'regular_polygon(${1:6}, ${2:10})', detail: 'regular_polygon(sides, length)  — BetterSCAD', info: 'An equilateral polygon with `sides` sides, each `length` long. Fewer than 3 sides cannot close, and is an error.\n\nExports to `.scad` as a generated module wrapping circle($fn = sides).', type: 'class' },
+  { label: 'regular_polygon', template: 'regular_polygon(${1:6}, ${2:10})', detail: 'regular_polygon(sides, length, r)  — BetterSCAD', info: 'An equilateral polygon with `sides` sides, each `length` long. Fewer than 3 sides cannot close, and is an error. `r` rounds the corners, up to the apothem.\n\nExports to `.scad` as a generated module wrapping circle($fn = sides).', type: 'class', forms: [{ template: 'regular_polygon(${1:6}, ${2:10}, r = ${3:2})', detail: 'regular_polygon(sides, length, r)' }] },
 
   // Single-axis transforms (BetterSCAD extension). Grouped so the axis reads as
   // the point of the call rather than as a position in a vector.
