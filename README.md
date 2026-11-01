@@ -313,6 +313,33 @@ bscad model.bscad --legacy-scad -o out.scad # convert to plain OpenSCAD
 bscad model.scad --strict                   # treat warnings as errors, for CI
 ```
 
+## The engine as a library
+
+[![npm](https://img.shields.io/npm/v/%40betterscad%2Fengine?color=e8553e)](https://www.npmjs.com/package/@betterscad/engine)
+[![types](https://img.shields.io/npm/types/%40betterscad%2Fengine)](https://www.npmjs.com/package/@betterscad/engine)
+[![license](https://img.shields.io/npm/l/%40betterscad%2Fengine)](LICENSE)
+
+Everything BetterSCAD does to a model ships on its own as **`@betterscad/engine`**:
+parse and validate the source, evaluate it, build the geometry, read the
+Customizer parameters, export STL and the rest, and write plain OpenSCAD back
+out. No DOM, no UI: it runs in Node, in a Web Worker and in the browser.
+
+```sh
+npm i @betterscad/engine
+```
+
+```ts
+import { Engine } from '@betterscad/engine';
+
+const engine = await Engine.create();
+const result = await engine.render('cube([30, 20, 10], r = 3);', { parameters: {} });
+const stl = engine.export(result, 'stl');   // stl.data is a Uint8Array
+```
+
+See the [library README](packages/engine/README.md) for the API: diagnostics,
+the Customizer model, includes and fonts, drawing the meshes, and the plain
+OpenSCAD export.
+
 ## Browser support
 
 | | Rendering | Direct file save | System fonts |
@@ -346,6 +373,10 @@ workflow.
 The site is fully static: `npm run build`, then serve `packages/app/dist`
 anywhere. For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
 publishes on every push to `main` with no repo settings to change.
+
+The engine lives in `packages/engine`, an npm workspace the app and the CLI
+build from. An `engine-v*` tag at a commit publishes that version of the
+library to npm through [`.github/workflows/publish-engine.yml`](.github/workflows/publish-engine.yml).
 
 The build has no fixed base URL — one `dist/` works from a domain root, from a
 Pages project path and from `file://` in the desktop shell. The few tags that

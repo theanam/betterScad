@@ -1,0 +1,35 @@
+name: Publish @betterscad/engine
+
+# Push a tag like engine-v0.33.0 at the commit whose version that is. The
+# engine shares the project version (`npm run bump`), so every bump is a
+# release the tag can publish; not every bump has to be tagged.
+on:
+  push:
+    tags: ['engine-v*']
+
+permissions:
+  contents: read
+  # npm trusted publishing and provenance.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: Check the tag matches the package version
+        run: |
+          version=$(node -p "require('./packages/engine/package.json').version")
+          test "engine-v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+      - run: npm run version:check
+      - run: npm run build:engine
+      - run: npm test -w @betterscad/engine
+      - run: npm publish -w @betterscad/engine --provenance --access public
