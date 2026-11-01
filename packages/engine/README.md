@@ -1,28 +1,30 @@
 # libbetterscad
 
-A complete OpenSCAD engine for JavaScript. Give it any `.scad` file and get
-back diagnostics, a Customizer model, meshes, and files to save. No DOM, no
-bundler assumptions, no UI: the same code runs in Node, in a Web Worker and in
-the browser's main thread.
+The engine behind [BetterSCAD](https://betterscad.org) as a library: the
+OpenSCAD language, BetterSCAD's extensions to it, and the geometry behind
+both. Give it a `.scad` or `.bscad` file and get back diagnostics, a
+Customizer model, meshes, and files to save. No DOM, no bundler assumptions,
+no UI: the same code runs in Node, in a Web Worker and in the browser's main
+thread.
 
-**OpenSCAD compatibility is the point.** The whole OpenSCAD 2021.01 language
-is implemented and covered by tests, not a subset: every primitive, transform
-and boolean, `linear_extrude` and `rotate_extrude` with all their options,
-`hull()` and `minkowski()`, `import()` and `surface()`, `text()`, list
-comprehensions, `let`, `each`, `$fn`/`$fa`/`$fs`, special variables, `echo()`
-and `assert()`, `include` and `use`, and the Customizer comment syntax. A file
-written for OpenSCAD renders unmodified and gives the same geometry; the
-[language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md#compatibility)
-lists everything. A model that renders differently from OpenSCAD is a bug:
-[report it](https://github.com/theanam/betterScad/issues).
+It is three things at once:
 
-On top of that it understands BetterSCAD's extensions (`negative()`,
-`cube(r)`, `polygon(r)`, `thread()`, `gear()`, `center()` and the rest, all in
-the [language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md)),
-and it can write any file that uses them back out as plain OpenSCAD.
+- **A complete OpenSCAD.** The whole 2021.01 language, not a subset, covered
+  by tests. A file written for OpenSCAD renders unmodified and gives the same
+  geometry; the [compatibility list](https://github.com/theanam/betterScad/blob/main/docs/language.md#compatibility)
+  names every primitive, transform, boolean, extrusion, function and special
+  variable, and a model that renders differently is a bug to
+  [report](https://github.com/theanam/betterScad/issues).
+- **The BetterSCAD language.** Rounded and chamfered `cube(r)`, `square(r)`
+  and `polygon(r)`, `negative()`, `thread()`, `gear()`, `center()`,
+  `get_size()`, text on an arc, one-axis transforms and more, each a few
+  words in the file rather than a library to include. They are listed
+  [below](#betterscads-extensions).
+- **A way back.** Every extension has a defined rewrite to plain `.scad`, and
+  the engine writes it, so a file made with BetterSCAD opens in OpenSCAD and
+  nothing you write can strand you.
 
-It is the engine behind [betterscad.org](https://betterscad.org), the editor,
-and the `bscad` command line.
+It is the same engine the BetterSCAD editor and the `bscad` command line run.
 
 ```sh
 npm install libbetterscad
@@ -121,6 +123,32 @@ for the whole file, and `omittedLines` says which lines were left out.
 A plain `compile()` function is exported too, for when no kernel is loaded at
 all; then `get_size()` reports `undef` and everything else works.
 
+## BetterSCAD's extensions
+
+Everything OpenSCAD has, plus the following. The engine takes them in any
+file; there is nothing to enable. The
+[language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md)
+has each one in full, with what it becomes in plain `.scad`.
+
+| Syntax | What it does |
+| --- | --- |
+| `negative() { … }` | Turns anything inside it into negative space, cut from what is around it |
+| `cube(size, center, r, chamfer, centerxy)`<br>`square(size, center, r, chamfer)` | The stock box and rectangle with rounded (`r`) or chamfered edges; `centerxy` centres on X and Y and keeps the box standing on Z = 0 |
+| `cylinder(…, chamfer, chamfer1, chamfer2, edge_style)` | Takes the rim off either end, cut flat or `edge_style = "round"` |
+| `linear_extrude(…, scale, ease)` | Curves a tapered extrusion into its ends |
+| `text(…, radius, start, facing)` | Runs the writing around a circle, spaced by real letter widths |
+| `polygon(…, r)`<br>`regular_polygon(sides, length, r)` | Rounded corners, and an equilateral polygon given by its side length |
+| `thread(d, pitch, h, internal, profile, crest)` | A screw thread, or the hole the same bolt screws into |
+| `gear(m, teeth, h, internal, helix)` | An involute gear; any two sharing a module mesh |
+| `translate(x, y, z)`, `translatex(d)`, `rotatez(a)`, `mirrory()`, … | Loose numbers and one-axis forms of the three transforms |
+| `get_size(object)`<br>`get_position(object)` | How big a part is and where its lowest corner is, as `[x, y, z]`, for stacking one part on another |
+| `center() { … }`, `centerx()`, `centerxy()`, … | Centres everything inside on the first thing inside, on the named axes |
+| `for (i = 0; i < n; i = i + 1)` | A C-style loop as a statement |
+| `is_range(x)` | Tests for a range, like the other `is_*` functions |
+
+`describeExtensions(file)` tells you which of these a parsed file uses and on
+which lines; the editor's Info tab is built on it.
+
 ## Drawing it
 
 The engine does not draw. It hands you meshes, and any renderer takes them.
@@ -211,10 +239,30 @@ const engine = await Engine.create({ fonts });
 `text(font = "Inter:style=Bold")` resolves against the registered families
 and falls back to the default family when the one asked for is missing.
 
+## `.bscad` files
+
+`.bscad` is BetterSCAD's own format, and it *is* a `.scad` file: the source,
+with one JSON comment at the top that carries what the source cannot, such as
+Customizer presets, the camera and the editor's layout. OpenSCAD reads past
+the comment and renders the file as it is.
+
+```ts
+import { parseBscad, serializeBscad, toLegacyScadSource } from 'libbetterscad';
+
+const file = parseBscad(text);             // { source, metadata, hadMetadata }
+file.metadata.presets;                     // preset name -> parameter name -> value
+const saved = serializeBscad(file.source, { ...file.metadata, activePreset: 'Large' });
+const plain = toLegacyScadSource(text);    // the source alone
+```
+
+A plain `.scad` parses the same way, with `hadMetadata` false. Anything a
+future version adds to the metadata is preserved on a round trip.
+
 ## Plain OpenSCAD out
 
 A file that uses BetterSCAD extensions can be written as stock OpenSCAD, with
-each extension replaced by a generated module or a rewrite:
+each extension replaced by a generated module or a rewrite, defined once and
+called wherever the shape was used, so the export reads like what was written:
 
 ```ts
 import { parse, transpileToLegacyScad, describeExtensions } from 'libbetterscad';
@@ -226,12 +274,12 @@ legacy.source;                          // OpenSCAD 2021.01 reads this
 ```
 
 Two rewrites need more than the text. `text(radius = …)` spaces glyphs by their
-real widths, so it needs the fonts; `get_size()` needs the measurements from a
-compile of the same source, and is written out as the value it measured. The
-result says when either was missing rather than emitting a wrong file.
-
-`parseBscad` and `serializeBscad` read and write the `.bscad` format, which is
-the same source with a metadata header.
+real widths, so it needs the fonts; `get_size()` and `center()` need the
+measurements from a compile of the same source, and are written out as the
+values they measured. The result says when either was missing rather than
+emitting a wrong file, and `usesMeasurements(file)` says up front whether a
+file needs them, so a caller without geometry at hand only compiles when it
+has to.
 
 ## Lower levels
 
@@ -257,8 +305,8 @@ piece of it:
 
 ## Versioning
 
-The package version is the BetterSCAD version: the engine, the app and the CLI
-are released together and tested together. The `.scad` the engine writes
+The package version is the BetterSCAD version: the engine, the editor and the
+CLI are released together and tested together. The `.scad` the engine writes
 targets OpenSCAD 2021.01.
 
 ## Feedback

@@ -319,13 +319,14 @@ bscad model.scad --strict                   # treat warnings as errors, for CI
 [![types](https://img.shields.io/npm/types/libbetterscad)](https://www.npmjs.com/package/libbetterscad)
 [![license](https://img.shields.io/npm/l/libbetterscad)](LICENSE)
 
-Everything BetterSCAD does to a model ships on its own as **`libbetterscad`**,
-a complete OpenSCAD engine for JavaScript. It takes any `.scad` file, the
-whole OpenSCAD 2021.01 language and not a subset, and renders it unmodified to
-the same geometry OpenSCAD would produce. From one call you get diagnostics,
-the Customizer parameters, the meshes, and STL, 3MF, OFF, AMF, SVG or DXF to
-save. BetterSCAD's own extensions work too, and any file that uses them can be
-written back out as plain OpenSCAD. No DOM, no UI: it runs in Node, in a Web
+Everything BetterSCAD does to a model ships on its own as **`libbetterscad`**:
+the OpenSCAD language in full, the extensions in the table above, `.bscad`
+files, and the geometry behind them. It takes any `.scad` file, the whole
+OpenSCAD 2021.01 language and not a subset, and renders it unmodified to the
+same geometry OpenSCAD would produce. It takes every BetterSCAD extension the
+same way, and writes a file that uses them back out as plain OpenSCAD. From
+one call you get diagnostics, the Customizer parameters, the meshes, and STL,
+3MF, OFF, AMF, SVG or DXF to save. No DOM, no UI: it runs in Node, in a Web
 Worker and in the browser.
 
 ```sh
@@ -344,8 +345,8 @@ const stl = engine.export(result, 'stl');   // stl.data is a Uint8Array
 Use it to validate `.scad` files in CI, render them on a server, build a
 Customizer or a viewer into your own page, or convert between formats. See the
 [library README](packages/engine/README.md) for the API: diagnostics, the
-Customizer model, includes and fonts, drawing the meshes, and the plain
-OpenSCAD export.
+Customizer model, the extensions, `.bscad` files, includes and fonts, drawing
+the meshes, and the plain OpenSCAD export.
 
 ## Browser support
 

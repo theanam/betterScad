@@ -1,11 +1,13 @@
 {
   "name": "libbetterscad",
-  "version": "0.33.3",
-  "description": "A complete OpenSCAD engine for JavaScript: parse, validate and render any .scad file to meshes, read its Customizer parameters, and export STL, 3MF, OFF, AMF, SVG and DXF. Runs in Node, Web Workers and the browser. No DOM, no UI.",
+  "version": "0.33.4",
+  "description": "The BetterSCAD engine: a complete OpenSCAD implementation plus BetterSCAD's extensions (rounded cube(r), negative(), thread(), gear(), get_size() and more) and .bscad files. Parse, validate and render to meshes, read Customizer parameters, export STL, 3MF, OFF, AMF, SVG and DXF, and write plain OpenSCAD back out. Node, Web Workers and the browser. No DOM, no UI.",
   "keywords": [
     "openscad",
     "scad",
     "openscad-compatible",
+    "betterscad",
+    "bscad",
     "customizer",
     "cad",
     "parametric",
