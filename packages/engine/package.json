@@ -1,10 +1,12 @@
 {
   "name": "libbetterscad",
-  "version": "0.33.2",
-  "description": "The BetterSCAD language and geometry engine: parse, validate and render OpenSCAD source to meshes, and export STL, 3MF, OFF, AMF, SVG and DXF. No DOM, no UI.",
+  "version": "0.33.3",
+  "description": "A complete OpenSCAD engine for JavaScript: parse, validate and render any .scad file to meshes, read its Customizer parameters, and export STL, 3MF, OFF, AMF, SVG and DXF. Runs in Node, Web Workers and the browser. No DOM, no UI.",
   "keywords": [
     "openscad",
     "scad",
+    "openscad-compatible",
+    "customizer",
     "cad",
     "parametric",
     "csg",

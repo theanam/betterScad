@@ -1,14 +1,25 @@
 # libbetterscad
 
-The BetterSCAD language and geometry engine as a library. Give it OpenSCAD
-source, get back diagnostics, a Customizer model, meshes, and files to save.
-No DOM, no bundler assumptions, no UI: the same code runs in Node, in a Web
-Worker and in the browser's main thread.
+A complete OpenSCAD engine for JavaScript. Give it any `.scad` file and get
+back diagnostics, a Customizer model, meshes, and files to save. No DOM, no
+bundler assumptions, no UI: the same code runs in Node, in a Web Worker and in
+the browser's main thread.
 
-It understands the whole OpenSCAD language plus BetterSCAD's extensions
-(`negative()`, `cube(r)`, `polygon(r)`, `thread()`, `gear()`, `center()` and
-the rest, all listed in the [language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md)),
-and it can write any BetterSCAD file back out as plain OpenSCAD.
+**OpenSCAD compatibility is the point.** The whole OpenSCAD 2021.01 language
+is implemented and covered by tests, not a subset: every primitive, transform
+and boolean, `linear_extrude` and `rotate_extrude` with all their options,
+`hull()` and `minkowski()`, `import()` and `surface()`, `text()`, list
+comprehensions, `let`, `each`, `$fn`/`$fa`/`$fs`, special variables, `echo()`
+and `assert()`, `include` and `use`, and the Customizer comment syntax. A file
+written for OpenSCAD renders unmodified and gives the same geometry; the
+[language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md#compatibility)
+lists everything. A model that renders differently from OpenSCAD is a bug:
+[report it](https://github.com/theanam/betterScad/issues).
+
+On top of that it understands BetterSCAD's extensions (`negative()`,
+`cube(r)`, `polygon(r)`, `thread()`, `gear()`, `center()` and the rest, all in
+the [language guide](https://github.com/theanam/betterScad/blob/main/docs/language.md)),
+and it can write any file that uses them back out as plain OpenSCAD.
 
 It is the engine behind [betterscad.org](https://betterscad.org), the editor,
 and the `bscad` command line.

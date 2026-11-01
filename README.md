@@ -313,16 +313,20 @@ bscad model.bscad --legacy-scad -o out.scad # convert to plain OpenSCAD
 bscad model.scad --strict                   # treat warnings as errors, for CI
 ```
 
-## The engine as a library
+## libbetterscad: the OpenSCAD engine as a library
 
 [![npm](https://img.shields.io/npm/v/libbetterscad?color=e8553e)](https://www.npmjs.com/package/libbetterscad)
 [![types](https://img.shields.io/npm/types/libbetterscad)](https://www.npmjs.com/package/libbetterscad)
 [![license](https://img.shields.io/npm/l/libbetterscad)](LICENSE)
 
-Everything BetterSCAD does to a model ships on its own as **`libbetterscad`**:
-parse and validate the source, evaluate it, build the geometry, read the
-Customizer parameters, export STL and the rest, and write plain OpenSCAD back
-out. No DOM, no UI: it runs in Node, in a Web Worker and in the browser.
+Everything BetterSCAD does to a model ships on its own as **`libbetterscad`**,
+a complete OpenSCAD engine for JavaScript. It takes any `.scad` file, the
+whole OpenSCAD 2021.01 language and not a subset, and renders it unmodified to
+the same geometry OpenSCAD would produce. From one call you get diagnostics,
+the Customizer parameters, the meshes, and STL, 3MF, OFF, AMF, SVG or DXF to
+save. BetterSCAD's own extensions work too, and any file that uses them can be
+written back out as plain OpenSCAD. No DOM, no UI: it runs in Node, in a Web
+Worker and in the browser.
 
 ```sh
 npm i libbetterscad
@@ -332,12 +336,15 @@ npm i libbetterscad
 import { Engine } from 'libbetterscad';
 
 const engine = await Engine.create();
-const result = await engine.render('cube([30, 20, 10], r = 3);', { parameters: {} });
+const result = await engine.render(scadSource, { parameters: { width: 80 } });
+for (const d of result.diagnostics) console.log(d.severity, d.message);
 const stl = engine.export(result, 'stl');   // stl.data is a Uint8Array
 ```
 
-See the [library README](packages/engine/README.md) for the API: diagnostics,
-the Customizer model, includes and fonts, drawing the meshes, and the plain
+Use it to validate `.scad` files in CI, render them on a server, build a
+Customizer or a viewer into your own page, or convert between formats. See the
+[library README](packages/engine/README.md) for the API: diagnostics, the
+Customizer model, includes and fonts, drawing the meshes, and the plain
 OpenSCAD export.
 
 ## Browser support
@@ -389,7 +396,7 @@ overrides it if you serve from a path rather than a domain root.
 
 ## Contributing
 
-Issues and pull requests welcome. Four non-negotiable rules:
+Issues and pull requests welcome. Five non-negotiable rules:
 
 1. **Any new language syntax ships with its plain-`.scad` downgrade**,
    implemented in [`transpile.ts`](packages/engine/src/transpile.ts) and covered
@@ -416,6 +423,13 @@ Issues and pull requests welcome. Four non-negotiable rules:
    places — five manifests, a literal in the engine's API, and the lock file —
    so it is never edited by hand, and `npm run version:check` fails CI when any
    of them drifts.
+5. **Every change to the engine is a library release.** The engine's npm
+   version is the project version, so the bump from rule 4 is the library's
+   bump, and any commit that touches [`packages/engine`](packages/engine/)
+   has one. Once that commit is on `main`, tag it `libbetterscad-v<version>`
+   and push the tag; the tag publishes to npm. A change to the engine's public
+   API also lands in the [library README](packages/engine/README.md) in the
+   same commit.
 
 ```sh
 npm run typecheck
@@ -423,6 +437,7 @@ npm test
 npm run build
 npm run reference          # after adding or changing any element
 npm run bump -- minor      # or patch; never edit a version by hand
+git tag libbetterscad-v0.34.0 && git push origin libbetterscad-v0.34.0   # once an engine change is on main
 npm run screenshot         # retakes the README's app screenshots, needs `npm run dev`
 ```
 

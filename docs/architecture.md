@@ -335,8 +335,10 @@ repository root. Publishing is a tag: `libbetterscad-v<version>` at a commit who
 engine version that is, and `publish-lib.yml` checks the two agree, runs
 the engine's tests, and publishes with npm provenance through trusted
 publishing, so no token is stored anywhere. The version is the project version
-(below): every bump is a release the tag can publish, and a bump that is not
-tagged is simply not on npm yet.
+(below), so every change to the engine already carries a bump; the rule is
+that every such change is also tagged once it is on `main`, so that npm never
+lags the repository. A change that touches only the app or the CLI is a bump
+without a tag, and that is fine: the library did not change.
 
 ## The version
 
