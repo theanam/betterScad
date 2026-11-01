@@ -1,0 +1,26 @@
+{
+  "name": "BetterSCAD",
+  "short_name": "BetterSCAD",
+  "description": "Local-first parametric CAD in the browser, fully compatible with OpenSCAD.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0e0c0b",
+  "theme_color": "#0e0c0b",
+  "orientation": "any",
+  "categories": ["productivity", "graphics", "developer"],
+  "icons": [
+    { "src": "./betterscad-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./betterscad-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./betterscad-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/x-openscad": [".scad"],
+        "application/x-betterscad": [".bscad"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,290 @@
+[
+  {
+    "family": "Anton",
+    "license": "OFL-1.1",
+    "path": "ofl/anton/Anton-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Arvo",
+    "license": "OFL-1.1",
+    "path": "ofl/arvo/Arvo-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Barlow",
+    "license": "OFL-1.1",
+    "path": "ofl/barlow/Barlow-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Bebas Neue",
+    "license": "OFL-1.1",
+    "path": "ofl/bebasneue/BebasNeue-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Bitter",
+    "license": "OFL-1.1",
+    "path": "ofl/bitter/Bitter[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Cabin",
+    "license": "OFL-1.1",
+    "path": "ofl/cabin/Cabin[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Caveat",
+    "license": "OFL-1.1",
+    "path": "ofl/caveat/Caveat[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Cinzel",
+    "license": "OFL-1.1",
+    "path": "ofl/cinzel/Cinzel[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Courier Prime",
+    "license": "OFL-1.1",
+    "path": "ofl/courierprime/CourierPrime-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Dancing Script",
+    "license": "OFL-1.1",
+    "path": "ofl/dancingscript/DancingScript[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Dosis",
+    "license": "OFL-1.1",
+    "path": "ofl/dosis/Dosis[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Exo 2",
+    "license": "OFL-1.1",
+    "path": "ofl/exo2/Exo2[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Fira Code",
+    "license": "OFL-1.1",
+    "path": "ofl/firacode/FiraCode[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Fira Sans",
+    "license": "OFL-1.1",
+    "path": "ofl/firasans/FiraSans-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Inconsolata",
+    "license": "OFL-1.1",
+    "path": "ofl/inconsolata/Inconsolata[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Inter",
+    "license": "OFL-1.1",
+    "path": "ofl/inter/Inter[opsz,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "JetBrains Mono",
+    "license": "OFL-1.1",
+    "path": "ofl/jetbrainsmono/JetBrainsMono[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Josefin Sans",
+    "license": "OFL-1.1",
+    "path": "ofl/josefinsans/JosefinSans[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Karla",
+    "license": "OFL-1.1",
+    "path": "ofl/karla/Karla[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Lato",
+    "license": "OFL-1.1",
+    "path": "ofl/lato/Lato-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Libre Baskerville",
+    "license": "OFL-1.1",
+    "path": "ofl/librebaskerville/LibreBaskerville[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Lobster",
+    "license": "OFL-1.1",
+    "path": "ofl/lobster/Lobster-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Lora",
+    "license": "OFL-1.1",
+    "path": "ofl/lora/Lora[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Montserrat",
+    "license": "OFL-1.1",
+    "path": "ofl/montserrat/Montserrat[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Noto Sans",
+    "license": "OFL-1.1",
+    "path": "ofl/notosans/NotoSans[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Noto Serif",
+    "license": "OFL-1.1",
+    "path": "ofl/notoserif/NotoSerif[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Nunito",
+    "license": "OFL-1.1",
+    "path": "ofl/nunito/Nunito[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Open Sans",
+    "license": "OFL-1.1",
+    "path": "ofl/opensans/OpenSans[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Orbitron",
+    "license": "OFL-1.1",
+    "path": "ofl/orbitron/Orbitron[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Oswald",
+    "license": "OFL-1.1",
+    "path": "ofl/oswald/Oswald[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Pacifico",
+    "license": "OFL-1.1",
+    "path": "ofl/pacifico/Pacifico-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Permanent Marker",
+    "license": "Apache-2.0",
+    "path": "apache/permanentmarker/PermanentMarker-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Playfair Display",
+    "license": "OFL-1.1",
+    "path": "ofl/playfairdisplay/PlayfairDisplay[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Poppins",
+    "license": "OFL-1.1",
+    "path": "ofl/poppins/Poppins-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Press Start 2P",
+    "license": "OFL-1.1",
+    "path": "ofl/pressstart2p/PressStart2P-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Quicksand",
+    "license": "OFL-1.1",
+    "path": "ofl/quicksand/Quicksand[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Raleway",
+    "license": "OFL-1.1",
+    "path": "ofl/raleway/Raleway[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Righteous",
+    "license": "OFL-1.1",
+    "path": "ofl/righteous/Righteous-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Roboto",
+    "license": "OFL-1.1",
+    "path": "ofl/roboto/Roboto[wdth,wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Roboto Mono",
+    "license": "OFL-1.1",
+    "path": "ofl/robotomono/RobotoMono[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Roboto Slab",
+    "license": "Apache-2.0",
+    "path": "apache/robotoslab/RobotoSlab[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Rubik",
+    "license": "OFL-1.1",
+    "path": "ofl/rubik/Rubik[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Source Sans 3",
+    "license": "OFL-1.1",
+    "path": "ofl/sourcesans3/SourceSans3[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Space Mono",
+    "license": "OFL-1.1",
+    "path": "ofl/spacemono/SpaceMono-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Teko",
+    "license": "OFL-1.1",
+    "path": "ofl/teko/Teko[wght].ttf",
+    "variable": true
+  },
+  {
+    "family": "Ubuntu",
+    "license": "UFL-1.0",
+    "path": "ufl/ubuntu/Ubuntu-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "VT323",
+    "license": "OFL-1.1",
+    "path": "ofl/vt323/VT323-Regular.ttf",
+    "variable": false
+  },
+  {
+    "family": "Work Sans",
+    "license": "OFL-1.1",
+    "path": "ofl/worksans/WorkSans[wght].ttf",
+    "variable": true
+  }
+]
