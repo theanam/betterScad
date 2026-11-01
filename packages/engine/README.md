@@ -1,4 +1,4 @@
-# @betterscad/engine
+# libbetterscad
 
 The BetterSCAD language and geometry engine as a library. Give it OpenSCAD
 source, get back diagnostics, a Customizer model, meshes, and files to save.
@@ -14,13 +14,13 @@ It is the engine behind [betterscad.org](https://betterscad.org), the editor,
 and the `bscad` command line.
 
 ```sh
-npm install @betterscad/engine
+npm install libbetterscad
 ```
 
 ## Quick start
 
 ```ts
-import { Engine } from '@betterscad/engine';
+import { Engine } from 'libbetterscad';
 import { writeFile } from 'node:fs/promises';
 
 const engine = await Engine.create();
@@ -49,7 +49,7 @@ WebAssembly, and it finds its own `.wasm` file.
 A bundler moves the wasm file, so tell the engine where it went. With Vite:
 
 ```ts
-import { Engine } from '@betterscad/engine';
+import { Engine } from 'libbetterscad';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
 
 const engine = await Engine.create({ wasmUrl });
@@ -189,7 +189,7 @@ reports a diagnostic.
 OpenType files and pass the registry when creating the engine:
 
 ```ts
-import { Engine, FontRegistry } from '@betterscad/engine';
+import { Engine, FontRegistry } from 'libbetterscad';
 import { readFile } from 'node:fs/promises';
 
 const fonts = new FontRegistry();
@@ -206,7 +206,7 @@ A file that uses BetterSCAD extensions can be written as stock OpenSCAD, with
 each extension replaced by a generated module or a rewrite:
 
 ```ts
-import { parse, transpileToLegacyScad, describeExtensions } from '@betterscad/engine';
+import { parse, transpileToLegacyScad, describeExtensions } from 'libbetterscad';
 
 const { file } = parse(source);
 describeExtensions(file);               // which extensions the file uses, and where

@@ -17,7 +17,7 @@
  * parameter the interpreter would ignore.
  */
 
-import { BUILTIN_FUNCTIONS, BUILTIN_MODULES } from '@betterscad/engine';
+import { BUILTIN_FUNCTIONS, BUILTIN_MODULES } from 'libbetterscad';
 
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { StateField, type EditorState, type Extension } from '@codemirror/state';

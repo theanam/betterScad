@@ -6,7 +6,7 @@
  * half of what makes inline error reporting useful (spec feature 13).
  */
 
-import type { Diagnostic, ExtensionUse } from '@betterscad/engine';
+import type { Diagnostic, ExtensionUse } from 'libbetterscad';
 import type { RenderStats } from '../render/protocol.js';
 import { button, clear, el, formatDuration, formatNumber } from './dom.js';
 import { extensionList } from './extension-list.js';

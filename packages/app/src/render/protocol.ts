@@ -11,7 +11,7 @@ import type {
   ExportFormat,
   ExtensionUse,
   Value,
-} from '@betterscad/engine';
+} from 'libbetterscad';
 
 /** A loaded font face. The style is what makes a `font=` spec unambiguous. */
 export interface FontFaceInfo {

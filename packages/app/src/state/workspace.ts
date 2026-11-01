@@ -10,7 +10,7 @@ import { EditorState } from '@codemirror/state';
 
 import type { CameraState } from '../viewport/controls.js';
 import { DEFAULT_ARRANGEMENT, sanitize, type Arrangement } from './panels.js';
-import { parseBscad, serializeBscad, type BscadMetadata, type Value } from '@betterscad/engine';
+import { parseBscad, serializeBscad, type BscadMetadata, type Value } from 'libbetterscad';
 
 /** What a document writes to disk: `.bscad` carries metadata, `.scad` does not. */
 export type DocumentFormat = 'bscad' | 'scad';

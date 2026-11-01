@@ -7,7 +7,7 @@
  * behind a queue.
  */
 
-import type { CustomizerModel, CustomizerParameter, Value } from '@betterscad/engine';
+import type { CustomizerModel, CustomizerParameter, Value } from 'libbetterscad';
 import { button, clear, el, formatNumber, icon } from './dom.js';
 import { setHint } from './tooltip.js';
 

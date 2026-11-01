@@ -36,7 +36,7 @@ import {
   rectangularSelection,
 } from '@codemirror/view';
 
-import type { Diagnostic } from '@betterscad/engine';
+import type { Diagnostic } from 'libbetterscad';
 import { openscad } from './scad-language.js';
 import { scadCompletions } from './completions.js';
 import { inchEntry } from './units.js';

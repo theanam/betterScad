@@ -18,7 +18,7 @@ import {
   usesMeasurements,
   type AssetProvider,
   type Value,
-} from '@betterscad/engine';
+} from 'libbetterscad';
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
 
 import type {

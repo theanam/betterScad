@@ -2,7 +2,7 @@
  * Modal dialogs: export, fonts, legacy export, and confirmations.
  */
 
-import { EXPORT_FORMATS, formatFontSpec, type ExportFormat, type ExtensionUse } from '@betterscad/engine';
+import { EXPORT_FORMATS, formatFontSpec, type ExportFormat, type ExtensionUse } from 'libbetterscad';
 import { button, clear, el } from './dom.js';
 import { extensionList } from './extension-list.js';
 import type { CatalogEntry, SpecimenSheet } from '../files/font-library.js';

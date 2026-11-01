@@ -315,21 +315,21 @@ bscad model.scad --strict                   # treat warnings as errors, for CI
 
 ## The engine as a library
 
-[![npm](https://img.shields.io/npm/v/%40betterscad%2Fengine?color=e8553e)](https://www.npmjs.com/package/@betterscad/engine)
-[![types](https://img.shields.io/npm/types/%40betterscad%2Fengine)](https://www.npmjs.com/package/@betterscad/engine)
-[![license](https://img.shields.io/npm/l/%40betterscad%2Fengine)](LICENSE)
+[![npm](https://img.shields.io/npm/v/libbetterscad?color=e8553e)](https://www.npmjs.com/package/libbetterscad)
+[![types](https://img.shields.io/npm/types/libbetterscad)](https://www.npmjs.com/package/libbetterscad)
+[![license](https://img.shields.io/npm/l/libbetterscad)](LICENSE)
 
-Everything BetterSCAD does to a model ships on its own as **`@betterscad/engine`**:
+Everything BetterSCAD does to a model ships on its own as **`libbetterscad`**:
 parse and validate the source, evaluate it, build the geometry, read the
 Customizer parameters, export STL and the rest, and write plain OpenSCAD back
 out. No DOM, no UI: it runs in Node, in a Web Worker and in the browser.
 
 ```sh
-npm i @betterscad/engine
+npm i libbetterscad
 ```
 
 ```ts
-import { Engine } from '@betterscad/engine';
+import { Engine } from 'libbetterscad';
 
 const engine = await Engine.create();
 const result = await engine.render('cube([30, 20, 10], r = 3);', { parameters: {} });
@@ -375,8 +375,8 @@ anywhere. For GitHub Pages, [`.github/workflows/deploy.yml`](.github/workflows/d
 publishes on every push to `main` with no repo settings to change.
 
 The engine lives in `packages/engine`, an npm workspace the app and the CLI
-build from. An `engine-v*` tag at a commit publishes that version of the
-library to npm through [`.github/workflows/publish-engine.yml`](.github/workflows/publish-engine.yml).
+build from. An `libbetterscad-v*` tag at a commit publishes that version of the
+library to npm through [`.github/workflows/publish-lib.yml`](.github/workflows/publish-lib.yml).
 
 The build has no fixed base URL — one `dist/` works from a domain root, from a
 Pages project path and from `file://` in the desktop shell. The few tags that

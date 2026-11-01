@@ -6,7 +6,7 @@
  * stream of fresh frames instead of a backlog of stale ones.
  */
 
-import type { Value } from '@betterscad/engine';
+import type { Value } from 'libbetterscad';
 import type {
   ClipResponse,
   ExportResponse,

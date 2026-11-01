@@ -6,7 +6,7 @@
  * the same question and so should answer it the same way.
  */
 
-import type { ExtensionUse } from '@betterscad/engine';
+import type { ExtensionUse } from 'libbetterscad';
 import { el } from './dom.js';
 
 /** `name — what it becomes`, with the lines it appears on. */

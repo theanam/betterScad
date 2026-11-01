@@ -11,7 +11,7 @@
  * be a backup; this is a copy of one model.
  */
 
-import { createZip, parseFontSpec, readZip, safePath, type ZipEntry } from '@betterscad/engine';
+import { createZip, parseFontSpec, readZip, safePath, type ZipEntry } from 'libbetterscad';
 
 import type { Dependency } from '../render/protocol.js';
 import { kindOf, type ProjectFile } from './project-files.js';

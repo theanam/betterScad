@@ -24,7 +24,7 @@ import {
   type Diagnostic,
   type ExportFormat,
   type Value,
-} from '@betterscad/engine';
+} from 'libbetterscad';
 
 interface Options {
   input: string[];
@@ -424,7 +424,7 @@ export function parseLiteral(text: string): Value {
   return literalOf(statement.value);
 }
 
-function literalOf(expr: import('@betterscad/engine').Expr): Value {
+function literalOf(expr: import('libbetterscad').Expr): Value {
   switch (expr.kind) {
     case 'number':
       return expr.value;

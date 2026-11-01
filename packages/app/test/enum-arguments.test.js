@@ -13,7 +13,7 @@ import { before, test } from 'node:test';
 import { EditorState } from '@codemirror/state';
 import { CompletionContext } from '@codemirror/autocomplete';
 
-import { Engine } from '@betterscad/engine';
+import { Engine } from 'libbetterscad';
 import { ENUM_ARGUMENTS, parameterCompletions } from '../src/editor/signature.ts';
 
 /** Runs the completion source at `|` in the given source. */

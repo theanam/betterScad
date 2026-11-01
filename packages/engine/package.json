@@ -1,6 +1,6 @@
 {
-  "name": "@betterscad/engine",
-  "version": "0.33.1",
+  "name": "libbetterscad",
+  "version": "0.33.2",
   "description": "The BetterSCAD language and geometry engine: parse, validate and render OpenSCAD source to meshes, and export STL, 3MF, OFF, AMF, SVG and DXF. No DOM, no UI.",
   "keywords": [
     "openscad",
@@ -35,10 +35,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "publishConfig": {
-    "access": "public"
-  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },

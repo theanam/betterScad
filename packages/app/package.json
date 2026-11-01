@@ -1,6 +1,6 @@
 {
   "name": "@betterscad/app",
-  "version": "0.33.1",
+  "version": "0.33.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "test": "node --experimental-strip-types --import ./test/resolve-ts.mjs --test test/*.test.js"
   },
   "dependencies": {
-    "@betterscad/engine": "*",
+    "libbetterscad": "*",
     "@codemirror/autocomplete": "^6.18.3",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/language": "^6.10.6",

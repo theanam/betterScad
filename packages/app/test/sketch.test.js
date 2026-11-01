@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
 
-import { Engine } from '@betterscad/engine';
+import { Engine } from 'libbetterscad';
 
 import { digestSketch, normalizeSketch, scaleNode, translateNode } from '../src/sketch/doc.js';
 import { boundsOfSketch, flattenSketch } from '../src/sketch/flatten.js';

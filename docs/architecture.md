@@ -21,7 +21,7 @@ kernel/evaluate.ts ─► geometry            (Manifold WASM does the CSG)
     └──► io/export/* (STL, 3MF, OFF, AMF, SVG, DXF)
 ```
 
-Everything left of the viewport lives in `@betterscad/engine` and has no DOM
+Everything left of the viewport lives in `libbetterscad` and has no DOM
 dependency. That is what lets the same code run in the browser app, in a Web
 Worker, and in the Node CLI.
 
@@ -321,7 +321,7 @@ actually looked at, so the reference works offline once it has been read.
 
 ## The library
 
-`packages/engine`, published as `@betterscad/engine`
+`packages/engine`, published as `libbetterscad`
 
 Everything left of the viewport is one npm workspace, and the app and the CLI
 depend on it by name like any other package. It never imports from the app;
@@ -331,8 +331,8 @@ the parts that have to run in a Worker and in Node.
 
 The package ships its own README, which is its npm page, and a copy of the
 licence, because npm reads both from the package directory and not from the
-repository root. Publishing is a tag: `engine-v<version>` at a commit whose
-engine version that is, and `publish-engine.yml` checks the two agree, runs
+repository root. Publishing is a tag: `libbetterscad-v<version>` at a commit whose
+engine version that is, and `publish-lib.yml` checks the two agree, runs
 the engine's tests, and publishes with npm provenance through trusted
 publishing, so no token is stored anywhere. The version is the project version
 (below): every bump is a release the tag can publish, and a bump that is not

@@ -18,7 +18,7 @@ import {
   type ExtensionUse,
   type Value,
   importSVG,
-} from '@betterscad/engine';
+} from 'libbetterscad';
 import type { SketchDocument } from './sketch/doc.js';
 import { fromContours, fromSvg, resolveCuts, toSvg } from './sketch/svg.js';
 import { showSketchEditor } from './sketch/editor.js';
